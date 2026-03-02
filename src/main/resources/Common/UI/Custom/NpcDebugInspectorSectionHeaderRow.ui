@@ -72,9 +72,14 @@ Group {
         );
       }
 
-      ReorderableListGrip #SectionMoveButton {
+      Button #SectionMoveButton {
         Anchor: (Width: 28, Height: 28);
-        TooltipText: %client.settings.dragToReorder;
+        TooltipText: "Move section";
+        Style: ButtonStyle(
+          Default: (Background: (Color: #00000000)),
+          Hovered: (Background: (Color: #ffffff10)),
+          Pressed: (Background: (Color: #ffffff08))
+        );
 
         Group {
           LayoutMode: Middle;

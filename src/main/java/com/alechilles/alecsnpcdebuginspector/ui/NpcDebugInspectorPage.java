@@ -577,17 +577,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
         String compact = subtitle;
         int markerIndex = compact.indexOf("| Changed lines");
-        if (markerIndex <= 0) {
-            return compact
-                    .replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "")
-                    .replace("Game Time (UTC):", "UTC:")
-                    .trim();
+        if (markerIndex > 0) {
+            compact = compact.substring(0, markerIndex).trim();
         }
-        compact = compact.substring(0, markerIndex).trim();
-        return compact
+        compact = compact
                 .replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "")
                 .replace("Game Time (UTC):", "UTC:")
                 .trim();
+        return compact.replaceAll("\\s*\\|\\s*UTC:\\s*", "\nUTC: ").trim();
     }
 
     private void rebuildRows(@Nonnull UICommandBuilder commandBuilder,

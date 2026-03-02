@@ -19,16 +19,79 @@ $C.@PageOverlay {
       Group #NpcDebugInspectorHeaderRow {
         Anchor: (Height: 46);
 
-        Label #NpcDebugInspectorSubtitle {
+        Group #NpcDebugInspectorSubtitle {
+          LayoutMode: Top;
           Anchor: (Left: 0, Top: 0, Right: 130, Height: 40);
-          Text: "";
-          Style: (
-            FontSize: 12,
-            TextColor: #c3d5e8,
-            HorizontalAlignment: Start,
-            VerticalAlignment: Start,
-            Wrap: true
-          );
+
+          Group {
+            LayoutMode: Left;
+            Anchor: (Height: 18);
+
+            Label #NpcDebugInspectorSubtitleUuidLabel {
+              Anchor: (Height: 18);
+              Text: "UUID:";
+              Style: (
+                FontSize: 12,
+                RenderBold: true,
+                TextColor: #c3d5e8,
+                HorizontalAlignment: Start,
+                VerticalAlignment: Center
+              );
+            }
+
+            Group {
+              Anchor: (Width: 4);
+            }
+
+            Label #NpcDebugInspectorSubtitleUuidValue {
+              Anchor: (Height: 18);
+              FlexWeight: 1;
+              Text: "";
+              Style: (
+                FontSize: 12,
+                TextColor: #c3d5e8,
+                HorizontalAlignment: Start,
+                VerticalAlignment: Center
+              );
+            }
+          }
+
+          Group {
+            Anchor: (Height: 2);
+          }
+
+          Group {
+            LayoutMode: Left;
+            Anchor: (Height: 18);
+
+            Label #NpcDebugInspectorSubtitleUtcLabel {
+              Anchor: (Height: 18);
+              Text: "UTC:";
+              Style: (
+                FontSize: 12,
+                RenderBold: true,
+                TextColor: #c3d5e8,
+                HorizontalAlignment: Start,
+                VerticalAlignment: Center
+              );
+            }
+
+            Group {
+              Anchor: (Width: 4);
+            }
+
+            Label #NpcDebugInspectorSubtitleUtcValue {
+              Anchor: (Height: 18);
+              FlexWeight: 1;
+              Text: "";
+              Style: (
+                FontSize: 12,
+                TextColor: #c3d5e8,
+                HorizontalAlignment: Start,
+                VerticalAlignment: Center
+              );
+            }
+          }
         }
 
         $C.@SmallSecondaryTextButton #NpcDebugInspectorPinButton {

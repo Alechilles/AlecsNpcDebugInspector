@@ -585,8 +585,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {
         long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
+        InspectorSubtitleFields subtitleFields = parseInspectorSubtitleFields(latestSnapshot.subtitle());
         commandBuilder.set("#NpcDebugInspectorTitle.Text", "Inspector - " + resolvedNpcName);
-        commandBuilder.set("#NpcDebugInspectorSubtitle.Text", compactSubtitle(latestSnapshot.subtitle()));
+        commandBuilder.set("#NpcDebugInspectorSubtitleUuidValue.Text", subtitleFields.uuid);
+        commandBuilder.set("#NpcDebugInspectorSubtitleUtcValue.Text", subtitleFields.utc);
         commandBuilder.set("#NpcDebugInspectorPinButton.Text", pinModeEnabled ? "Unpin" : "Pin NPC");
         commandBuilder.set("#NpcDebugInspectorBackButton.Visible", backCallback != null);
         commandBuilder.set("#NpcDebugInspectorFooterGap.Visible", backCallback != null);
@@ -615,6 +617,36 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 .replace("Game Time (UTC):", "UTC:")
                 .trim();
         return compact.replaceAll("\\s*\\|\\s*UTC:\\s*", "\nUTC: ").trim();
+    }
+
+    @Nonnull
+    private InspectorSubtitleFields parseInspectorSubtitleFields(@Nullable String subtitle) {
+        String compact = compactSubtitle(subtitle);
+        String uuidValue = "n/a";
+        String utcValue = "n/a";
+        if (!compact.isBlank()) {
+            String[] lines = compact.split("\\R");
+            for (String line : lines) {
+                String trimmed = line != null ? line.trim() : "";
+                if (trimmed.regionMatches(true, 0, "UUID:", 0, 5)) {
+                    String candidate = trimmed.substring(5).trim();
+                    if (!candidate.isBlank()) {
+                        uuidValue = candidate;
+                    }
+                    continue;
+                }
+                if (trimmed.regionMatches(true, 0, "UTC:", 0, 4)) {
+                    String candidate = trimmed.substring(4).trim();
+                    if (!candidate.isBlank()) {
+                        utcValue = candidate;
+                    }
+                }
+            }
+        }
+        if ("n/a".equals(uuidValue) && targetNpcUuid != null) {
+            uuidValue = targetNpcUuid.toString();
+        }
+        return new InspectorSubtitleFields(uuidValue, utcValue);
     }
 
     private void rebuildRows(@Nonnull UICommandBuilder commandBuilder,
@@ -1108,6 +1140,16 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         private FieldNameValue(@Nonnull String nameText, @Nonnull String valueText) {
             this.nameText = nameText;
             this.valueText = valueText;
+        }
+    }
+
+    private static final class InspectorSubtitleFields {
+        private final String uuid;
+        private final String utc;
+
+        private InspectorSubtitleFields(@Nonnull String uuid, @Nonnull String utc) {
+            this.uuid = uuid;
+            this.utc = utc;
         }
     }
 

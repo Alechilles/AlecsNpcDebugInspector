@@ -46,6 +46,10 @@ Group {
       );
     }
 
+    Group {
+      Anchor: (Width: 5);
+    }
+
     Label #FieldValue {
       Anchor: (Height: 18);
       FlexWeight: 1;

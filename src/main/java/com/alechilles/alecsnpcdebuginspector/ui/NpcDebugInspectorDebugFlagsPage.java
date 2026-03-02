@@ -238,9 +238,8 @@ public final class NpcDebugInspectorDebugFlagsPage
     private void applyHeader(@Nonnull UICommandBuilder commandBuilder) {
         String label = npcDisplayLabel != null && !npcDisplayLabel.isBlank() ? npcDisplayLabel : "NPC";
         commandBuilder.set("#NpcDebugFlagsTitle.Text", "Debug Flags - " + label);
-        String subtitle = "NPC: " + label + " (" + targetNpcUuid + ")"
-                + "\nActive Flags: " + activeFlags.size() + "/" + RoleDebugFlags.values().length;
-        commandBuilder.set("#NpcDebugFlagsSubtitle.Text", subtitle);
+        commandBuilder.set("#NpcDebugFlagsSubtitleNpcValue.Text", label + " (" + targetNpcUuid + ")");
+        commandBuilder.set("#NpcDebugFlagsSubtitleActiveFlagsValue.Text", activeFlags.size() + "/" + RoleDebugFlags.values().length);
         commandBuilder.set("#NpcDebugFlagsStatus.Text", resolveStatusLine());
     }
 

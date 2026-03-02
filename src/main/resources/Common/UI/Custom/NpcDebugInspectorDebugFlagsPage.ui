@@ -16,16 +16,79 @@ $C.@PageOverlay {
       LayoutMode: Top;
       Padding: (Left: 10, Right: 10, Top: 8, Bottom: 10);
 
-      Label #NpcDebugFlagsSubtitle {
+      Group #NpcDebugFlagsSubtitle {
+        LayoutMode: Top;
         Anchor: (Height: 38);
-        Text: "";
-        Style: (
-          FontSize: 12,
-          TextColor: #c3d5e8,
-          HorizontalAlignment: Start,
-          VerticalAlignment: Start,
-          Wrap: true
-        );
+
+        Group {
+          LayoutMode: Left;
+          Anchor: (Height: 18);
+
+          Label #NpcDebugFlagsSubtitleNpcLabel {
+            Anchor: (Height: 18);
+            Text: "NPC:";
+            Style: (
+              FontSize: 12,
+              RenderBold: true,
+              TextColor: #c3d5e8,
+              HorizontalAlignment: Start,
+              VerticalAlignment: Center
+            );
+          }
+
+          Group {
+            Anchor: (Width: 4);
+          }
+
+          Label #NpcDebugFlagsSubtitleNpcValue {
+            Anchor: (Height: 18);
+            FlexWeight: 1;
+            Text: "";
+            Style: (
+              FontSize: 12,
+              TextColor: #c3d5e8,
+              HorizontalAlignment: Start,
+              VerticalAlignment: Center
+            );
+          }
+        }
+
+        Group {
+          Anchor: (Height: 2);
+        }
+
+        Group {
+          LayoutMode: Left;
+          Anchor: (Height: 18);
+
+          Label #NpcDebugFlagsSubtitleActiveFlagsLabel {
+            Anchor: (Height: 18);
+            Text: "Active Flags:";
+            Style: (
+              FontSize: 12,
+              RenderBold: true,
+              TextColor: #c3d5e8,
+              HorizontalAlignment: Start,
+              VerticalAlignment: Center
+            );
+          }
+
+          Group {
+            Anchor: (Width: 4);
+          }
+
+          Label #NpcDebugFlagsSubtitleActiveFlagsValue {
+            Anchor: (Height: 18);
+            FlexWeight: 1;
+            Text: "";
+            Style: (
+              FontSize: 12,
+              TextColor: #c3d5e8,
+              HorizontalAlignment: Start,
+              VerticalAlignment: Center
+            );
+          }
+        }
       }
 
       Label #NpcDebugFlagsStatus {

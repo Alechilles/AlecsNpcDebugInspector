@@ -176,6 +176,7 @@ public final class NpcDebugInspectorRosterPage
         }
 
         if (normalizedAction == null || normalizedAction.isBlank() || ACTION_CLOSE.equals(normalizedAction)) {
+            stopRefreshLoop();
             close();
             return;
         }
@@ -191,6 +192,7 @@ public final class NpcDebugInspectorRosterPage
         if (normalizedAction.startsWith(INSPECT_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, INSPECT_PREFIX);
             if (npcUuid != null) {
+                stopRefreshLoop();
                 inspectCallback.accept(npcUuid);
             }
             return;
@@ -199,6 +201,7 @@ public final class NpcDebugInspectorRosterPage
         if (normalizedAction.startsWith(DEBUG_FLAGS_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, DEBUG_FLAGS_PREFIX);
             if (npcUuid != null) {
+                stopRefreshLoop();
                 debugFlagsCallback.accept(npcUuid);
             }
             return;
@@ -243,7 +246,12 @@ public final class NpcDebugInspectorRosterPage
 
     @Override
     public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
+        stopRefreshLoop();
+    }
+
+    private void stopRefreshLoop() {
         dismissed = true;
+        refreshTickGeneration.incrementAndGet();
     }
 
     private void buildCards(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {

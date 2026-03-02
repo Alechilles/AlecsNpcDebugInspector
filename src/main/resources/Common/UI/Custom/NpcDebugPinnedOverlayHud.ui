@@ -1,48 +1,47 @@
 $C = "Common.ui";
 
 $C.@DecoratedContainer #NpcDebugPinnedOverlayRoot {
-  Anchor: (Right: 18, Top: 95, Width: 420, Height: 540);
+  Anchor: (Right: 18, Top: 95, Width: 460, Height: 540);
 
   #Title {
     $C.@Title #NpcDebugPinnedOverlayTitle {
-      @Text = "NPC DEBUG PINNED OVERLAY";
+      @Text = "NPC Debug Inspector - Pinned Overlay";
     }
   }
 
   #Content {
     LayoutMode: Top;
-    Padding: (Left: 10, Right: 10, Top: 8, Bottom: 10);
-    Background: #0d1b2e;
+    Padding: (Left: 10, Right: 6, Top: 8, Bottom: 10);
 
     Label #NpcDebugPinnedOverlaySubtitle {
-      Anchor: (Height: 18);
+      Anchor: (Height: 22);
       Text: "";
       Style: (
-        FontSize: 11,
-        TextColor: #b7c8dc,
+        FontSize: 13,
+        TextColor: #c4d2e1,
         HorizontalAlignment: Start,
         VerticalAlignment: Center
       );
     }
 
     $C.@PanelSeparatorFancy {
-      @Anchor = (Top: 5, Bottom: 7);
+      @Anchor = (Top: 8, Bottom: 8);
     }
 
     Group #NpcDebugPinnedOverlayBodyViewport {
-      Anchor: (Top: 2);
+      Anchor: (Top: 1);
       FlexWeight: 1;
       LayoutMode: TopScrolling;
       KeepScrollPosition: true;
       ScrollbarStyle: $C.@DefaultScrollbarStyle;
-      Padding: (Right: 6);
+      Padding: (Left: 7, Right: 2, Top: 1, Bottom: 7);
 
       Label #NpcDebugPinnedOverlayBody {
-        Anchor: (Left: 0, Right: 0, Top: 0);
+        Anchor: (Left: 0, Right: 0, Top: 0, Bottom: 6);
         Text: "";
         Style: (
           FontSize: 12,
-          TextColor: #e7f0fb,
+          TextColor: #e0ecf8,
           HorizontalAlignment: Start,
           VerticalAlignment: Start,
           Wrap: true

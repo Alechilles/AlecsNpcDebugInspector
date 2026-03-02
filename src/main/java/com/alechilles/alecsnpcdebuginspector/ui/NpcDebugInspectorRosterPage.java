@@ -5,18 +5,26 @@ import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
+import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
-import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.world.ParticleUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -32,30 +40,78 @@ public final class NpcDebugInspectorRosterPage
         extends InteractiveCustomUIPage<NpcDebugInspectorRosterPage.RosterEventData> {
     public static final String UI_PATH = "NpcDebugInspectorRoster.ui";
     public static final String CARD_UI_PATH = "NpcDebugInspectorRosterCard.ui";
+
     private static final String EVENT_ACTION = "Action";
+    private static final String EVENT_FILTER_QUERY = "FilterQuery";
+
     private static final String ACTION_CLOSE = "__close__";
+    private static final String ACTION_FILTER_LOADED = "__filter_loaded__";
+    private static final String ACTION_FILTER_FLOCK = "__filter_flock__";
+    private static final String ACTION_FILTER_APPLY = "__filter_apply__";
+    private static final String ACTION_FILTER_CLEAR = "__filter_clear__";
+
     private static final String INSPECT_PREFIX = "__inspect__:";
     private static final String UNLINK_PREFIX = "__unlink__:";
+    private static final String COPY_PREFIX = "__copy__:";
+    private static final String HIGHLIGHT_PREFIX = "__highlight__:";
+
     private static final long REFRESH_INTERVAL_MS = 1000L;
+    private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
+    private static final String HIGHLIGHT_PARTICLE_ID = "Particles/NPC/Emotions/Question_Subtle";
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
+    private final Supplier<String> sameFlockIdSupplier;
     private final Consumer<UUID> inspectCallback;
     private final Consumer<UUID> unlinkCallback;
+    @Nullable
+    private final Consumer<String> notificationCallback;
+
+    private NpcDebugLinkedEntry[] sourceEntries;
     private NpcDebugLinkedEntry[] entries;
     private int renderedCardCount;
+    private final Map<UUID, NpcDebugLinkedEntry> previousEntriesByUuid;
+    private final Map<UUID, String> changeSummaryByUuid;
+    private final Set<UUID> highlightedNpcUuids;
+
+    private boolean filterLoadedOnly;
+    private boolean filterSameFlock;
+    private String filterQuery;
+    @Nullable
+    private String activeFlockFilterId;
+
+    @Nullable
+    private String statusMessage;
+    private long statusMessageUntilMs;
+    private boolean syncQueryFieldValue;
+
     private volatile boolean refreshLoopStarted;
     private volatile boolean dismissed;
 
     public NpcDebugInspectorRosterPage(@Nonnull PlayerRef playerRef,
                                        @Nonnull Supplier<List<NpcDebugLinkedEntry>> entrySupplier,
+                                       @Nonnull Supplier<String> sameFlockIdSupplier,
                                        @Nonnull Consumer<UUID> inspectCallback,
-                                       @Nonnull Consumer<UUID> unlinkCallback) {
+                                       @Nonnull Consumer<UUID> unlinkCallback,
+                                       @Nullable Consumer<String> notificationCallback) {
         super(playerRef, CustomPageLifetime.CanDismiss, RosterEventData.CODEC);
         this.entrySupplier = entrySupplier;
+        this.sameFlockIdSupplier = sameFlockIdSupplier;
         this.inspectCallback = inspectCallback;
         this.unlinkCallback = unlinkCallback;
+        this.notificationCallback = notificationCallback;
+        this.sourceEntries = new NpcDebugLinkedEntry[0];
         this.entries = new NpcDebugLinkedEntry[0];
         this.renderedCardCount = 0;
+        this.previousEntriesByUuid = new HashMap<>();
+        this.changeSummaryByUuid = new HashMap<>();
+        this.highlightedNpcUuids = new HashSet<>();
+        this.filterLoadedOnly = false;
+        this.filterSameFlock = false;
+        this.filterQuery = "";
+        this.activeFlockFilterId = null;
+        this.statusMessage = null;
+        this.statusMessageUntilMs = 0L;
+        this.syncQueryFieldValue = true;
     }
 
     @Override
@@ -65,9 +121,12 @@ public final class NpcDebugInspectorRosterPage
                       @Nonnull Store<EntityStore> store) {
         refreshEntries();
         commandBuilder.append(UI_PATH);
+        applyFilterControlState(commandBuilder);
+        commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
+        syncQueryFieldValue = false;
         commandBuilder.set("#NpcDebugRosterSubtitle.Text", resolveSubtitle());
         buildCards(commandBuilder, eventBuilder);
-        bindCloseEvent(eventBuilder);
+        bindGlobalEvents(eventBuilder);
         startRefreshLoop();
     }
 
@@ -75,10 +134,46 @@ public final class NpcDebugInspectorRosterPage
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull RosterEventData data) {
+        if (data == null) {
+            close();
+            return;
+        }
+
+        if (data.filterQuery != null
+                && (data.action == null || data.action.isBlank() || ACTION_FILTER_APPLY.equals(data.action))) {
+            applyFilterQuery(data.filterQuery);
+            refreshEntries();
+            sendRefreshUpdate();
+            return;
+        }
+
         if (data.action == null || data.action.isBlank() || ACTION_CLOSE.equals(data.action)) {
             close();
             return;
         }
+
+        if (ACTION_FILTER_LOADED.equals(data.action)) {
+            filterLoadedOnly = !filterLoadedOnly;
+            setStatusMessage("Loaded-only filter " + (filterLoadedOnly ? "enabled" : "disabled") + ".", STATUS_MESSAGE_DURATION_MS);
+            refreshEntries();
+            sendRefreshUpdate();
+            return;
+        }
+
+        if (ACTION_FILTER_FLOCK.equals(data.action)) {
+            toggleSameFlockFilter();
+            refreshEntries();
+            sendRefreshUpdate();
+            return;
+        }
+
+        if (ACTION_FILTER_CLEAR.equals(data.action)) {
+            clearFilters();
+            refreshEntries();
+            sendRefreshUpdate();
+            return;
+        }
+
         if (data.action.startsWith(INSPECT_PREFIX)) {
             UUID npcUuid = parseUuidAction(data.action, INSPECT_PREFIX);
             if (npcUuid != null) {
@@ -86,10 +181,34 @@ public final class NpcDebugInspectorRosterPage
             }
             return;
         }
+
         if (data.action.startsWith(UNLINK_PREFIX)) {
             UUID npcUuid = parseUuidAction(data.action, UNLINK_PREFIX);
             if (npcUuid != null) {
+                highlightedNpcUuids.remove(npcUuid);
                 unlinkCallback.accept(npcUuid);
+                setStatusMessage("Unlinked " + npcUuid + ".", STATUS_MESSAGE_DURATION_MS);
+                refreshEntries();
+                sendRefreshUpdate();
+            }
+            return;
+        }
+
+        if (data.action.startsWith(COPY_PREFIX)) {
+            UUID npcUuid = parseUuidAction(data.action, COPY_PREFIX);
+            if (npcUuid != null) {
+                String uuidText = npcUuid.toString();
+                notifyPlayer("Inspector UUID: " + uuidText);
+                setStatusMessage("UUID sent to chat: " + uuidText, STATUS_MESSAGE_DURATION_MS);
+                sendRefreshUpdate();
+            }
+            return;
+        }
+
+        if (data.action.startsWith(HIGHLIGHT_PREFIX)) {
+            UUID npcUuid = parseUuidAction(data.action, HIGHLIGHT_PREFIX);
+            if (npcUuid != null) {
+                toggleHighlight(npcUuid);
                 refreshEntries();
                 sendRefreshUpdate();
             }
@@ -124,6 +243,7 @@ public final class NpcDebugInspectorRosterPage
         if (appendCard) {
             commandBuilder.append("#NpcDebugRosterList", CARD_UI_PATH);
         }
+
         commandBuilder.set(entrySelector + " #CardName.Text", entry.displayName());
         commandBuilder.set(entrySelector + " #CardUuid.Text", "UUID: " + entry.npcUuid());
         commandBuilder.set(entrySelector + " #CardRole.Text", "Role: " + entry.roleId());
@@ -131,6 +251,13 @@ public final class NpcDebugInspectorRosterPage
         commandBuilder.set(entrySelector + " #CardState.Text", "State: " + defaultText(entry.stateName(), "n/a"));
         commandBuilder.set(entrySelector + " #CardHealth.Text", "Health: " + defaultText(entry.healthText(), "n/a"));
         commandBuilder.set(entrySelector + " #CardFlock.Text", "Flock: " + defaultText(entry.flockText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardLocation.Text", "Location: " + defaultText(entry.locationText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardDistance.Text", "Distance: " + defaultText(entry.distanceText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardChange.Text", defaultText(changeSummaryByUuid.get(entry.npcUuid()), ""));
+        commandBuilder.set(
+                entrySelector + " #CardHighlightState.Text",
+                highlightedNpcUuids.contains(entry.npcUuid()) ? "Highlight: On" : ""
+        );
 
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
@@ -142,6 +269,18 @@ public final class NpcDebugInspectorRosterPage
                 CustomUIEventBindingType.Activating,
                 entrySelector + " #UnlinkButton",
                 EventData.of(EVENT_ACTION, UNLINK_PREFIX + entry.npcUuid()),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                entrySelector + " #CopyButton",
+                EventData.of(EVENT_ACTION, COPY_PREFIX + entry.npcUuid()),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                entrySelector + " #HighlightButton",
+                EventData.of(EVENT_ACTION, HIGHLIGHT_PREFIX + entry.npcUuid()),
                 false
         );
     }
@@ -185,6 +324,7 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
         refreshEntries();
+        emitHighlightParticles();
         sendRefreshUpdate();
         if (!dismissed) {
             scheduleRefreshTick();
@@ -194,10 +334,18 @@ public final class NpcDebugInspectorRosterPage
     private void sendRefreshUpdate() {
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = new UIEventBuilder();
+
+        applyFilterControlState(commandBuilder);
+        if (syncQueryFieldValue) {
+            commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
+            syncQueryFieldValue = false;
+        }
         commandBuilder.set("#NpcDebugRosterSubtitle.Text", resolveSubtitle());
+
         boolean hasEntries = entries.length > 0;
         commandBuilder.set("#NpcDebugRosterEmpty.Visible", !hasEntries);
         commandBuilder.set("#NpcDebugRosterListViewport.Visible", hasEntries);
+
         boolean structureChanged = renderedCardCount != entries.length;
         if (structureChanged) {
             commandBuilder.clear("#NpcDebugRosterList");
@@ -212,25 +360,76 @@ public final class NpcDebugInspectorRosterPage
                 bindCard(commandBuilder, eventBuilder, i, entries[i], false);
             }
         }
-        bindCloseEvent(eventBuilder);
+
+        bindGlobalEvents(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
     }
 
-    private void bindCloseEvent(@Nonnull UIEventBuilder eventBuilder) {
+    private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
                 "#NpcDebugRosterCloseButton",
                 EventData.of(EVENT_ACTION, ACTION_CLOSE),
                 false
         );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                "#NpcDebugRosterFilterLoadedButton",
+                EventData.of(EVENT_ACTION, ACTION_FILTER_LOADED),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                "#NpcDebugRosterFilterFlockButton",
+                EventData.of(EVENT_ACTION, ACTION_FILTER_FLOCK),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                "#NpcDebugRosterApplyFilterButton",
+                EventData.of(EVENT_FILTER_QUERY, "#NpcDebugRosterFilterQueryField.Value"),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                "#NpcDebugRosterFilterQueryField",
+                EventData.of(EVENT_FILTER_QUERY, "#NpcDebugRosterFilterQueryField.Value"),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
+                "#NpcDebugRosterClearFilterButton",
+                EventData.of(EVENT_ACTION, ACTION_FILTER_CLEAR),
+                false
+        );
+    }
+
+    private void applyFilterControlState(@Nonnull UICommandBuilder commandBuilder) {
+        commandBuilder.set(
+                "#NpcDebugRosterFilterLoadedButton.Text",
+                filterLoadedOnly ? "Loaded Only: On" : "Loaded Only: Off"
+        );
+        String flockText = "Same Flock: Off";
+        if (filterSameFlock) {
+            flockText = activeFlockFilterId != null
+                    ? "Same Flock: " + abbreviate(activeFlockFilterId)
+                    : "Same Flock: On";
+        }
+        commandBuilder.set("#NpcDebugRosterFilterFlockButton.Text", flockText);
     }
 
     private void refreshEntries() {
         List<NpcDebugLinkedEntry> values = entrySupplier != null ? entrySupplier.get() : List.of();
         if (values == null || values.isEmpty()) {
+            sourceEntries = new NpcDebugLinkedEntry[0];
             entries = new NpcDebugLinkedEntry[0];
+            previousEntriesByUuid.clear();
+            changeSummaryByUuid.clear();
+            highlightedNpcUuids.clear();
+            activeFlockFilterId = null;
             return;
         }
+
         ArrayList<NpcDebugLinkedEntry> safe = new ArrayList<>(values.size());
         for (NpcDebugLinkedEntry entry : values) {
             if (entry == null || entry.npcUuid() == null) {
@@ -243,18 +442,318 @@ public final class NpcDebugInspectorRosterPage
                         .thenComparing(NpcDebugLinkedEntry::displayName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(entry -> entry.npcUuid().toString())
         );
-        entries = safe.toArray(new NpcDebugLinkedEntry[0]);
+        sourceEntries = safe.toArray(new NpcDebugLinkedEntry[0]);
+
+        refreshChangeSummaries();
+        pruneHighlights();
+        refreshActiveFlockFilter();
+        entries = applyFilters();
+    }
+
+    private void refreshChangeSummaries() {
+        Map<UUID, NpcDebugLinkedEntry> currentByUuid = new HashMap<>();
+        Map<UUID, String> summaries = new HashMap<>();
+        for (NpcDebugLinkedEntry current : sourceEntries) {
+            UUID uuid = current.npcUuid();
+            currentByUuid.put(uuid, current);
+            String summary = resolveChangeSummary(previousEntriesByUuid.get(uuid), current);
+            if (summary != null && !summary.isBlank()) {
+                summaries.put(uuid, summary);
+            }
+        }
+        previousEntriesByUuid.clear();
+        previousEntriesByUuid.putAll(currentByUuid);
+        changeSummaryByUuid.clear();
+        changeSummaryByUuid.putAll(summaries);
+    }
+
+    @Nullable
+    private String resolveChangeSummary(@Nullable NpcDebugLinkedEntry previous, @Nonnull NpcDebugLinkedEntry current) {
+        if (previous == null) {
+            return "Newly linked";
+        }
+        List<String> fields = new ArrayList<>(6);
+        if (previous.loaded() != current.loaded()) {
+            fields.add("status");
+        }
+        if (!equalsValue(previous.stateName(), current.stateName())) {
+            fields.add("state");
+        }
+        if (!equalsValue(previous.healthText(), current.healthText())) {
+            fields.add("health");
+        }
+        if (!equalsValue(previous.flockText(), current.flockText())) {
+            fields.add("flock");
+        }
+        if (!equalsValue(previous.locationText(), current.locationText())) {
+            fields.add("location");
+        }
+        if (!equalsValue(previous.distanceText(), current.distanceText())) {
+            fields.add("distance");
+        }
+        if (fields.isEmpty()) {
+            return null;
+        }
+        String joined = String.join(", ", fields);
+        if (joined.length() > 44) {
+            joined = joined.substring(0, 41) + "...";
+        }
+        return "Changed: " + joined;
+    }
+
+    private boolean equalsValue(@Nullable String left, @Nullable String right) {
+        String a = normalizeMaybe(left);
+        String b = normalizeMaybe(right);
+        if (a == null) {
+            return b == null;
+        }
+        return a.equals(b);
+    }
+
+    private void pruneHighlights() {
+        Set<UUID> currentUuids = new HashSet<>();
+        for (NpcDebugLinkedEntry entry : sourceEntries) {
+            currentUuids.add(entry.npcUuid());
+        }
+        highlightedNpcUuids.retainAll(currentUuids);
+    }
+
+    private void refreshActiveFlockFilter() {
+        if (!filterSameFlock) {
+            activeFlockFilterId = null;
+            return;
+        }
+        String resolved = resolveSameFlockId();
+        if (resolved == null) {
+            filterSameFlock = false;
+            activeFlockFilterId = null;
+            setStatusMessage("Same flock filter disabled (no flock target).", STATUS_MESSAGE_DURATION_MS);
+            return;
+        }
+        activeFlockFilterId = resolved;
+    }
+
+    @Nullable
+    private String resolveSameFlockId() {
+        String bySupplier = sameFlockIdSupplier != null ? normalizeMaybe(sameFlockIdSupplier.get()) : null;
+        if (bySupplier != null) {
+            return bySupplier;
+        }
+        return resolveFallbackFlockId();
+    }
+
+    @Nullable
+    private String resolveFallbackFlockId() {
+        for (NpcDebugLinkedEntry entry : sourceEntries) {
+            if (!entry.loaded()) {
+                continue;
+            }
+            String flockId = normalizeMaybe(entry.flockId());
+            if (flockId != null) {
+                return flockId;
+            }
+        }
+        return null;
+    }
+
+    @Nonnull
+    private NpcDebugLinkedEntry[] applyFilters() {
+        if (sourceEntries.length == 0) {
+            return new NpcDebugLinkedEntry[0];
+        }
+        String query = normalizeMaybe(filterQuery);
+        String loweredQuery = query != null ? query.toLowerCase(Locale.ROOT) : null;
+        ArrayList<NpcDebugLinkedEntry> filtered = new ArrayList<>(sourceEntries.length);
+        for (NpcDebugLinkedEntry entry : sourceEntries) {
+            if (filterLoadedOnly && !entry.loaded()) {
+                continue;
+            }
+            if (filterSameFlock && activeFlockFilterId != null) {
+                String entryFlockId = normalizeMaybe(entry.flockId());
+                if (entryFlockId == null || !activeFlockFilterId.equals(entryFlockId)) {
+                    continue;
+                }
+            }
+            if (loweredQuery != null && !matchesQuery(entry, loweredQuery)) {
+                continue;
+            }
+            filtered.add(entry);
+        }
+        return filtered.toArray(new NpcDebugLinkedEntry[0]);
+    }
+
+    private boolean matchesQuery(@Nonnull NpcDebugLinkedEntry entry, @Nonnull String loweredQuery) {
+        return containsToken(entry.displayName(), loweredQuery)
+                || containsToken(entry.roleId(), loweredQuery)
+                || containsToken(entry.stateName(), loweredQuery)
+                || containsToken(entry.healthText(), loweredQuery)
+                || containsToken(entry.flockText(), loweredQuery)
+                || containsToken(entry.locationText(), loweredQuery)
+                || containsToken(entry.distanceText(), loweredQuery)
+                || containsToken(entry.npcUuid().toString(), loweredQuery);
+    }
+
+    private boolean containsToken(@Nullable String text, @Nonnull String loweredQuery) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.toLowerCase(Locale.ROOT).contains(loweredQuery);
+    }
+
+    private void toggleSameFlockFilter() {
+        if (filterSameFlock) {
+            filterSameFlock = false;
+            activeFlockFilterId = null;
+            setStatusMessage("Same-flock filter disabled.", STATUS_MESSAGE_DURATION_MS);
+            return;
+        }
+        filterSameFlock = true;
+        refreshActiveFlockFilter();
+        if (!filterSameFlock) {
+            return;
+        }
+        setStatusMessage("Same-flock filter enabled.", STATUS_MESSAGE_DURATION_MS);
+    }
+
+    private void toggleHighlight(@Nonnull UUID npcUuid) {
+        boolean enabled;
+        if (highlightedNpcUuids.contains(npcUuid)) {
+            highlightedNpcUuids.remove(npcUuid);
+            enabled = false;
+        } else {
+            highlightedNpcUuids.add(npcUuid);
+            enabled = true;
+        }
+        String stateText = enabled ? "enabled" : "disabled";
+        setStatusMessage("Highlight " + stateText + " for " + npcUuid + ".", STATUS_MESSAGE_DURATION_MS);
+        notifyPlayer("Highlight " + stateText + ": " + npcUuid);
+    }
+
+    private void applyFilterQuery(@Nullable String rawQuery) {
+        String trimmed = rawQuery != null ? rawQuery.trim() : "";
+        if (trimmed.length() > 48) {
+            trimmed = trimmed.substring(0, 48);
+        }
+        filterQuery = trimmed;
+        syncQueryFieldValue = true;
+        if (filterQuery.isBlank()) {
+            setStatusMessage("Search query cleared.", STATUS_MESSAGE_DURATION_MS);
+        } else {
+            setStatusMessage("Search applied: \"" + filterQuery + "\"", STATUS_MESSAGE_DURATION_MS);
+        }
+    }
+
+    private void clearFilters() {
+        filterLoadedOnly = false;
+        filterSameFlock = false;
+        filterQuery = "";
+        activeFlockFilterId = null;
+        syncQueryFieldValue = true;
+        setStatusMessage("All filters cleared.", STATUS_MESSAGE_DURATION_MS);
+    }
+
+    private void emitHighlightParticles() {
+        if (highlightedNpcUuids.isEmpty()) {
+            return;
+        }
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return;
+        }
+        Store<EntityStore> store = ref.getStore();
+        if (store == null || store.getExternalData() == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+
+        List<UUID> highlighted = new ArrayList<>(highlightedNpcUuids);
+        for (UUID uuid : highlighted) {
+            Ref<EntityStore> npcRef = world.getEntityRef(uuid);
+            if (npcRef == null || !npcRef.isValid()) {
+                continue;
+            }
+            TransformComponent transform = store.getComponent(npcRef, TransformComponent.getComponentType());
+            if (transform == null) {
+                continue;
+            }
+            Vector3d position = new Vector3d(transform.getPosition());
+            position.y += 1.2;
+            ParticleUtil.spawnParticleEffect(HIGHLIGHT_PARTICLE_ID, position, store);
+        }
     }
 
     @Nonnull
     private String resolveSubtitle() {
-        int loadedCount = 0;
-        for (NpcDebugLinkedEntry entry : entries) {
+        int totalCount = sourceEntries.length;
+        int loadedCount = countLoaded(sourceEntries);
+        int shownCount = entries.length;
+
+        StringBuilder subtitle = new StringBuilder();
+        subtitle.append("Linked NPCs: ").append(totalCount).append(" (").append(loadedCount).append(" loaded)");
+        if (shownCount != totalCount) {
+            subtitle.append(" | Showing: ").append(shownCount);
+        }
+
+        List<String> activeFilters = new ArrayList<>(3);
+        if (filterLoadedOnly) {
+            activeFilters.add("loaded");
+        }
+        if (filterSameFlock) {
+            activeFilters.add(
+                    activeFlockFilterId != null
+                            ? "flock " + abbreviate(activeFlockFilterId)
+                            : "same flock"
+            );
+        }
+        if (!filterQuery.isBlank()) {
+            activeFilters.add("query \"" + filterQuery + "\"");
+        }
+        if (!activeFilters.isEmpty()) {
+            subtitle.append(" | Filters: ").append(String.join(", ", activeFilters));
+        }
+
+        String activeStatus = resolveActiveStatusMessage();
+        if (activeStatus != null) {
+            subtitle.append(" | ").append(activeStatus);
+        }
+        return subtitle.toString();
+    }
+
+    private int countLoaded(@Nonnull NpcDebugLinkedEntry[] values) {
+        int loaded = 0;
+        for (NpcDebugLinkedEntry entry : values) {
             if (entry.loaded()) {
-                loadedCount++;
+                loaded++;
             }
         }
-        return "Linked NPCs: " + entries.length + " (" + loadedCount + " loaded)";
+        return loaded;
+    }
+
+    @Nullable
+    private String resolveActiveStatusMessage() {
+        if (statusMessage == null) {
+            return null;
+        }
+        if (System.currentTimeMillis() > statusMessageUntilMs) {
+            statusMessage = null;
+            statusMessageUntilMs = 0L;
+            return null;
+        }
+        return statusMessage;
+    }
+
+    private void setStatusMessage(@Nonnull String message, long durationMs) {
+        statusMessage = message;
+        statusMessageUntilMs = System.currentTimeMillis() + Math.max(500L, durationMs);
+    }
+
+    private void notifyPlayer(@Nonnull String message) {
+        if (notificationCallback != null) {
+            notificationCallback.accept(message);
+        }
     }
 
     @Nullable
@@ -278,6 +777,26 @@ public final class NpcDebugInspectorRosterPage
         return value;
     }
 
+    @Nullable
+    private String normalizeMaybe(@Nullable String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        return trimmed;
+    }
+
+    @Nonnull
+    private String abbreviate(@Nonnull String value) {
+        if (value.length() <= 12) {
+            return value;
+        }
+        return value.substring(0, 8) + "...";
+    }
+
     /** Event payload emitted by roster button clicks. */
     public static final class RosterEventData {
         public static final BuilderCodec<RosterEventData> CODEC = BuilderCodec.builder(
@@ -290,8 +809,15 @@ public final class NpcDebugInspectorRosterPage
                 data -> data.action
             )
             .add()
+            .append(
+                new KeyedCodec<>(EVENT_FILTER_QUERY, Codec.STRING),
+                (data, value) -> data.filterQuery = value,
+                data -> data.filterQuery
+            )
+            .add()
             .build();
 
         private String action;
+        private String filterQuery;
     }
 }

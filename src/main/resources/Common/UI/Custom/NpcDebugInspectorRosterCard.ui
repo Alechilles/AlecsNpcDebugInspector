@@ -1,7 +1,7 @@
 $C = "Common.ui";
 
 Group {
-  Anchor: (Top: 3, Left: 0, Right: 0, Height: 128);
+  Anchor: (Top: 3, Left: 0, Right: 0, Height: 152);
   Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
   Padding: (Left: 10, Right: 10, Top: 8, Bottom: 8);
 
@@ -83,16 +83,89 @@ Group {
     );
   }
 
-  $C.@SmallSecondaryTextButton #InspectButton {
-    @Sounds = $C.@ButtonSounds;
-    @Text = "Inspect";
-    @Anchor = (Top: 48, Right: 96, MinWidth: 96);
+  Label #CardLocation {
+    Anchor: (Top: 94, Left: 0, Width: 320, Height: 16);
+    Text: "Location:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
   }
 
-  $C.@SmallSecondaryTextButton #UnlinkButton {
-    @Sounds = $C.@ButtonSounds;
-    @Text = "Unlink";
-    @Anchor = (Top: 48, Right: 0, MinWidth: 86);
+  Label #CardDistance {
+    Anchor: (Top: 94, Left: 330, Width: 220, Height: 16);
+    Text: "Distance:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardChange {
+    Anchor: (Top: 112, Left: 0, Width: 320, Height: 16);
+    Text: "";
+    Style: (
+      FontSize: 12,
+      TextColor: #f5d59f,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardHighlightState {
+    Anchor: (Top: 112, Left: 330, Width: 220, Height: 16);
+    Text: "";
+    Style: (
+      FontSize: 12,
+      TextColor: #c0e8ff,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Group #CardActionButtonsTop {
+    Anchor: (Top: 48, Right: 0, Width: 304, Height: 30);
+    LayoutMode: Right;
+
+    $C.@SmallSecondaryTextButton #CopyButton {
+      @Sounds = $C.@ButtonSounds;
+      @Text = "Copy UUID";
+      @Anchor = (Width: 90);
+    }
+
+    Group #CardActionSpacer {
+      Anchor: (Width: 8);
+    }
+
+    $C.@SmallSecondaryTextButton #UnlinkButton {
+      @Sounds = $C.@ButtonSounds;
+      @Text = "Unlink";
+      @Anchor = (Width: 86);
+    }
+
+    Group #CardActionSpacer2 {
+      Anchor: (Width: 8);
+    }
+
+    $C.@SmallSecondaryTextButton #InspectButton {
+      @Sounds = $C.@ButtonSounds;
+      @Text = "Inspect";
+      @Anchor = (Width: 112);
+    }
+  }
+
+  Group #CardActionButtonsBottom {
+    Anchor: (Top: 82, Right: 0, Width: 168, Height: 30);
+    LayoutMode: Right;
+
+    $C.@SmallSecondaryTextButton #HighlightButton {
+      @Sounds = $C.@ButtonSounds;
+      @Text = "Highlight";
+      @Anchor = (Width: 168);
+    }
   }
 }
-

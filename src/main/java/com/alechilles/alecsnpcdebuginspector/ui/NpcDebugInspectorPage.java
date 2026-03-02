@@ -13,8 +13,13 @@ import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * Read-only page that renders one NPC debug snapshot.
@@ -23,14 +28,18 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public static final String UI_PATH = "NpcDebugInspectorPage.ui";
     private static final String EVENT_ACTION = "Action";
     private static final String ACTION_CLOSE = "Close";
+    private static final long REFRESH_INTERVAL_MS = 1000L;
 
-    private final NpcDebugSnapshot snapshot;
-    private boolean handled;
+    private final Supplier<NpcDebugSnapshot> snapshotSupplier;
+    private volatile boolean dismissed;
+    private volatile boolean refreshLoopStarted;
 
-    public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef, @Nonnull NpcDebugSnapshot snapshot) {
+    public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
         super(playerRef, CustomPageLifetime.CanDismiss, PageEventData.CODEC);
-        this.snapshot = snapshot;
-        this.handled = false;
+        this.snapshotSupplier = snapshotSupplier;
+        this.dismissed = false;
+        this.refreshLoopStarted = false;
     }
 
     @Override
@@ -39,10 +48,26 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                       @Nonnull UIEventBuilder eventBuilder,
                       @Nonnull Store<EntityStore> store) {
         commandBuilder.append(UI_PATH);
-        commandBuilder.set("#NpcDebugInspectorTitle.Text", snapshot.title());
-        commandBuilder.set("#NpcDebugInspectorSubtitle.Text", snapshot.subtitle());
-        commandBuilder.set("#NpcDebugInspectorDetails.Text", snapshot.details());
+        applySnapshot(commandBuilder, resolveSnapshot());
+        bindCloseEvent(eventBuilder);
+        startRefreshLoop();
+    }
 
+    @Override
+    public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
+                                @Nonnull Store<EntityStore> store,
+                                @Nonnull PageEventData data) {
+        if (data.action == null || data.action.isBlank() || ACTION_CLOSE.equals(data.action)) {
+            close();
+        }
+    }
+
+    @Override
+    public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
+        dismissed = true;
+    }
+
+    private void bindCloseEvent(@Nonnull UIEventBuilder eventBuilder) {
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
                 "#NpcDebugInspectorCloseButton",
@@ -51,17 +76,78 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         );
     }
 
-    @Override
-    public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
-                                @Nonnull Store<EntityStore> store,
-                                @Nonnull PageEventData data) {
-        handled = true;
-        close();
+    private void applySnapshot(@Nonnull UICommandBuilder commandBuilder, @Nonnull NpcDebugSnapshot snapshot) {
+        commandBuilder.set("#NpcDebugInspectorTitle.Text", snapshot.title());
+        commandBuilder.set("#NpcDebugInspectorSubtitle.Text", snapshot.subtitle());
+        commandBuilder.set("#NpcDebugInspectorDetails.Text", snapshot.details());
     }
 
-    @Override
-    public void onDismiss(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
-        handled = true;
+    @Nonnull
+    private NpcDebugSnapshot resolveSnapshot() {
+        if (snapshotSupplier == null) {
+            return new NpcDebugSnapshot("NPC Debug Inspector", "Snapshot supplier unavailable", "No data.");
+        }
+        try {
+            NpcDebugSnapshot snapshot = snapshotSupplier.get();
+            if (snapshot != null) {
+                return snapshot;
+            }
+        } catch (RuntimeException ignored) {
+            // Return fallback below.
+        }
+        return new NpcDebugSnapshot("NPC Debug Inspector", "Snapshot unavailable", "No data.");
+    }
+
+    private void startRefreshLoop() {
+        if (refreshLoopStarted) {
+            return;
+        }
+        refreshLoopStarted = true;
+        scheduleRefreshTick();
+    }
+
+    private void scheduleRefreshTick() {
+        CompletableFuture.runAsync(
+                this::dispatchRefreshTick,
+                CompletableFuture.delayedExecutor(REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        );
+    }
+
+    private void dispatchRefreshTick() {
+        if (dismissed) {
+            return;
+        }
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return;
+        }
+        Store<EntityStore> store = ref.getStore();
+        if (store == null || store.getExternalData() == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+        world.execute(this::runRefreshTickOnWorldThread);
+    }
+
+    private void runRefreshTickOnWorldThread() {
+        if (dismissed) {
+            return;
+        }
+        sendRefreshUpdate();
+        if (!dismissed) {
+            scheduleRefreshTick();
+        }
+    }
+
+    private void sendRefreshUpdate() {
+        UICommandBuilder commandBuilder = new UICommandBuilder();
+        UIEventBuilder eventBuilder = new UIEventBuilder();
+        applySnapshot(commandBuilder, resolveSnapshot());
+        bindCloseEvent(eventBuilder);
+        sendUpdate(commandBuilder, eventBuilder, false);
     }
 
     /** Event payload for the inspector page. */
@@ -81,4 +167,3 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         private String action;
     }
 }
-

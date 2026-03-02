@@ -1,6 +1,5 @@
 package com.alechilles.alecsnpcdebuginspector.commands;
 
-import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorPage;
 import com.hypixel.hytale.component.Ref;
@@ -65,8 +64,20 @@ public final class NpcDebugCommand extends AbstractPlayerCommand {
             }
         }
 
-        NpcDebugSnapshot snapshot = snapshotService.capture(targetUuid, npcRef, store);
-        player.getPageManager().openCustomPage(ref, store, new NpcDebugInspectorPage(playerRef, snapshot));
+        UUID capturedUuid = targetUuid;
+        player.getPageManager().openCustomPage(
+                ref,
+                store,
+                new NpcDebugInspectorPage(
+                        playerRef,
+                        () -> snapshotService.capture(
+                                capturedUuid,
+                                world.getEntityRef(capturedUuid),
+                                ref,
+                                store
+                        )
+                )
+        );
     }
 
     @Nullable
@@ -90,4 +101,3 @@ public final class NpcDebugCommand extends AbstractPlayerCommand {
         }
     }
 }
-

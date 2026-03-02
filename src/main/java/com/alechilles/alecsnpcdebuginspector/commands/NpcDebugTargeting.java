@@ -17,7 +17,7 @@ import javax.annotation.Nullable;
 /**
  * Resolves the NPC currently closest to player crosshair.
  */
-final class NpcDebugTargeting {
+public final class NpcDebugTargeting {
     private static final double MAX_DISTANCE = 8.0;
     private static final double MIN_DOT = 0.7;
 
@@ -25,7 +25,7 @@ final class NpcDebugTargeting {
     }
 
     @Nullable
-    static Candidate findTargetNpc(Store<EntityStore> store, Ref<EntityStore> playerRef) {
+    public static Candidate findTargetNpc(Store<EntityStore> store, Ref<EntityStore> playerRef) {
         if (store == null || playerRef == null || !playerRef.isValid()) {
             return null;
         }
@@ -79,9 +79,9 @@ final class NpcDebugTargeting {
         return new Candidate(best.ref, best.npcUuid);
     }
 
-    static final class Candidate {
-        final Ref<EntityStore> ref;
-        final UUID npcUuid;
+    public static final class Candidate {
+        public final Ref<EntityStore> ref;
+        public final UUID npcUuid;
 
         Candidate(Ref<EntityStore> ref, UUID npcUuid) {
             this.ref = ref;
@@ -95,4 +95,3 @@ final class NpcDebugTargeting {
         private double score = -1.0;
     }
 }
-

@@ -7,6 +7,7 @@ import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatValue;
@@ -75,6 +76,12 @@ final class NpcDebugLinkService {
         if (world == null) {
             return List.of();
         }
+        TransformComponent playerTransform = null;
+        Ref<EntityStore> playerRef = player.getReference();
+        if (playerRef != null && playerRef.isValid()) {
+            playerTransform = store.getComponent(playerRef, TransformComponent.getComponentType());
+        }
+
         List<NpcDebugLinkedEntry> out = new ArrayList<>();
         for (UUID uuid : readLinkedNpcSet(stack)) {
             Ref<EntityStore> npcRef = world.getEntityRef(uuid);
@@ -84,6 +91,9 @@ final class NpcDebugLinkService {
                         "Unloaded NPC",
                         "<unknown>",
                         false,
+                        null,
+                        null,
+                        null,
                         null,
                         null,
                         null
@@ -99,6 +109,9 @@ final class NpcDebugLinkService {
                         false,
                         null,
                         null,
+                        null,
+                        null,
+                        null,
                         null
                 ));
                 continue;
@@ -110,7 +123,10 @@ final class NpcDebugLinkService {
                     true,
                     resolveStateName(npc),
                     resolveHealthText(npcRef, store),
-                    resolveFlockText(npcRef, store)
+                    resolveFlockText(npcRef, store),
+                    resolveFlockId(npcRef, store),
+                    resolveLocationText(npcRef, store),
+                    resolveDistanceText(playerTransform, npcRef, store)
             ));
         }
         return out;
@@ -228,6 +244,46 @@ final class NpcDebugLinkService {
         return String.valueOf(membership.getMembershipType()).toLowerCase(Locale.ROOT);
     }
 
+    @Nullable
+    private String resolveFlockId(@Nonnull Ref<EntityStore> npcRef, @Nonnull Store<EntityStore> store) {
+        ComponentType<EntityStore, FlockMembership> flockType = FlockMembership.getComponentType();
+        if (flockType == null) {
+            return null;
+        }
+        FlockMembership membership = store.getComponent(npcRef, flockType);
+        if (membership == null || membership.getFlockId() == null) {
+            return null;
+        }
+        return String.valueOf(membership.getFlockId());
+    }
+
+    @Nullable
+    private String resolveLocationText(@Nonnull Ref<EntityStore> npcRef, @Nonnull Store<EntityStore> store) {
+        TransformComponent transform = store.getComponent(npcRef, TransformComponent.getComponentType());
+        if (transform == null) {
+            return null;
+        }
+        int x = (int) Math.floor(transform.getPosition().x);
+        int y = (int) Math.floor(transform.getPosition().y);
+        int z = (int) Math.floor(transform.getPosition().z);
+        return x + ", " + y + ", " + z;
+    }
+
+    @Nullable
+    private String resolveDistanceText(@Nullable TransformComponent playerTransform,
+                                       @Nonnull Ref<EntityStore> npcRef,
+                                       @Nonnull Store<EntityStore> store) {
+        if (playerTransform == null) {
+            return null;
+        }
+        TransformComponent npcTransform = store.getComponent(npcRef, TransformComponent.getComponentType());
+        if (npcTransform == null) {
+            return null;
+        }
+        double distance = playerTransform.getPosition().distanceTo(npcTransform.getPosition());
+        return String.format(Locale.ROOT, "%.1f", distance);
+    }
+
     static final class ToolResolution {
         final ItemStack stack;
         final String toolId;
@@ -256,4 +312,3 @@ final class NpcDebugLinkService {
         }
     }
 }
-

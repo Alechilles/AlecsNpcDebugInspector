@@ -15,6 +15,9 @@ public final class NpcDebugLinkedEntry {
     private final String stateName;
     private final String healthText;
     private final String flockText;
+    private final String flockId;
+    private final String locationText;
+    private final String distanceText;
 
     public NpcDebugLinkedEntry(@Nonnull UUID npcUuid,
                                @Nonnull String displayName,
@@ -22,7 +25,10 @@ public final class NpcDebugLinkedEntry {
                                boolean loaded,
                                @Nullable String stateName,
                                @Nullable String healthText,
-                               @Nullable String flockText) {
+                               @Nullable String flockText,
+                               @Nullable String flockId,
+                               @Nullable String locationText,
+                               @Nullable String distanceText) {
         this.npcUuid = npcUuid;
         this.displayName = displayName;
         this.roleId = roleId;
@@ -30,6 +36,9 @@ public final class NpcDebugLinkedEntry {
         this.stateName = stateName;
         this.healthText = healthText;
         this.flockText = flockText;
+        this.flockId = flockId;
+        this.locationText = locationText;
+        this.distanceText = distanceText;
     }
 
     @Nonnull
@@ -65,5 +74,19 @@ public final class NpcDebugLinkedEntry {
     public String flockText() {
         return flockText;
     }
-}
 
+    @Nullable
+    public String flockId() {
+        return flockId;
+    }
+
+    @Nullable
+    public String locationText() {
+        return locationText;
+    }
+
+    @Nullable
+    public String distanceText() {
+        return distanceText;
+    }
+}

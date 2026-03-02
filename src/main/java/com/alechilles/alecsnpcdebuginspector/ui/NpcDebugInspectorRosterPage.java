@@ -8,17 +8,14 @@ import com.hypixel.hytale.codec.codecs.map.MapCodec;
 import com.hypixel.hytale.codec.util.RawJsonReader;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
-import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
-import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.world.ParticleUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.io.IOException;
@@ -64,7 +61,6 @@ public final class NpcDebugInspectorRosterPage
 
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
-    private static final String HIGHLIGHT_PARTICLE_ID = "Question";
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
     private final Supplier<String> sameFlockIdSupplier;
@@ -81,6 +77,7 @@ public final class NpcDebugInspectorRosterPage
     private final Map<UUID, NpcDebugLinkedEntry> previousEntriesByUuid;
     private final Map<UUID, String> changeSummaryByUuid;
     private final Set<UUID> highlightedNpcUuids;
+    private final NpcDebugHighlightVisualizer highlightVisualizer;
 
     private boolean filterLoadedOnly;
     private boolean filterSameFlock;
@@ -121,6 +118,7 @@ public final class NpcDebugInspectorRosterPage
         this.previousEntriesByUuid = new HashMap<>();
         this.changeSummaryByUuid = new HashMap<>();
         this.highlightedNpcUuids = new HashSet<>();
+        this.highlightVisualizer = new NpcDebugHighlightVisualizer();
         this.filterLoadedOnly = false;
         this.filterSameFlock = false;
         this.filterQuery = "";
@@ -385,7 +383,7 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
         refreshEntries();
-        emitHighlightParticles();
+        emitHighlightVisualization();
         sendRefreshUpdate();
         if (!dismissed && isCurrentPageActive() && generation == refreshTickGeneration.get()) {
             scheduleRefreshTick();
@@ -778,7 +776,7 @@ public final class NpcDebugInspectorRosterPage
         }
     }
 
-    private void emitHighlightParticles() {
+    private void emitHighlightVisualization() {
         if (highlightedNpcUuids.isEmpty()) {
             return;
         }
@@ -794,21 +792,7 @@ public final class NpcDebugInspectorRosterPage
         if (world == null) {
             return;
         }
-
-        List<UUID> highlighted = new ArrayList<>(highlightedNpcUuids);
-        for (UUID uuid : highlighted) {
-            Ref<EntityStore> npcRef = world.getEntityRef(uuid);
-            if (npcRef == null || !npcRef.isValid()) {
-                continue;
-            }
-            TransformComponent transform = store.getComponent(npcRef, TransformComponent.getComponentType());
-            if (transform == null) {
-                continue;
-            }
-            Vector3d position = new Vector3d(transform.getPosition());
-            position.y += 1.2;
-            ParticleUtil.spawnParticleEffect(HIGHLIGHT_PARTICLE_ID, position, store);
-        }
+        highlightVisualizer.render(playerRef, store, highlightedNpcUuids);
     }
 
     @Nonnull

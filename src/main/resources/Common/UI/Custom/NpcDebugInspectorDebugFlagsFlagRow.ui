@@ -1,14 +1,14 @@
 $C = "Common.ui";
 
 Group {
-  Anchor: (Top: 2, Left: 0, Right: 0, Height: 52);
+  Anchor: (Top: 2, Left: 0, Right: 0, Height: 56);
   Background: #23344c(0.86);
   Padding: (Left: 10, Right: 10, Top: 7, Bottom: 7);
   LayoutMode: Left;
 
   Group {
     LayoutMode: Top;
-    Anchor: (Left: 0, Right: 90, Height: 38);
+    Anchor: (Left: 0, Right: 34, Height: 42);
 
     Label #FlagName {
       Anchor: (Height: 17);
@@ -23,24 +23,23 @@ Group {
     }
 
     Label #FlagDescription {
-      Anchor: (Top: 2, Height: 16);
+      Anchor: (Top: 2, Height: 20);
       Text: "";
       Style: (
         FontSize: 11,
         TextColor: #b7c8dc,
         HorizontalAlignment: Start,
-        VerticalAlignment: Center
+        VerticalAlignment: Start,
+        RenderWordWrap: true
       );
     }
   }
 
   Group {
-    Anchor: (Width: 10);
+    Anchor: (Width: 8);
   }
 
-  $C.@SmallSecondaryTextButton #FlagToggleButton {
-    @Sounds = $C.@ButtonSounds;
-    @Text = "OFF";
-    @Anchor = (Width: 80, Height: 28, Top: 5);
+  $C.@CheckBox #FlagToggleCheck {
+    Anchor: (Width: 22, Height: 22, Top: 10);
   }
 }

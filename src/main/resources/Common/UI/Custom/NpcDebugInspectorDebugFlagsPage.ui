@@ -4,7 +4,7 @@ $C.@PageOverlay {
   LayoutMode: Middle;
 
   $C.@DecoratedContainer #NpcDebugFlagsRoot {
-    Anchor: (Width: 920, Height: 760);
+    Anchor: (Width: 620, Height: 760);
 
     #Title {
       $C.@Title #NpcDebugFlagsTitle {

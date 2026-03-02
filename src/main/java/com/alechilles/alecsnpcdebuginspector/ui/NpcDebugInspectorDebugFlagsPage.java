@@ -283,10 +283,10 @@ public final class NpcDebugInspectorDebugFlagsPage
                 commandBuilder.set(flagSelector + " #FlagName.Text", descriptor.label());
                 commandBuilder.set(flagSelector + " #FlagDescription.Text", descriptor.description());
                 boolean enabled = activeFlags.contains(descriptor.flag());
-                commandBuilder.set(flagSelector + " #FlagToggleButton.Text", enabled ? "ON" : "OFF");
+                commandBuilder.set(flagSelector + " #FlagToggleCheck.Value", enabled);
                 eventBuilder.addEventBinding(
-                        CustomUIEventBindingType.Activating,
-                        flagSelector + " #FlagToggleButton",
+                        CustomUIEventBindingType.ValueChanged,
+                        flagSelector + " #FlagToggleCheck",
                         EventData.of(EVENT_ACTION, ACTION_TOGGLE_FLAG_PREFIX + descriptor.flag().name()),
                         false
                 );

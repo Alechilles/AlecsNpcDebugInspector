@@ -250,7 +250,9 @@ public final class NpcDebugSnapshotService {
 
         List<Map.Entry<String, String>> targetingKeys = filterScope(scopeValues,
                 "target", "seen", "los", "aggro", "threat", "attack", "enemy", "hostile", "distance");
-        appendTopEntries(sb, npcUuid, now, "targeting.scope", targetingKeys, 12, true);
+        List<Map.Entry<String, String>> resolvedTargetingKeys =
+                resolveScopeEntityRefs(targetingKeys, marked, store);
+        appendTopEntries(sb, npcUuid, now, "targeting.scope", resolvedTargetingKeys, 12, true);
 
         if (npcRef != null && npcRef.isValid()) {
             appendTrackedLine(sb, npcUuid, now, "targeting.selfRef", "Self Ref", resolveEntityTargetLabel(npcRef, store), true, false);
@@ -422,7 +424,9 @@ public final class NpcDebugSnapshotService {
         Map<String, String> scopeValues = snapshotScopeValues(role.getEntitySupport().getSensorScope());
         List<Map.Entry<String, String>> relationshipKeys = filterScope(scopeValues,
                 "owner", "tamer", "leader", "follower", "flock", "home", "leash", "parent", "mate", "bond");
-        appendTopEntries(sb, npcUuid, now, "relationships.scope", relationshipKeys, 12, true);
+        List<Map.Entry<String, String>> resolvedRelationshipKeys =
+                resolveScopeEntityRefs(relationshipKeys, marked, store);
+        appendTopEntries(sb, npcUuid, now, "relationships.scope", resolvedRelationshipKeys, 12, true);
         return sb.toString().trim();
     }
 
@@ -1097,6 +1101,63 @@ public final class NpcDebugSnapshotService {
         UUID targetUuid = targetNpc.getUuid();
         String uuidText = targetUuid != null ? targetUuid.toString() : "<unknown-uuid>";
         return preferredName + " (" + uuidText + ")";
+    }
+
+    @Nonnull
+    private List<Map.Entry<String, String>> resolveScopeEntityRefs(@Nonnull List<Map.Entry<String, String>> entries,
+                                                                   @Nullable MarkedEntitySupport marked,
+                                                                   @Nonnull Store<EntityStore> store) {
+        if (entries.isEmpty()) {
+            return entries;
+        }
+        List<Map.Entry<String, String>> resolved = new ArrayList<>(entries.size());
+        for (Map.Entry<String, String> entry : entries) {
+            String resolvedValue = resolveScopeEntityRefValue(entry.getKey(), entry.getValue(), marked, store);
+            resolved.add(Map.entry(entry.getKey(), resolvedValue));
+        }
+        return resolved;
+    }
+
+    @Nonnull
+    private String resolveScopeEntityRefValue(@Nonnull String key,
+                                              @Nonnull String value,
+                                              @Nullable MarkedEntitySupport marked,
+                                              @Nonnull Store<EntityStore> store) {
+        if (!value.startsWith("Ref{")) {
+            return value;
+        }
+        Ref<EntityStore> ref = matchMarkedEntityRef(key, value, marked);
+        if (ref == null || !ref.isValid()) {
+            return value;
+        }
+        return resolveEntityTargetLabel(ref, store);
+    }
+
+    @Nullable
+    private Ref<EntityStore> matchMarkedEntityRef(@Nonnull String key,
+                                                  @Nonnull String value,
+                                                  @Nullable MarkedEntitySupport marked) {
+        if (marked == null) {
+            return null;
+        }
+        String lowerKey = key.toLowerCase(Locale.ROOT);
+        int slotCount = marked.getMarkedEntitySlotCount();
+        for (int i = 0; i < slotCount; i++) {
+            String slotName = safeText(marked.getSlotName(i), "Slot" + i);
+            Ref<EntityStore> ref = marked.getMarkedEntityRef(i);
+            if (ref == null || !ref.isValid()) {
+                continue;
+            }
+            String refText = String.valueOf(ref);
+            String lowerSlotName = slotName.toLowerCase(Locale.ROOT);
+            if (value.equals(refText)
+                    || key.equalsIgnoreCase(slotName)
+                    || lowerKey.contains(lowerSlotName)
+                    || lowerSlotName.contains(lowerKey)) {
+                return ref;
+            }
+        }
+        return null;
     }
 
     @Nullable

@@ -518,12 +518,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 refreshEventData,
                 false
         );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.MouseButtonReleased,
-                "#NpcDebugInspectorRefreshSlider",
-                refreshEventData,
-                false
-        );
     }
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {

@@ -96,6 +96,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private final LinkedHashSet<String> collapsedSectionIds;
     private final LinkedHashSet<String> pinnedFieldKeys;
     private final ArrayList<String> renderedFieldKeys;
+    private String resolvedNpcName;
     private boolean pinModeEnabled;
     private boolean sectionStateInitialized;
     @Nullable
@@ -117,6 +118,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.collapsedSectionIds = new LinkedHashSet<>();
         this.pinnedFieldKeys = new LinkedHashSet<>();
         this.renderedFieldKeys = new ArrayList<>();
+        this.resolvedNpcName = "NPC";
         this.pinModeEnabled = false;
         this.sectionStateInitialized = false;
         this.lastRenderedStructureSignature = null;
@@ -555,7 +557,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {
         long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
-        commandBuilder.set("#NpcDebugInspectorTitle.Text", latestSnapshot.title());
+        commandBuilder.set("#NpcDebugInspectorTitle.Text", "Inspector - " + resolvedNpcName);
         commandBuilder.set("#NpcDebugInspectorSubtitle.Text", compactSubtitle(latestSnapshot.subtitle()));
         commandBuilder.set("#NpcDebugInspectorPinButton.Text", pinModeEnabled ? "Unpin" : "Pin NPC");
         commandBuilder.set("#NpcDebugInspectorRefreshLabel.Text", NpcDebugUiRefreshSettings.formatIntervalLabel(refreshIntervalMs));
@@ -563,8 +565,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and drag or move buttons to reorder."
-                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and drag or move buttons to reorder."
+                        ? "Pinned overlay active. Check fields to pin. Use arrows or drag handle to reorder sections."
+                        : "Pin NPC to create an overlay. Use arrows or drag handle to reorder sections."
         );
     }
 
@@ -576,10 +578,16 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         String compact = subtitle;
         int markerIndex = compact.indexOf("| Changed lines");
         if (markerIndex <= 0) {
-            return compact.replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "").trim();
+            return compact
+                    .replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "")
+                    .replace("Game Time (UTC):", "UTC:")
+                    .trim();
         }
         compact = compact.substring(0, markerIndex).trim();
-        return compact.replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "").trim();
+        return compact
+                .replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "")
+                .replace("Game Time (UTC):", "UTC:")
+                .trim();
     }
 
     private void rebuildRows(@Nonnull UICommandBuilder commandBuilder,
@@ -705,6 +713,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private void refreshSnapshotData() {
         latestSnapshot = resolveSnapshot();
         NpcDebugInspectorLine[] lines = NpcDebugInspectorLineParser.parse(latestSnapshot.details());
+        resolvedNpcName = NpcDebugNameHierarchyResolver.resolvePreferredName(lines, "NPC");
         rebuildSections(lines);
         syncSectionState();
     }
@@ -764,6 +773,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         for (InspectorSection section : sectionsById.values()) {
             snapshotOrder.add(section.id);
         }
+        applyDefaultSectionOrdering(snapshotOrder);
 
         if (!sectionStateInitialized) {
             sectionOrder.clear();
@@ -785,6 +795,34 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
         collapsedSectionIds.removeIf(id -> !sectionsById.containsKey(id));
+    }
+
+    private void applyDefaultSectionOrdering(@Nonnull List<String> sectionIds) {
+        if (sectionIds.isEmpty()) {
+            return;
+        }
+        String recentEventsId = findSectionIdByTitle(sectionIds, NpcDebugInspectorLineParser.RECENT_EVENTS_SECTION);
+        if (recentEventsId == null) {
+            return;
+        }
+        sectionIds.remove(recentEventsId);
+        int overviewIndex = sectionIds.indexOf(OVERVIEW_SECTION_ID);
+        int insertIndex = overviewIndex >= 0 ? overviewIndex + 1 : 0;
+        sectionIds.add(Math.min(insertIndex, sectionIds.size()), recentEventsId);
+    }
+
+    @Nullable
+    private String findSectionIdByTitle(@Nonnull List<String> sectionIds, @Nonnull String title) {
+        for (String sectionId : sectionIds) {
+            InspectorSection section = sectionsById.get(sectionId);
+            if (section == null || section.title == null) {
+                continue;
+            }
+            if (title.equalsIgnoreCase(section.title)) {
+                return sectionId;
+            }
+        }
+        return null;
     }
 
     private boolean isSectionHeaderLine(@Nullable String value) {

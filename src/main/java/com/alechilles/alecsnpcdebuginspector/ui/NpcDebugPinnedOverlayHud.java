@@ -11,7 +11,7 @@ import javax.annotation.Nonnull;
 final class NpcDebugPinnedOverlayHud extends CustomUIHud {
     static final String UI_PATH = "NpcDebugPinnedOverlayHud.ui";
 
-    private String title = "NPC Debug Pinned Overlay";
+    private String title = "Pinned Overlay";
     private String subtitle = "";
     private String body = "";
 

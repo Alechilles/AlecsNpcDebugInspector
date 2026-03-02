@@ -5,7 +5,7 @@ $C.@DecoratedContainer #NpcDebugPinnedOverlayRoot {
 
   #Title {
     $C.@Title #NpcDebugPinnedOverlayTitle {
-      @Text = "NPC Debug Inspector - Pinned Overlay";
+      @Text = "Pinned Overlay";
     }
   }
 

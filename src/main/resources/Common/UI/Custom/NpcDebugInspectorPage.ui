@@ -17,34 +17,36 @@ $C.@PageOverlay {
       Padding: (Left: 10, Right: 10, Top: 8, Bottom: 12);
 
       Group #NpcDebugInspectorHeaderRow {
-        Anchor: (Height: 32);
+        Anchor: (Height: 46);
 
         Label #NpcDebugInspectorSubtitle {
-          Anchor: (Left: 0, Top: 5, Right: 130, Height: 22);
+          Anchor: (Left: 0, Top: 0, Right: 130, Height: 40);
           Text: "";
           Style: (
-            FontSize: 13,
+            FontSize: 12,
             TextColor: #c3d5e8,
             HorizontalAlignment: Start,
-            VerticalAlignment: Center
+            VerticalAlignment: Start,
+            Wrap: true
           );
         }
 
         $C.@SmallSecondaryTextButton #NpcDebugInspectorPinButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Pin NPC";
-          @Anchor = (Right: 0, Top: 0, Width: 120, Height: 30);
+          @Anchor = (Right: 0, Top: 8, Width: 120, Height: 30);
         }
       }
 
       Label #NpcDebugInspectorPinHint {
-        Anchor: (Top: 4, Height: 20);
+        Anchor: (Top: 2, Height: 30);
         Text: "";
         Style: (
           FontSize: 11,
           TextColor: #b7c8dc,
           HorizontalAlignment: Start,
-          VerticalAlignment: Center
+          VerticalAlignment: Start,
+          Wrap: true
         );
       }
 

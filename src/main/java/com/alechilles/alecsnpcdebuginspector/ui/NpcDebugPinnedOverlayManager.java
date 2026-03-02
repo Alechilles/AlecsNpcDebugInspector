@@ -227,8 +227,9 @@ public final class NpcDebugPinnedOverlayManager {
             NpcDebugSnapshot snapshot = resolveSnapshot();
             NpcDebugInspectorLine[] lines = NpcDebugInspectorLineParser.parse(snapshot.details());
             String body = resolvePinnedBody(snapshot.details(), lines);
+            String pinnedNpcName = resolvePinnedNpcName(lines);
             String subtitle = "NPC: " + resolvePinnedNpcLabel(lines) + " | Pinned: " + countPinned(lines);
-            hud.setContent("NPC Debug Pinned Overlay", subtitle, body);
+            hud.setContent("Pinned Overlay - " + pinnedNpcName, subtitle, body);
             if (!hudShown) {
                 hud.showOverlay();
                 hudShown = true;
@@ -405,74 +406,13 @@ public final class NpcDebugPinnedOverlayManager {
         }
 
         @Nonnull
-        private String resolvePinnedNpcLabel(@Nonnull NpcDebugInspectorLine[] lines) {
-            String displayName = findOverviewFieldValue(lines, "Display Name");
-            String entityNameKey = findOverviewFieldValue(lines, "Entity Name Key");
-            String roleId = findOverviewFieldValue(lines, "Role Id");
-            String preferredName = firstMeaningfulName(displayName, entityNameKey, roleId, "NPC");
-            return preferredName + " (" + npcUuid + ")";
-        }
-
-        @Nullable
-        private String findOverviewFieldValue(@Nonnull NpcDebugInspectorLine[] lines, @Nonnull String label) {
-            String keyPrefix = "Overview|" + label;
-            for (NpcDebugInspectorLine line : lines) {
-                if (line.key == null || !line.key.startsWith(keyPrefix)) {
-                    continue;
-                }
-                String parsedValue = parseLineValue(line.displayText);
-                if (parsedValue != null) {
-                    return parsedValue;
-                }
-            }
-            return null;
-        }
-
-        @Nullable
-        private String parseLineValue(@Nullable String displayText) {
-            String normalized = normalizePinnedLineText(displayText);
-            if (normalized.isBlank()) {
-                return null;
-            }
-            int separatorIndex = normalized.indexOf(": ");
-            if (separatorIndex < 0 || separatorIndex + 2 >= normalized.length()) {
-                return normalized;
-            }
-            return normalized.substring(separatorIndex + 2).trim();
+        private String resolvePinnedNpcName(@Nonnull NpcDebugInspectorLine[] lines) {
+            return NpcDebugNameHierarchyResolver.resolvePreferredName(lines, "NPC");
         }
 
         @Nonnull
-        private String firstMeaningfulName(@Nullable String displayName,
-                                           @Nullable String entityNameKey,
-                                           @Nullable String roleId,
-                                           @Nonnull String fallback) {
-            if (isMeaningfulName(displayName)) {
-                return displayName.trim();
-            }
-            if (isMeaningfulName(entityNameKey)) {
-                return entityNameKey.trim();
-            }
-            if (isMeaningfulName(roleId)) {
-                return roleId.trim();
-            }
-            return fallback;
-        }
-
-        private boolean isMeaningfulName(@Nullable String value) {
-            if (value == null) {
-                return false;
-            }
-            String normalized = value.trim();
-            if (normalized.isBlank()) {
-                return false;
-            }
-            String lower = normalized.toLowerCase(java.util.Locale.ROOT);
-            return !"<none>".equals(lower)
-                    && !"none".equals(lower)
-                    && !"n/a".equals(lower)
-                    && !"null".equals(lower)
-                    && !"<unknown>".equals(lower)
-                    && !"unknown".equals(lower);
+        private String resolvePinnedNpcLabel(@Nonnull NpcDebugInspectorLine[] lines) {
+            return resolvePinnedNpcName(lines) + " (" + npcUuid + ")";
         }
 
         @Nonnull

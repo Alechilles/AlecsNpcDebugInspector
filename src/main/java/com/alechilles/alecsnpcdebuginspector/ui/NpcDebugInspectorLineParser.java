@@ -11,6 +11,11 @@ import javax.annotation.Nullable;
  * Parses inspector details text into structured line entries.
  */
 final class NpcDebugInspectorLineParser {
+    static final String RECENT_EVENTS_SECTION = "Recent Events";
+    static final String EVENTS_LOG_LABEL = "Events Log";
+    static final String EVENTS_LOG_PIN_KEY = RECENT_EVENTS_SECTION + "|" + EVENTS_LOG_LABEL;
+    private static final String EVENTS_LOG_PIN_TEXT = RECENT_EVENTS_SECTION + " | " + EVENTS_LOG_LABEL;
+
     private NpcDebugInspectorLineParser() {
     }
 
@@ -46,6 +51,16 @@ final class NpcDebugInspectorLineParser {
                 normalized = line.substring(3);
             } else if (line.startsWith("- ")) {
                 normalized = line.substring(2);
+            }
+            normalized = normalized.trim();
+
+            if (RECENT_EVENTS_SECTION.equalsIgnoreCase(currentSection)) {
+                if (normalized.startsWith(EVENTS_LOG_LABEL + ":")) {
+                    lines.add(new NpcDebugInspectorLine(line, EVENTS_LOG_PIN_KEY, true, EVENTS_LOG_PIN_TEXT));
+                } else {
+                    lines.add(new NpcDebugInspectorLine(line, null, false, currentSection));
+                }
+                continue;
             }
 
             int valueSeparator = normalized.indexOf(": ");

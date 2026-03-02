@@ -36,12 +36,14 @@ final class NpcDebugHistoryStore {
         boolean changed = previous != null && !previous.equals(value);
         if (changed && recordEvent) {
             String event = EVENT_TIME_FORMAT.format(now) + " " + label + ": " + previous + " -> " + value;
-            entry.events.addFirst(event);
-            while (entry.events.size() > MAX_EVENTS) {
-                entry.events.removeLast();
-            }
+            pushEvent(entry, event);
         }
         return new TrackResult(changed, previous);
+    }
+
+    void recordEvent(@Nonnull UUID npcUuid, @Nonnull Instant now, @Nonnull String description) {
+        HistoryEntry entry = history.computeIfAbsent(npcUuid, ignored -> new HistoryEntry());
+        pushEvent(entry, EVENT_TIME_FORMAT.format(now) + " " + description);
     }
 
     @Nonnull
@@ -61,6 +63,13 @@ final class NpcDebugHistoryStore {
         private final Deque<String> events = new ArrayDeque<>();
     }
 
+    private void pushEvent(@Nonnull HistoryEntry entry, @Nonnull String event) {
+        entry.events.addFirst(event);
+        while (entry.events.size() > MAX_EVENTS) {
+            entry.events.removeLast();
+        }
+    }
+
     static final class TrackResult {
         final boolean changed;
         @Nullable
@@ -72,4 +81,3 @@ final class NpcDebugHistoryStore {
         }
     }
 }
-

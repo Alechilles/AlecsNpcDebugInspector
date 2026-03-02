@@ -51,11 +51,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
     private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
     private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
+    private static final String ACTION_REORDER_INTERACTION = "ReorderInteraction";
     private static final String ACTION_REORDER_SECTION = "ReorderSection";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_INTERVAL_MS = 1000L;
-    private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 1750L;
+    private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 4000L;
     private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
     private static final String[] FROM_INDEX_KEYS = {
             "FromIndex",
@@ -164,6 +165,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (ACTION_TOGGLE_PIN_MODE.equals(data.action)) {
             togglePinMode();
             sendRefreshUpdate();
+            return;
+        }
+        if (ACTION_REORDER_INTERACTION.equals(data.action)) {
+            suppressRefreshTemporarily();
             return;
         }
         if (data.action.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
@@ -477,6 +482,18 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     CustomUIEventBindingType.Activating,
                     sectionSelector + " #SectionMoveDownButton",
                     EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionMoveButton",
+                    EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.MouseEntered,
+                    sectionSelector + " #SectionMoveButton",
+                    EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
                     false
             );
 

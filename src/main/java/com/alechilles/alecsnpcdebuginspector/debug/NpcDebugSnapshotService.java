@@ -62,6 +62,12 @@ public final class NpcDebugSnapshotService {
             DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
     private static final String HIGHLIGHT_CHANGED_PREFIX = ">> ";
     private static final String NORMAL_PREFIX = "- ";
+    private static final String EVENTS_LOG_HINT = "Events Log: Pin this to mirror recent events in overlay.";
+    private static final String TIMER_PHASE_ACTIVE = "active";
+    private static final String TIMER_PHASE_INACTIVE = "inactive";
+    private static final String ALARM_STATUS_SET = "set";
+    private static final String ALARM_STATUS_UNSET = "unset";
+    private static final String ALARM_STATUS_READY = "ready";
 
     private final NpcDebugHistoryStore historyStore = new NpcDebugHistoryStore();
 
@@ -306,17 +312,32 @@ public final class NpcDebugSnapshotService {
         }
 
         appendTrackedLine(sb, npcUuid, now, "timers.available", "Available", "true", true, false);
-        appendTrackedLine(sb, npcUuid, now, "timers.despawnSeconds", "Despawn Countdown (s)", formatNumber(npc.getDespawnTime()), true, false);
+        String despawnSeconds = formatNumber(npc.getDespawnTime());
+        appendTrackedLine(sb, npcUuid, now, "timers.despawnSeconds", "Despawn Countdown (s)", despawnSeconds, true, false);
+        trackTimerTransition(npcUuid, now, "despawnSeconds", "Despawn Countdown (s)", despawnSeconds);
 
         CombatSupport combatSupport = npc.getRole().getCombatSupport();
-        appendTrackedLine(sb, npcUuid, now, "timers.attackExecuting", "Attack Executing", String.valueOf(combatSupport.isExecutingAttack()), true, true);
+        String attackExecuting = String.valueOf(combatSupport.isExecutingAttack());
+        appendTrackedLine(sb, npcUuid, now, "timers.attackExecuting", "Attack Executing", attackExecuting, true, false);
+        trackTimerTransition(npcUuid, now, "attackExecuting", "Attack Executing", attackExecuting);
         Double attackPause = readField(combatSupport, "attackPause", Double.class);
-        appendTrackedLine(sb, npcUuid, now, "timers.attackPause", "Attack Pause (s)", attackPause != null ? formatNumber(attackPause) : "n/a", true, false);
+        String attackPauseText = attackPause != null ? formatNumber(attackPause) : "n/a";
+        appendTrackedLine(sb, npcUuid, now, "timers.attackPause", "Attack Pause (s)", attackPauseText, true, false);
+        trackTimerTransition(npcUuid, now, "attackPause", "Attack Pause (s)", attackPauseText);
 
         Map<String, String> scopeValues = snapshotScopeValues(npc.getRole().getEntitySupport().getSensorScope());
         List<Map.Entry<String, String>> timerKeys = filterScope(scopeValues,
                 "timer", "time", "cooldown", "window", "delay", "pause", "until", "respawn", "lock");
-        appendTopEntries(sb, npcUuid, now, "timers.scope", timerKeys, 14, true);
+        for (Map.Entry<String, String> timerEntry : timerKeys) {
+            trackTimerTransition(
+                    npcUuid,
+                    now,
+                    "scope." + timerEntry.getKey(),
+                    timerEntry.getKey(),
+                    timerEntry.getValue()
+            );
+        }
+        appendTopEntries(sb, npcUuid, now, "timers.scope", timerKeys, 14, false);
         return sb.toString().trim();
     }
 
@@ -484,7 +505,8 @@ public final class NpcDebugSnapshotService {
             String status = resolveAlarmStatus(alarm, now);
             String remaining = resolveAlarmRemainingText(alarm, now);
             String value = remaining != null ? status + " (" + remaining + ")" : status;
-            appendTrackedLine(sb, npcUuid, now, "alarms." + entry.getKey(), entry.getKey(), value, true, true);
+            appendTrackedLine(sb, npcUuid, now, "alarms." + entry.getKey(), entry.getKey(), value, true, false);
+            trackAlarmTransition(npcUuid, now, entry.getKey(), status);
         }
         if (ordered.size() > limit) {
             appendTrackedLine(sb, npcUuid, now, "alarms.remaining", "Additional Alarms", String.valueOf(ordered.size() - limit), false, false);
@@ -605,10 +627,13 @@ public final class NpcDebugSnapshotService {
     @Nonnull
     private String buildEventsSection(@Nullable UUID npcUuid) {
         List<String> events = historyStore.events(npcUuid);
-        if (events.isEmpty()) {
-            return "No recent tracked changes yet.";
-        }
         StringBuilder sb = new StringBuilder();
+        sb.append(EVENTS_LOG_HINT).append('\n');
+        if (events.isEmpty()) {
+            sb.append("Event Count: 0").append('\n');
+            sb.append("- No recent tracked changes yet.");
+            return sb.toString().trim();
+        }
         sb.append("Event Count: ").append(events.size()).append('\n');
         for (String event : events) {
             sb.append("- ").append(event).append('\n');
@@ -838,12 +863,12 @@ public final class NpcDebugSnapshotService {
             return "missing";
         }
         if (!alarm.isSet()) {
-            return "unset";
+            return ALARM_STATUS_UNSET;
         }
         if (alarm.hasPassed(gameTime)) {
-            return "passed";
+            return ALARM_STATUS_READY;
         }
-        return "active";
+        return ALARM_STATUS_SET;
     }
 
     @Nullable
@@ -884,6 +909,90 @@ public final class NpcDebugSnapshotService {
                 .append(": ")
                 .append(value)
                 .append('\n');
+    }
+
+    private void trackTimerTransition(@Nullable UUID npcUuid,
+                                      @Nonnull Instant now,
+                                      @Nonnull String key,
+                                      @Nonnull String label,
+                                      @Nonnull String value) {
+        if (npcUuid == null) {
+            return;
+        }
+        String phase = resolveTimerPhase(value);
+        NpcDebugHistoryStore.TrackResult phaseResult = historyStore.track(
+                npcUuid,
+                "events.timer." + key,
+                "Timer " + label,
+                phase,
+                now,
+                false
+        );
+        if (!phaseResult.changed) {
+            return;
+        }
+        if (TIMER_PHASE_ACTIVE.equals(phase)) {
+            historyStore.recordEvent(npcUuid, now, "Timer started: " + label + " = " + value);
+            return;
+        }
+        historyStore.recordEvent(npcUuid, now, "Timer ended: " + label);
+    }
+
+    private void trackAlarmTransition(@Nullable UUID npcUuid,
+                                      @Nonnull Instant now,
+                                      @Nonnull String alarmKey,
+                                      @Nonnull String status) {
+        if (npcUuid == null) {
+            return;
+        }
+        NpcDebugHistoryStore.TrackResult statusResult = historyStore.track(
+                npcUuid,
+                "events.alarm." + alarmKey + ".status",
+                "Alarm " + alarmKey,
+                status,
+                now,
+                false
+        );
+        if (!statusResult.changed) {
+            return;
+        }
+        String previous = statusResult.previous != null ? statusResult.previous : "unknown";
+        historyStore.recordEvent(npcUuid, now, "Alarm " + alarmKey + ": " + previous + " -> " + status);
+    }
+
+    @Nonnull
+    private String resolveTimerPhase(@Nullable String value) {
+        return isTimerActiveValue(value) ? TIMER_PHASE_ACTIVE : TIMER_PHASE_INACTIVE;
+    }
+
+    private boolean isTimerActiveValue(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if ("true".equals(normalized)) {
+            return true;
+        }
+        if ("false".equals(normalized)
+                || "n/a".equals(normalized)
+                || "none".equals(normalized)
+                || "<none>".equals(normalized)
+                || "unset".equals(normalized)
+                || "[]".equals(normalized)
+                || "0".equals(normalized)
+                || "0.0".equals(normalized)
+                || "0.00".equals(normalized)
+                || "0s".equals(normalized)) {
+            return false;
+        }
+        try {
+            return Math.abs(Double.parseDouble(normalized)) > 0.000_001d;
+        } catch (NumberFormatException ignored) {
+            return true;
+        }
     }
 
     @Nonnull

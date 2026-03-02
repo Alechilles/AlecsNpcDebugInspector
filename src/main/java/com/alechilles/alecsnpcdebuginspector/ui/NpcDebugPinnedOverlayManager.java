@@ -191,7 +191,7 @@ public final class NpcDebugPinnedOverlayManager {
 
             NpcDebugSnapshot snapshot = resolveSnapshot();
             NpcDebugInspectorLine[] lines = NpcDebugInspectorLineParser.parse(snapshot.details());
-            String body = resolvePinnedBody(lines);
+            String body = resolvePinnedBody(snapshot.details(), lines);
             String subtitle = "NPC: " + npcUuid + " | Pinned: " + countPinned(lines);
             hud.setContent("NPC Debug Pinned Overlay", subtitle, body);
             if (!hudShown) {
@@ -223,18 +223,26 @@ public final class NpcDebugPinnedOverlayManager {
         }
 
         @Nonnull
-        private String resolvePinnedBody(@Nonnull NpcDebugInspectorLine[] lines) {
+        private String resolvePinnedBody(@Nullable String details, @Nonnull NpcDebugInspectorLine[] lines) {
             Set<String> keys = getPinnedFieldKeys();
             if (keys.isEmpty()) {
                 return "No pinned fields selected.\n\nOpen NPC inspector and check fields to pin.";
             }
 
             List<String> entries = new ArrayList<>();
+            boolean includeEventsLog = keys.contains(NpcDebugInspectorLineParser.EVENTS_LOG_PIN_KEY);
+            if (includeEventsLog) {
+                appendEventsLog(entries, details);
+            }
+
             for (NpcDebugInspectorLine line : lines) {
                 if (!line.pinnable || line.key == null) {
                     continue;
                 }
                 if (!keys.contains(line.key)) {
+                    continue;
+                }
+                if (NpcDebugInspectorLineParser.EVENTS_LOG_PIN_KEY.equals(line.key)) {
                     continue;
                 }
                 entries.add("- " + line.pinnedText);
@@ -246,6 +254,63 @@ public final class NpcDebugPinnedOverlayManager {
                 return "Pinned fields are currently unavailable for this NPC snapshot.";
             }
             return String.join("\n", entries);
+        }
+
+        private void appendEventsLog(@Nonnull List<String> entries, @Nullable String details) {
+            if (entries.size() >= MAX_PINNED_LINES) {
+                return;
+            }
+            entries.add("=== Recent Events ===");
+            int remaining = MAX_PINNED_LINES - entries.size();
+            if (remaining <= 0) {
+                return;
+            }
+            List<String> lines = extractRecentEventsLines(details);
+            if (lines.isEmpty()) {
+                entries.add("No recent tracked changes yet.");
+                return;
+            }
+            int limit = Math.min(remaining, lines.size());
+            for (int i = 0; i < limit; i++) {
+                entries.add(lines.get(i));
+            }
+        }
+
+        @Nonnull
+        private List<String> extractRecentEventsLines(@Nullable String details) {
+            if (details == null || details.isBlank()) {
+                return List.of();
+            }
+            List<String> lines = new ArrayList<>();
+            boolean inRecentEvents = false;
+            String[] rawLines = details.split("\\R");
+            for (String rawLine : rawLines) {
+                if (rawLine == null) {
+                    continue;
+                }
+                String line = rawLine.stripTrailing();
+                if (line.startsWith("=== ") && line.endsWith(" ===")) {
+                    String sectionName = line.substring(4, Math.max(4, line.length() - 4)).trim();
+                    if (inRecentEvents) {
+                        break;
+                    }
+                    inRecentEvents = NpcDebugInspectorLineParser.RECENT_EVENTS_SECTION.equalsIgnoreCase(sectionName);
+                    continue;
+                }
+                if (!inRecentEvents || line.isBlank()) {
+                    continue;
+                }
+                if (line.startsWith(">> ")) {
+                    line = line.substring(3);
+                } else if (line.startsWith("- ")) {
+                    line = line.substring(2);
+                }
+                if (line.startsWith(NpcDebugInspectorLineParser.EVENTS_LOG_LABEL + ":")) {
+                    continue;
+                }
+                lines.add(line);
+            }
+            return lines;
         }
 
         @Nonnull

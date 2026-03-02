@@ -21,7 +21,8 @@ import javax.annotation.Nullable;
  * Maintains a persistent per-player highlight rendering loop independent of open UI pages.
  */
 public final class NpcDebugHighlightManager {
-    private static final long HIGHLIGHT_REFRESH_MS = 100L;
+    // Match flock debug cadence: debug shapes are re-issued every world tick (~50ms).
+    private static final long HIGHLIGHT_REFRESH_MS = 50L;
     private static final Map<UUID, HighlightSession> SESSIONS = new ConcurrentHashMap<>();
 
     private NpcDebugHighlightManager() {
@@ -83,14 +84,19 @@ public final class NpcDebugHighlightManager {
                 return;
             }
             started = true;
-            scheduleTick();
+            // Render immediately so highlights appear without the initial delay.
+            scheduleTick(0L);
         }
 
         private void scheduleTick() {
+            scheduleTick(HIGHLIGHT_REFRESH_MS);
+        }
+
+        private void scheduleTick(long delayMs) {
             long generation = tickGeneration.incrementAndGet();
             CompletableFuture.runAsync(
                     () -> dispatchTick(generation),
-                    CompletableFuture.delayedExecutor(HIGHLIGHT_REFRESH_MS, TimeUnit.MILLISECONDS)
+                    CompletableFuture.delayedExecutor(Math.max(0L, delayMs), TimeUnit.MILLISECONDS)
             );
         }
 

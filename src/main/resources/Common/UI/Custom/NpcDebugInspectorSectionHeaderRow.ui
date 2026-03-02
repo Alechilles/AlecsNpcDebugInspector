@@ -75,7 +75,6 @@ Group {
       ReorderableListGrip #SectionMoveButton {
         Anchor: (Width: 28, Height: 28);
         TooltipText: %client.settings.dragToReorder;
-        TextTooltipStyle: $C.@ButtonTextTooltipStyle;
 
         Group {
           LayoutMode: Middle;

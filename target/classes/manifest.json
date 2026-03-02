@@ -1,0 +1,24 @@
+{
+  "Group": "Alechilles",
+  "Name": "Alec's NPC Debug Inspector",
+  "Version": "0.1.0-SNAPSHOT",
+  "Description": "Standalone NPC debug inspector with in-game detail UI.",
+  "Authors": [
+    {
+      "Name": "Alec (Alechilles)",
+      "Email": "",
+      "Url": "https://www.curseforge.com/members/alechilles/projects",
+      "Discord": "alechilles"
+    }
+  ],
+  "Website": "",
+  "Main": "com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector",
+  "ServerVersion": "2026.02.19-1A311A592",
+  "Dependencies": {},
+  "OptionalDependencies": {},
+  "LoadBefore": {},
+  "DisabledByDefault": false,
+  "IncludesAssetPack": true,
+  "SubPlugins": []
+}
+

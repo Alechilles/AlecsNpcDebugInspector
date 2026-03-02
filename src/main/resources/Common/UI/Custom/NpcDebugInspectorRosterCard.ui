@@ -1,0 +1,98 @@
+$C = "Common.ui";
+
+Group {
+  Anchor: (Top: 3, Left: 0, Right: 0, Height: 128);
+  Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
+  Padding: (Left: 10, Right: 10, Top: 8, Bottom: 8);
+
+  Label #CardName {
+    Anchor: (Top: 0, Left: 0, Width: 560, Height: 22);
+    Text: "NPC";
+    Style: (
+      FontSize: 16,
+      RenderBold: true,
+      TextColor: #eff4fa,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardUuid {
+    Anchor: (Top: 22, Left: 0, Width: 700, Height: 16);
+    Text: "UUID:";
+    Style: (
+      FontSize: 11,
+      TextColor: #b7c8dc,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardRole {
+    Anchor: (Top: 40, Left: 0, Width: 700, Height: 16);
+    Text: "Role:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardStatus {
+    Anchor: (Top: 58, Left: 0, Width: 320, Height: 16);
+    Text: "Status:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardState {
+    Anchor: (Top: 76, Left: 0, Width: 420, Height: 16);
+    Text: "State:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardHealth {
+    Anchor: (Top: 58, Left: 330, Width: 200, Height: 16);
+    Text: "Health:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #CardFlock {
+    Anchor: (Top: 76, Left: 330, Width: 220, Height: 16);
+    Text: "Flock:";
+    Style: (
+      FontSize: 12,
+      TextColor: #dbe6f2,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  $C.@SmallSecondaryTextButton #InspectButton {
+    @Sounds = $C.@ButtonSounds;
+    @Text = "Inspect";
+    @Anchor = (Top: 48, Right: 96, MinWidth: 96);
+  }
+
+  $C.@SmallSecondaryTextButton #UnlinkButton {
+    @Sounds = $C.@ButtonSounds;
+    @Text = "Unlink";
+    @Anchor = (Top: 48, Right: 0, MinWidth: 86);
+  }
+}
+

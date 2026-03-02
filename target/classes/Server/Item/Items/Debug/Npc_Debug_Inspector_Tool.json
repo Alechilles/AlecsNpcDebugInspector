@@ -1,0 +1,43 @@
+{
+  "$Comment": "Standalone item for linking NPCs and opening the NPC Debug Inspector roster.",
+  "TranslationProperties": {
+    "Name": "server.items.Npc_Debug_Inspector_Tool.name",
+    "Description": "server.items.Npc_Debug_Inspector_Tool.description"
+  },
+  "Quality": "Tool",
+  "PlayerAnimationsId": "Item",
+  "Interactions": {
+    "Primary": {
+      "Interactions": [
+        {
+          "Type": "NpcDebugInspectorItem"
+        }
+      ]
+    },
+    "Secondary": {
+      "Interactions": [
+        {
+          "Type": "NpcDebugInspectorItem",
+          "Action": "OpenRoster"
+        }
+      ]
+    }
+  },
+  "Model": "Items/Consumables/Recipes/Recipe.blockymodel",
+  "Texture": "Items/Consumables/Recipes/Recipe_Texture.png",
+  "Icon": "Icons/ItemsGenerated/Recipe_Page.png",
+  "IconProperties": {
+    "Scale": 0.76,
+    "Translation": [
+      -1,
+      5
+    ],
+    "Rotation": [
+      135,
+      135,
+      0
+    ]
+  },
+  "MaxStack": 1
+}
+

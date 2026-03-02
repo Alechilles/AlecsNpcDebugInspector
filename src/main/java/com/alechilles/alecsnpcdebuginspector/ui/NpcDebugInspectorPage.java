@@ -48,6 +48,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String EVENT_ACTION = "Action";
     private static final String EVENT_TYPE = "Type";
     private static final String ACTION_CLOSE = "Close";
+    private static final String ACTION_BACK = "Back";
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
@@ -89,6 +90,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
     @Nullable
     private final UUID targetNpcUuid;
+    @Nullable
+    private final Runnable backCallback;
 
     private NpcDebugSnapshot latestSnapshot;
     private final Map<String, InspectorSection> sectionsById;
@@ -108,10 +111,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
                                  @Nullable UUID targetNpcUuid,
-                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
+                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier,
+                                 @Nullable Runnable backCallback) {
         super(playerRef, CustomPageLifetime.CanDismiss, PageEventData.CODEC);
         this.snapshotSupplier = snapshotSupplier;
         this.targetNpcUuid = targetNpcUuid;
+        this.backCallback = backCallback;
         this.latestSnapshot = new NpcDebugSnapshot("NPC Debug Inspector", "", "No data.");
         this.sectionsById = new LinkedHashMap<>();
         this.sectionOrder = new ArrayList<>();
@@ -132,8 +137,17 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
      * Legacy constructor kept for compatibility where target UUID is unavailable.
      */
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nullable UUID targetNpcUuid,
                                  @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
-        this(playerRef, null, snapshotSupplier);
+        this(playerRef, targetNpcUuid, snapshotSupplier, null);
+    }
+
+    /**
+     * Legacy constructor kept for compatibility where target UUID is unavailable.
+     */
+    public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
+        this(playerRef, null, snapshotSupplier, null);
     }
 
     @Override
@@ -199,6 +213,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
         if (ACTION_CLOSE.equals(resolvedAction)) {
             close();
+            return;
+        }
+        if (ACTION_BACK.equals(resolvedAction)) {
+            if (backCallback != null) {
+                backCallback.run();
+            } else {
+                close();
+            }
             return;
         }
         if (ACTION_TOGGLE_PIN_MODE.equals(resolvedAction)) {
@@ -532,6 +554,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
+                "#NpcDebugInspectorBackButton",
+                EventData.of(EVENT_ACTION, ACTION_BACK),
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.Activating,
                 "#NpcDebugInspectorCloseButton",
                 EventData.of(EVENT_ACTION, ACTION_CLOSE),
                 false
@@ -560,6 +588,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set("#NpcDebugInspectorTitle.Text", "Inspector - " + resolvedNpcName);
         commandBuilder.set("#NpcDebugInspectorSubtitle.Text", compactSubtitle(latestSnapshot.subtitle()));
         commandBuilder.set("#NpcDebugInspectorPinButton.Text", pinModeEnabled ? "Unpin" : "Pin NPC");
+        commandBuilder.set("#NpcDebugInspectorBackButton.Visible", backCallback != null);
+        commandBuilder.set("#NpcDebugInspectorFooterGap.Visible", backCallback != null);
         commandBuilder.set("#NpcDebugInspectorRefreshLabel.Text", NpcDebugUiRefreshSettings.formatIntervalLabel(refreshIntervalMs));
         commandBuilder.set("#NpcDebugInspectorRefreshSlider.Value", NpcDebugUiRefreshSettings.toUiValue(refreshIntervalMs));
         commandBuilder.set(

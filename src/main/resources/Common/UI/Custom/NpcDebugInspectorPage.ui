@@ -99,13 +99,24 @@ $C.@PageOverlay {
         }
       }
 
-      Group {
+      Group #NpcDebugInspectorFooter {
         LayoutMode: Right;
+        Anchor: (Top: 10, Height: 32);
+
+        $C.@SmallSecondaryTextButton #NpcDebugInspectorBackButton {
+          @Sounds = $C.@ButtonSounds;
+          @Text = "Back";
+          @Anchor = (Width: 120, Height: 32);
+        }
+
+        Group #NpcDebugInspectorFooterGap {
+          Anchor: (Width: 10);
+        }
 
         $C.@SmallSecondaryTextButton #NpcDebugInspectorCloseButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Close";
-          @Anchor = (MinWidth: 120);
+          @Anchor = (Width: 120, Height: 32);
         }
       }
     }

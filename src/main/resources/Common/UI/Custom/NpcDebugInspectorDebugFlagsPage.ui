@@ -4,7 +4,7 @@ $C.@PageOverlay {
   LayoutMode: Middle;
 
   $C.@DecoratedContainer #NpcDebugFlagsRoot {
-    Anchor: (Width: 620, Height: 760);
+    Anchor: (Width: 380, Height: 760);
 
     #Title {
       $C.@Title #NpcDebugFlagsTitle {
@@ -45,7 +45,7 @@ $C.@PageOverlay {
         $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetDefaultButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Preset: Default";
-          @Anchor = (Width: 160);
+          @Anchor = (Width: 108);
         }
 
         Group {
@@ -55,7 +55,7 @@ $C.@PageOverlay {
         $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetAllButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Enable All";
-          @Anchor = (Width: 120);
+          @Anchor = (Width: 108);
         }
 
         Group {
@@ -65,7 +65,7 @@ $C.@PageOverlay {
         $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetNoneButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Disable All";
-          @Anchor = (Width: 120);
+          @Anchor = (Width: 108);
         }
       }
 

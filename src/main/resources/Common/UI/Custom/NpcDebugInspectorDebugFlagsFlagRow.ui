@@ -30,7 +30,7 @@ Group {
         TextColor: #b7c8dc,
         HorizontalAlignment: Start,
         VerticalAlignment: Start,
-        RenderWordWrap: true
+        Wrap: true
       );
     }
   }

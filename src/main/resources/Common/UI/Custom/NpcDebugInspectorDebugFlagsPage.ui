@@ -4,7 +4,7 @@ $C.@PageOverlay {
   LayoutMode: Middle;
 
   $C.@DecoratedContainer #NpcDebugFlagsRoot {
-    Anchor: (Width: 380, Height: 760);
+    Anchor: (Width: 460, Height: 760);
 
     #Title {
       $C.@Title #NpcDebugFlagsTitle {
@@ -42,20 +42,10 @@ $C.@PageOverlay {
         LayoutMode: Left;
         Anchor: (Top: 4, Height: 34);
 
-        $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetDefaultButton {
-          @Sounds = $C.@ButtonSounds;
-          @Text = "Preset: Default";
-          @Anchor = (Width: 108);
-        }
-
-        Group {
-          Anchor: (Width: 8);
-        }
-
         $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetAllButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Enable All";
-          @Anchor = (Width: 108);
+          @Anchor = (Width: 142);
         }
 
         Group {
@@ -65,7 +55,7 @@ $C.@PageOverlay {
         $C.@SmallSecondaryTextButton #NpcDebugFlagsPresetNoneButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Disable All";
-          @Anchor = (Width: 108);
+          @Anchor = (Width: 142);
         }
       }
 
@@ -79,7 +69,7 @@ $C.@PageOverlay {
         LayoutMode: TopScrolling;
         KeepScrollPosition: true;
         ScrollbarStyle: $C.@DefaultScrollbarStyle;
-        Padding: (Right: 6);
+        Padding: (Right: 6, Bottom: 4);
 
         Group #NpcDebugFlagsList {
           LayoutMode: Top;
@@ -87,13 +77,14 @@ $C.@PageOverlay {
         }
       }
 
-      Group {
+      Group #NpcDebugFlagsFooter {
         LayoutMode: Right;
+        Anchor: (Top: 10, Height: 32);
 
         $C.@SmallSecondaryTextButton #NpcDebugFlagsBackButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Back";
-          @Anchor = (MinWidth: 120);
+          @Anchor = (Width: 120, Height: 32);
         }
 
         Group {
@@ -103,7 +94,7 @@ $C.@PageOverlay {
         $C.@SmallSecondaryTextButton #NpcDebugFlagsCloseButton {
           @Sounds = $C.@ButtonSounds;
           @Text = "Close";
-          @Anchor = (MinWidth: 120);
+          @Anchor = (Width: 120, Height: 32);
         }
       }
     }

@@ -41,7 +41,6 @@ public final class NpcDebugInspectorDebugFlagsPage
     private static final String EVENT_ACTION = "Action";
     private static final String ACTION_CLOSE = "Close";
     private static final String ACTION_BACK = "Back";
-    private static final String ACTION_SET_DEFAULT = "SetDefault";
     private static final String ACTION_SET_ALL = "SetAll";
     private static final String ACTION_SET_NONE = "SetNone";
     private static final String ACTION_TOGGLE_FLAG_PREFIX = "ToggleFlag:";
@@ -122,10 +121,6 @@ public final class NpcDebugInspectorDebugFlagsPage
             } else {
                 close();
             }
-            return;
-        }
-        if (ACTION_SET_DEFAULT.equals(normalizedAction)) {
-            applyPreset(store, NpcDebugRoleDebugFlagService.Preset.DEFAULT, "Applied default debug flags.");
             return;
         }
         if (ACTION_SET_ALL.equals(normalizedAction)) {
@@ -225,7 +220,6 @@ public final class NpcDebugInspectorDebugFlagsPage
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
         bindStaticAction(eventBuilder, "#NpcDebugFlagsCloseButton", ACTION_CLOSE);
         bindStaticAction(eventBuilder, "#NpcDebugFlagsBackButton", ACTION_BACK);
-        bindStaticAction(eventBuilder, "#NpcDebugFlagsPresetDefaultButton", ACTION_SET_DEFAULT);
         bindStaticAction(eventBuilder, "#NpcDebugFlagsPresetAllButton", ACTION_SET_ALL);
         bindStaticAction(eventBuilder, "#NpcDebugFlagsPresetNoneButton", ACTION_SET_NONE);
     }

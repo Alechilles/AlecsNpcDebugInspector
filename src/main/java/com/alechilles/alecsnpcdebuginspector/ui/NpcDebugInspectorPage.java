@@ -45,6 +45,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String FIELD_ROW_UI_PATH = "NpcDebugInspectorFieldRow.ui";
 
     private static final String EVENT_ACTION = "Action";
+    private static final String EVENT_TYPE = "Type";
     private static final String ACTION_CLOSE = "Close";
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
@@ -54,7 +55,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_REORDER_INTERACTION = "ReorderInteraction";
     private static final String ACTION_REORDER_SECTION = "ReorderSection";
     private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
-    private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
+    private static final String EVENT_REFRESH_INTERVAL_MS = "@RefreshIntervalMs";
+    private static final String EVENT_REFRESH_INTERVAL_MS_LEGACY = "RefreshIntervalMs";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 4000L;
@@ -143,12 +145,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull String rawData) {
         Map<String, String> rawEventData = decodeRawEventData(rawData);
-        if (ACTION_REFRESH_RATE_CHANGED.equals(rawEventData.get(EVENT_ACTION))) {
+        String resolvedAction = firstNonBlank(rawEventData.get(EVENT_ACTION), rawEventData.get(EVENT_TYPE));
+        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)) {
             applyRefreshIntervalFromEvent(resolveRefreshIntervalValue(rawEventData));
             sendRefreshUpdate();
             return;
         }
-        if (ACTION_REORDER_SECTION.equals(rawEventData.get(EVENT_ACTION))) {
+        if (ACTION_REORDER_SECTION.equals(resolvedAction)) {
             suppressRefreshTemporarily();
             if (applySectionReorder(rawEventData)) {
                 sendRefreshUpdate();
@@ -162,53 +165,54 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull PageEventData data) {
-        if (data.action == null || data.action.isBlank()) {
+        String resolvedAction = firstNonBlank(data.action, data.type);
+        if (resolvedAction == null || resolvedAction.isBlank()) {
             return;
         }
-        if (ACTION_CLOSE.equals(data.action)) {
+        if (ACTION_CLOSE.equals(resolvedAction)) {
             close();
             return;
         }
-        if (ACTION_TOGGLE_PIN_MODE.equals(data.action)) {
+        if (ACTION_TOGGLE_PIN_MODE.equals(resolvedAction)) {
             togglePinMode();
             sendRefreshUpdate();
             return;
         }
-        if (ACTION_REORDER_INTERACTION.equals(data.action)) {
+        if (ACTION_REORDER_INTERACTION.equals(resolvedAction)) {
             suppressRefreshTemporarily();
             return;
         }
-        if (ACTION_REFRESH_RATE_CHANGED.equals(data.action)) {
+        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)) {
             applyRefreshIntervalFromEvent(resolveRefreshIntervalValue(data));
             sendRefreshUpdate();
             return;
         }
-        if (data.action.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
-            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_UP_PREFIX);
+        if (resolvedAction.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
+            String sectionId = parseActionSuffix(resolvedAction, ACTION_MOVE_SECTION_UP_PREFIX);
             if (sectionId != null && moveSectionByOffset(sectionId, -1)) {
                 suppressRefreshTemporarily();
                 sendRefreshUpdate();
             }
             return;
         }
-        if (data.action.startsWith(ACTION_MOVE_SECTION_DOWN_PREFIX)) {
-            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_DOWN_PREFIX);
+        if (resolvedAction.startsWith(ACTION_MOVE_SECTION_DOWN_PREFIX)) {
+            String sectionId = parseActionSuffix(resolvedAction, ACTION_MOVE_SECTION_DOWN_PREFIX);
             if (sectionId != null && moveSectionByOffset(sectionId, 1)) {
                 suppressRefreshTemporarily();
                 sendRefreshUpdate();
             }
             return;
         }
-        if (data.action.startsWith(ACTION_TOGGLE_SECTION_PREFIX)) {
-            String sectionId = parseActionSuffix(data.action, ACTION_TOGGLE_SECTION_PREFIX);
+        if (resolvedAction.startsWith(ACTION_TOGGLE_SECTION_PREFIX)) {
+            String sectionId = parseActionSuffix(resolvedAction, ACTION_TOGGLE_SECTION_PREFIX);
             if (sectionId != null) {
                 toggleSectionCollapsed(sectionId);
                 sendRefreshUpdate();
             }
             return;
         }
-        if (data.action.startsWith(ACTION_TOGGLE_FIELD_PREFIX)) {
-            int index = parseFieldIndex(data.action);
+        if (resolvedAction.startsWith(ACTION_TOGGLE_FIELD_PREFIX)) {
+            int index = parseFieldIndex(resolvedAction);
             if (index >= 0) {
                 togglePinnedField(index);
                 sendRefreshUpdate();
@@ -238,28 +242,28 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
-    private void applyRefreshIntervalFromEvent(@Nullable String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
+    private void applyRefreshIntervalFromEvent(@Nullable Double rawValue) {
+        if (rawValue == null || !Double.isFinite(rawValue)) {
             return;
         }
-        try {
-            double parsed = Double.parseDouble(rawValue.trim());
-            NpcDebugUiRefreshSettings.setFromUiValue(playerRef, parsed);
-        } catch (NumberFormatException ignored) {
-            // Ignore malformed UI value.
-        }
+        NpcDebugUiRefreshSettings.setFromUiValue(playerRef, rawValue);
     }
 
     @Nullable
-    private String resolveRefreshIntervalValue(@Nonnull Map<String, String> rawEventData) {
+    private Double resolveRefreshIntervalValue(@Nonnull Map<String, String> rawEventData) {
         String direct = firstNonBlank(
                 rawEventData.get(EVENT_REFRESH_INTERVAL_MS),
+                rawEventData.get(EVENT_REFRESH_INTERVAL_MS_LEGACY),
+                rawEventData.get("@Value"),
                 rawEventData.get("Value"),
+                rawEventData.get("@NewValue"),
                 rawEventData.get("NewValue"),
+                rawEventData.get("@SliderValue"),
                 rawEventData.get("SliderValue")
         );
-        if (direct != null) {
-            return direct;
+        Double parsedDirect = parseDouble(direct);
+        if (parsedDirect != null) {
+            return parsedDirect;
         }
         for (Map.Entry<String, String> entry : rawEventData.entrySet()) {
             String key = entry.getKey();
@@ -267,10 +271,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 continue;
             }
             String lowered = key.toLowerCase(Locale.ROOT);
-            if (lowered.contains("refresh") && lowered.contains("value")) {
-                String candidate = firstNonBlank(entry.getValue());
-                if (candidate != null) {
-                    return candidate;
+            if (lowered.contains("refresh") && (lowered.contains("value") || lowered.contains("interval"))) {
+                Double parsed = parseDouble(entry.getValue());
+                if (parsed != null) {
+                    return parsed;
                 }
             }
         }
@@ -278,13 +282,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     @Nullable
-    private String resolveRefreshIntervalValue(@Nonnull PageEventData data) {
-        return firstNonBlank(
-                data.refreshIntervalMs,
-                data.value,
-                data.newValue,
-                data.sliderValue
-        );
+    private Double resolveRefreshIntervalValue(@Nonnull PageEventData data) {
+        if (data.refreshIntervalMs != null) {
+            return data.refreshIntervalMs.doubleValue();
+        }
+        if (data.refreshIntervalMsLegacy != null) {
+            return data.refreshIntervalMsLegacy.doubleValue();
+        }
+        return null;
     }
 
     @Nullable
@@ -298,6 +303,18 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
         return null;
+    }
+
+    @Nullable
+    private Double parseDouble(@Nullable String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(rawValue.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     @Nullable
@@ -492,9 +509,17 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         );
         EventData refreshEventData = new EventData()
                 .append(EVENT_ACTION, ACTION_REFRESH_RATE_CHANGED)
+                .append(EVENT_TYPE, ACTION_REFRESH_RATE_CHANGED)
+                .append(EVENT_REFRESH_INTERVAL_MS_LEGACY, "#NpcDebugInspectorRefreshSlider.Value")
                 .append(EVENT_REFRESH_INTERVAL_MS, "#NpcDebugInspectorRefreshSlider.Value");
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.ValueChanged,
+                "#NpcDebugInspectorRefreshSlider",
+                refreshEventData,
+                false
+        );
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.MouseButtonReleased,
                 "#NpcDebugInspectorRefreshSlider",
                 refreshEventData,
                 false
@@ -923,35 +948,28 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             )
             .add()
             .append(
-                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.STRING),
+                new KeyedCodec<>(EVENT_TYPE, Codec.STRING),
+                (data, value) -> data.type = value,
+                data -> data.type
+            )
+            .add()
+            .append(
+                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.FLOAT),
                 (data, value) -> data.refreshIntervalMs = value,
                 data -> data.refreshIntervalMs
             )
             .add()
             .append(
-                new KeyedCodec<>("Value", Codec.STRING),
-                (data, value) -> data.value = value,
-                data -> data.value
-            )
-            .add()
-            .append(
-                new KeyedCodec<>("NewValue", Codec.STRING),
-                (data, value) -> data.newValue = value,
-                data -> data.newValue
-            )
-            .add()
-            .append(
-                new KeyedCodec<>("SliderValue", Codec.STRING),
-                (data, value) -> data.sliderValue = value,
-                data -> data.sliderValue
+                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS_LEGACY, Codec.FLOAT),
+                (data, value) -> data.refreshIntervalMsLegacy = value,
+                data -> data.refreshIntervalMsLegacy
             )
             .add()
             .build();
 
         private String action;
-        private String refreshIntervalMs;
-        private String value;
-        private String newValue;
-        private String sliderValue;
+        private String type;
+        private Float refreshIntervalMs;
+        private Float refreshIntervalMsLegacy;
     }
 }

@@ -174,7 +174,12 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
 
-        if (normalizedAction == null || normalizedAction.isBlank() || ACTION_CLOSE.equals(normalizedAction)) {
+        if (normalizedAction == null || normalizedAction.isBlank()) {
+            return;
+        }
+
+        if (ACTION_CLOSE.equals(normalizedAction)) {
+            dismissed = true;
             close();
             return;
         }
@@ -204,6 +209,8 @@ public final class NpcDebugInspectorRosterPage
         if (normalizedAction.startsWith(INSPECT_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, INSPECT_PREFIX);
             if (npcUuid != null) {
+                dismissed = true;
+                close();
                 inspectCallback.accept(npcUuid);
             }
             return;
@@ -361,6 +368,9 @@ public final class NpcDebugInspectorRosterPage
     }
 
     private void sendRefreshUpdate() {
+        if (dismissed) {
+            return;
+        }
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = new UIEventBuilder();
 

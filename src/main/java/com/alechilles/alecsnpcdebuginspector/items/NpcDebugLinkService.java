@@ -58,6 +58,7 @@ final class NpcDebugLinkService {
             linkedNow = true;
         }
         ItemStack updated = writeLinkedNpcSet(stack, linked);
+        updated = pruneHighlightsToLinkedSet(updated, linked);
         return new LinkToggleResult(updated, true, linkedNow, false, linked.size());
     }
 
@@ -65,7 +66,26 @@ final class NpcDebugLinkService {
     ItemStack removeLink(@Nonnull ItemStack stack, @Nonnull UUID npcUuid) {
         Set<UUID> linked = readLinkedNpcSet(stack);
         linked.remove(npcUuid);
-        return writeLinkedNpcSet(stack, linked);
+        ItemStack updated = writeLinkedNpcSet(stack, linked);
+        return pruneHighlightsToLinkedSet(updated, linked);
+    }
+
+    @Nonnull
+    Set<UUID> readHighlightedNpcSet(@Nonnull ItemStack stack) {
+        return readUuidSetFromMetadata(stack, NpcDebugMetadataKeys.HIGHLIGHTED_NPC_UUIDS);
+    }
+
+    @Nonnull
+    ItemStack setHighlight(@Nonnull ItemStack stack, @Nonnull UUID npcUuid, boolean highlighted) {
+        Set<UUID> highlightedNpcs = readHighlightedNpcSet(stack);
+        if (highlighted) {
+            highlightedNpcs.add(npcUuid);
+        } else {
+            highlightedNpcs.remove(npcUuid);
+        }
+        Set<UUID> linked = readLinkedNpcSet(stack);
+        highlightedNpcs.retainAll(linked);
+        return writeHighlightedNpcSet(stack, highlightedNpcs);
     }
 
     @Nonnull
@@ -134,7 +154,29 @@ final class NpcDebugLinkService {
 
     @Nonnull
     Set<UUID> readLinkedNpcSet(@Nonnull ItemStack stack) {
-        String raw = stack.getFromMetadataOrNull(NpcDebugMetadataKeys.LINKED_NPC_UUIDS, Codec.STRING);
+        return readUuidSetFromMetadata(stack, NpcDebugMetadataKeys.LINKED_NPC_UUIDS);
+    }
+
+    @Nonnull
+    private ItemStack writeLinkedNpcSet(@Nonnull ItemStack stack, @Nonnull Set<UUID> linkedNpcSet) {
+        return writeUuidSetToMetadata(stack, NpcDebugMetadataKeys.LINKED_NPC_UUIDS, linkedNpcSet);
+    }
+
+    @Nonnull
+    private ItemStack writeHighlightedNpcSet(@Nonnull ItemStack stack, @Nonnull Set<UUID> highlightedNpcSet) {
+        return writeUuidSetToMetadata(stack, NpcDebugMetadataKeys.HIGHLIGHTED_NPC_UUIDS, highlightedNpcSet);
+    }
+
+    @Nonnull
+    private ItemStack pruneHighlightsToLinkedSet(@Nonnull ItemStack stack, @Nonnull Set<UUID> linkedNpcSet) {
+        Set<UUID> highlightedNpcs = readHighlightedNpcSet(stack);
+        highlightedNpcs.retainAll(linkedNpcSet);
+        return writeHighlightedNpcSet(stack, highlightedNpcs);
+    }
+
+    @Nonnull
+    private Set<UUID> readUuidSetFromMetadata(@Nonnull ItemStack stack, @Nonnull String metadataKey) {
+        String raw = stack.getFromMetadataOrNull(metadataKey, Codec.STRING);
         LinkedHashSet<UUID> out = new LinkedHashSet<>();
         if (raw == null || raw.isBlank()) {
             return out;
@@ -154,18 +196,20 @@ final class NpcDebugLinkService {
     }
 
     @Nonnull
-    private ItemStack writeLinkedNpcSet(@Nonnull ItemStack stack, @Nonnull Set<UUID> linkedNpcSet) {
-        if (linkedNpcSet.isEmpty()) {
-            return stack.withMetadata(NpcDebugMetadataKeys.LINKED_NPC_UUIDS, Codec.STRING, "");
+    private ItemStack writeUuidSetToMetadata(@Nonnull ItemStack stack,
+                                             @Nonnull String metadataKey,
+                                             @Nonnull Set<UUID> uuidSet) {
+        if (uuidSet.isEmpty()) {
+            return stack.withMetadata(metadataKey, Codec.STRING, "");
         }
         StringBuilder sb = new StringBuilder();
-        for (UUID uuid : linkedNpcSet) {
+        for (UUID uuid : uuidSet) {
             if (sb.length() > 0) {
                 sb.append(',');
             }
             sb.append(uuid.toString());
         }
-        return stack.withMetadata(NpcDebugMetadataKeys.LINKED_NPC_UUIDS, Codec.STRING, sb.toString());
+        return stack.withMetadata(metadataKey, Codec.STRING, sb.toString());
     }
 
     @Nonnull

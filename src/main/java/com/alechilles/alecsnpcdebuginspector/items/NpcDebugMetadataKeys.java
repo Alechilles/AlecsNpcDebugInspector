@@ -6,8 +6,8 @@ package com.alechilles.alecsnpcdebuginspector.items;
 public final class NpcDebugMetadataKeys {
     public static final String TOOL_ID = "NpcDebugInspector.ToolId";
     public static final String LINKED_NPC_UUIDS = "NpcDebugInspector.LinkedNpcUuids";
+    public static final String HIGHLIGHTED_NPC_UUIDS = "NpcDebugInspector.HighlightedNpcUuids";
 
     private NpcDebugMetadataKeys() {
     }
 }
-

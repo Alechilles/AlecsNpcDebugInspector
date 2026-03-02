@@ -34,6 +34,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.annotation.Nonnull;
@@ -63,12 +64,14 @@ public final class NpcDebugInspectorRosterPage
 
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
-    private static final String HIGHLIGHT_PARTICLE_ID = "Particles/NPC/Emotions/Question_Subtle";
+    private static final String HIGHLIGHT_PARTICLE_ID = "Question";
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
     private final Supplier<String> sameFlockIdSupplier;
     private final Consumer<UUID> inspectCallback;
     private final Consumer<UUID> unlinkCallback;
+    private final Supplier<Set<UUID>> highlightedNpcSupplier;
+    private final BiConsumer<UUID, Boolean> highlightPersistenceCallback;
     @Nullable
     private final Consumer<String> notificationCallback;
 
@@ -101,12 +104,16 @@ public final class NpcDebugInspectorRosterPage
                                        @Nonnull Supplier<String> sameFlockIdSupplier,
                                        @Nonnull Consumer<UUID> inspectCallback,
                                        @Nonnull Consumer<UUID> unlinkCallback,
+                                       @Nonnull Supplier<Set<UUID>> highlightedNpcSupplier,
+                                       @Nonnull BiConsumer<UUID, Boolean> highlightPersistenceCallback,
                                        @Nullable Consumer<String> notificationCallback) {
         super(playerRef, CustomPageLifetime.CanDismiss, RosterEventData.CODEC);
         this.entrySupplier = entrySupplier;
         this.sameFlockIdSupplier = sameFlockIdSupplier;
         this.inspectCallback = inspectCallback;
         this.unlinkCallback = unlinkCallback;
+        this.highlightedNpcSupplier = highlightedNpcSupplier;
+        this.highlightPersistenceCallback = highlightPersistenceCallback;
         this.notificationCallback = notificationCallback;
         this.sourceEntries = new NpcDebugLinkedEntry[0];
         this.entries = new NpcDebugLinkedEntry[0];
@@ -131,6 +138,7 @@ public final class NpcDebugInspectorRosterPage
                       @Nonnull UICommandBuilder commandBuilder,
                       @Nonnull UIEventBuilder eventBuilder,
                       @Nonnull Store<EntityStore> store) {
+        loadPersistedHighlights();
         refreshEntries();
         commandBuilder.append(UI_PATH);
         applyFilterControlState(commandBuilder);
@@ -710,9 +718,26 @@ public final class NpcDebugInspectorRosterPage
             highlightedNpcUuids.add(npcUuid);
             enabled = true;
         }
+        persistHighlightState(npcUuid, enabled);
         String stateText = enabled ? "enabled" : "disabled";
         setStatusMessage("Highlight " + stateText + " for " + npcUuid + ".", STATUS_MESSAGE_DURATION_MS);
         notifyPlayer("Highlight " + stateText + ": " + npcUuid);
+    }
+
+    private void loadPersistedHighlights() {
+        highlightedNpcUuids.clear();
+        Set<UUID> persisted = highlightedNpcSupplier != null ? highlightedNpcSupplier.get() : Set.of();
+        if (persisted == null || persisted.isEmpty()) {
+            return;
+        }
+        highlightedNpcUuids.addAll(persisted);
+    }
+
+    private void persistHighlightState(@Nonnull UUID npcUuid, boolean highlighted) {
+        if (highlightPersistenceCallback == null) {
+            return;
+        }
+        highlightPersistenceCallback.accept(npcUuid, highlighted);
     }
 
     private void applyFilterQuery(@Nullable String rawQuery) {

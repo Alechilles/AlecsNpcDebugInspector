@@ -19,6 +19,7 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.flock.FlockMembership;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -109,6 +110,8 @@ public final class NpcDebugItemFeatureHandler {
                 () -> resolveCurrentTargetFlockId(playerRef, store),
                 npcUuid -> openInspectorForUuid(player, playerRef, uiPlayerRef, store, npcUuid),
                 npcUuid -> unlinkNpcFromTool(player, toolId, npcUuid),
+                () -> readHighlightsForTool(player, toolId),
+                (npcUuid, highlighted) -> setHighlightForTool(player, toolId, npcUuid, highlighted),
                 message -> player.sendMessage(Message.raw(message))
         );
         player.getPageManager().openCustomPage(playerRef, store, page);
@@ -139,6 +142,32 @@ public final class NpcDebugItemFeatureHandler {
         }
         player.sendInventory();
         player.sendMessage(Message.raw("Unlinked NPC " + npcUuid + "."));
+    }
+
+    @Nonnull
+    private Set<UUID> readHighlightsForTool(@Nonnull Player player, @Nonnull String toolId) {
+        ItemStack tool = findToolStackById(player, toolId);
+        if (tool == null || tool.isEmpty()) {
+            return Set.of();
+        }
+        return linkService.readHighlightedNpcSet(tool);
+    }
+
+    private void setHighlightForTool(@Nonnull Player player,
+                                     @Nonnull String toolId,
+                                     @Nonnull UUID npcUuid,
+                                     boolean highlighted) {
+        ItemSlot slot = findToolSlotById(player, toolId);
+        if (slot == null) {
+            return;
+        }
+        ItemStack updated = linkService.setHighlight(slot.stack, npcUuid, highlighted);
+        slot.container.setItemStackForSlot(slot.slot, updated);
+        Inventory inventory = player.getInventory();
+        if (inventory != null) {
+            inventory.markChanged();
+        }
+        player.sendInventory();
     }
 
     @Nullable

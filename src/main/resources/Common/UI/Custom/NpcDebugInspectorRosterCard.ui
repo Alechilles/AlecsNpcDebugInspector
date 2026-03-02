@@ -128,13 +128,13 @@ Group {
   }
 
   Group #CardActionButtonsTop {
-    Anchor: (Top: 48, Right: 0, Width: 304, Height: 30);
+    Anchor: (Top: 48, Right: 0, Width: 338, Height: 30);
     LayoutMode: Right;
 
     $C.@SmallSecondaryTextButton #CopyButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Copy UUID";
-      @Anchor = (Width: 90);
+      @Anchor = (Width: 118);
     }
 
     Group #CardActionSpacer {
@@ -144,7 +144,7 @@ Group {
     $C.@SmallSecondaryTextButton #UnlinkButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Unlink";
-      @Anchor = (Width: 86);
+      @Anchor = (Width: 90);
     }
 
     Group #CardActionSpacer2 {
@@ -154,18 +154,18 @@ Group {
     $C.@SmallSecondaryTextButton #InspectButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Inspect";
-      @Anchor = (Width: 112);
+      @Anchor = (Width: 114);
     }
   }
 
   Group #CardActionButtonsBottom {
-    Anchor: (Top: 82, Right: 0, Width: 168, Height: 30);
+    Anchor: (Top: 82, Right: 0, Width: 184, Height: 30);
     LayoutMode: Right;
 
     $C.@SmallSecondaryTextButton #HighlightButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Highlight";
-      @Anchor = (Width: 168);
+      @Anchor = (Width: 184);
     }
   }
 }

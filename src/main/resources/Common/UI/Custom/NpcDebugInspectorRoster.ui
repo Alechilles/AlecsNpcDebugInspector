@@ -82,6 +82,48 @@ $C.@PageOverlay {
         }
       }
 
+      Group #NpcDebugRosterCopyRow {
+        Anchor: (Top: 3, Height: 30);
+        LayoutMode: Left;
+        Visible: false;
+
+        Label #NpcDebugRosterCopyLabel {
+          Anchor: (Width: 120, Height: 30);
+          Text: "Copy Buffer:";
+          Style: (
+            FontSize: 12,
+            TextColor: #c4d2e1,
+            HorizontalAlignment: Start,
+            VerticalAlignment: Center
+          );
+        }
+
+        TextField #NpcDebugRosterCopyField {
+          Style: $C.@DefaultInputFieldStyle;
+          PlaceholderStyle: $C.@DefaultInputFieldPlaceholderStyle;
+          Background: $C.@InputBoxBackground;
+          Anchor: (Width: 360, Height: 30);
+          Padding: (Horizontal: 10);
+          PlaceholderText: "UUID appears here after pressing Copy UUID";
+          MaxLength: 64;
+        }
+
+        Group {
+          Anchor: (Width: 8);
+        }
+
+        Label #NpcDebugRosterCopyHint {
+          Anchor: (Width: 290, Height: 30);
+          Text: "Select this field and press Ctrl+C";
+          Style: (
+            FontSize: 11,
+            TextColor: #a9bfd7,
+            HorizontalAlignment: Start,
+            VerticalAlignment: Center
+          );
+        }
+      }
+
       $C.@PanelSeparatorFancy {
         @Anchor = (Top: 8, Bottom: 8);
       }

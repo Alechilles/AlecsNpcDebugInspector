@@ -1,8 +1,11 @@
 package com.alechilles.alecsnpcdebuginspector.ui;
 
 import com.hypixel.hytale.codec.Codec;
+import com.hypixel.hytale.codec.ExtraInfo;
 import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
+import com.hypixel.hytale.codec.codecs.map.MapCodec;
+import com.hypixel.hytale.codec.util.RawJsonReader;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3d;
@@ -17,6 +20,7 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.ParticleUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -82,6 +86,8 @@ public final class NpcDebugInspectorRosterPage
     private String statusMessage;
     private long statusMessageUntilMs;
     private boolean syncQueryFieldValue;
+    private String copyBufferValue;
+    private boolean copyBufferVisible;
 
     private volatile boolean refreshLoopStarted;
     private volatile boolean dismissed;
@@ -111,6 +117,8 @@ public final class NpcDebugInspectorRosterPage
         this.statusMessage = null;
         this.statusMessageUntilMs = 0L;
         this.syncQueryFieldValue = true;
+        this.copyBufferValue = "";
+        this.copyBufferVisible = false;
     }
 
     @Override
@@ -121,6 +129,7 @@ public final class NpcDebugInspectorRosterPage
         refreshEntries();
         commandBuilder.append(UI_PATH);
         applyFilterControlState(commandBuilder);
+        applyCopyBufferState(commandBuilder);
         commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
         syncQueryFieldValue = false;
         commandBuilder.set("#NpcDebugRosterSubtitle.Text", resolveSubtitle());
@@ -132,26 +141,45 @@ public final class NpcDebugInspectorRosterPage
     @Override
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
-                                @Nonnull RosterEventData data) {
-        if (data == null) {
-            close();
+                                @Nonnull String rawData) {
+        Map<String, String> rawEventData = decodeRawEventData(rawData);
+        String action = firstNonBlank(rawEventData.get(EVENT_ACTION), rawEventData.get("action"));
+        String filterQueryValue = firstNonBlank(
+                rawEventData.get(EVENT_FILTER_QUERY),
+                rawEventData.get("filterQuery"),
+                rawEventData.get("query")
+        );
+        if (action == null && filterQueryValue == null) {
+            super.handleDataEvent(ref, store, rawData);
             return;
         }
+        handleResolvedEvent(action, filterQueryValue);
+    }
 
-        if (data.filterQuery != null
-                && (data.action == null || data.action.isBlank() || ACTION_FILTER_APPLY.equals(data.action))) {
-            applyFilterQuery(data.filterQuery);
+    @Override
+    public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
+                                @Nonnull Store<EntityStore> store,
+                                @Nonnull RosterEventData data) {
+        handleResolvedEvent(data != null ? data.action : null, data != null ? data.filterQuery : null);
+    }
+
+    private void handleResolvedEvent(@Nullable String action, @Nullable String dataFilterQuery) {
+        String normalizedAction = action != null ? action.trim() : null;
+
+        if (dataFilterQuery != null
+                && (normalizedAction == null || normalizedAction.isBlank() || ACTION_FILTER_APPLY.equals(normalizedAction))) {
+            applyFilterQuery(dataFilterQuery);
             refreshEntries();
             sendRefreshUpdate();
             return;
         }
 
-        if (data.action == null || data.action.isBlank() || ACTION_CLOSE.equals(data.action)) {
+        if (normalizedAction == null || normalizedAction.isBlank() || ACTION_CLOSE.equals(normalizedAction)) {
             close();
             return;
         }
 
-        if (ACTION_FILTER_LOADED.equals(data.action)) {
+        if (ACTION_FILTER_LOADED.equals(normalizedAction)) {
             filterLoadedOnly = !filterLoadedOnly;
             setStatusMessage("Loaded-only filter " + (filterLoadedOnly ? "enabled" : "disabled") + ".", STATUS_MESSAGE_DURATION_MS);
             refreshEntries();
@@ -159,30 +187,30 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
 
-        if (ACTION_FILTER_FLOCK.equals(data.action)) {
+        if (ACTION_FILTER_FLOCK.equals(normalizedAction)) {
             toggleSameFlockFilter();
             refreshEntries();
             sendRefreshUpdate();
             return;
         }
 
-        if (ACTION_FILTER_CLEAR.equals(data.action)) {
+        if (ACTION_FILTER_CLEAR.equals(normalizedAction)) {
             clearFilters();
             refreshEntries();
             sendRefreshUpdate();
             return;
         }
 
-        if (data.action.startsWith(INSPECT_PREFIX)) {
-            UUID npcUuid = parseUuidAction(data.action, INSPECT_PREFIX);
+        if (normalizedAction.startsWith(INSPECT_PREFIX)) {
+            UUID npcUuid = parseUuidAction(normalizedAction, INSPECT_PREFIX);
             if (npcUuid != null) {
                 inspectCallback.accept(npcUuid);
             }
             return;
         }
 
-        if (data.action.startsWith(UNLINK_PREFIX)) {
-            UUID npcUuid = parseUuidAction(data.action, UNLINK_PREFIX);
+        if (normalizedAction.startsWith(UNLINK_PREFIX)) {
+            UUID npcUuid = parseUuidAction(normalizedAction, UNLINK_PREFIX);
             if (npcUuid != null) {
                 highlightedNpcUuids.remove(npcUuid);
                 unlinkCallback.accept(npcUuid);
@@ -193,19 +221,20 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
 
-        if (data.action.startsWith(COPY_PREFIX)) {
-            UUID npcUuid = parseUuidAction(data.action, COPY_PREFIX);
+        if (normalizedAction.startsWith(COPY_PREFIX)) {
+            UUID npcUuid = parseUuidAction(normalizedAction, COPY_PREFIX);
             if (npcUuid != null) {
                 String uuidText = npcUuid.toString();
-                notifyPlayer("Inspector UUID: " + uuidText);
-                setStatusMessage("UUID sent to chat: " + uuidText, STATUS_MESSAGE_DURATION_MS);
+                copyBufferValue = uuidText;
+                copyBufferVisible = true;
+                setStatusMessage("UUID ready in copy buffer. Click the field and press Ctrl+C.", STATUS_MESSAGE_DURATION_MS);
                 sendRefreshUpdate();
             }
             return;
         }
 
-        if (data.action.startsWith(HIGHLIGHT_PREFIX)) {
-            UUID npcUuid = parseUuidAction(data.action, HIGHLIGHT_PREFIX);
+        if (normalizedAction.startsWith(HIGHLIGHT_PREFIX)) {
+            UUID npcUuid = parseUuidAction(normalizedAction, HIGHLIGHT_PREFIX);
             if (npcUuid != null) {
                 toggleHighlight(npcUuid);
                 refreshEntries();
@@ -336,6 +365,7 @@ public final class NpcDebugInspectorRosterPage
         UIEventBuilder eventBuilder = new UIEventBuilder();
 
         applyFilterControlState(commandBuilder);
+        applyCopyBufferState(commandBuilder);
         if (syncQueryFieldValue) {
             commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
             syncQueryFieldValue = false;
@@ -410,6 +440,11 @@ public final class NpcDebugInspectorRosterPage
                     : "Same Flock: On";
         }
         commandBuilder.set("#NpcDebugRosterFilterFlockButton.Text", flockText);
+    }
+
+    private void applyCopyBufferState(@Nonnull UICommandBuilder commandBuilder) {
+        commandBuilder.set("#NpcDebugRosterCopyRow.Visible", copyBufferVisible);
+        commandBuilder.set("#NpcDebugRosterCopyField.Value", copyBufferValue);
     }
 
     private void refreshEntries() {
@@ -646,6 +681,21 @@ public final class NpcDebugInspectorRosterPage
         setStatusMessage("All filters cleared.", STATUS_MESSAGE_DURATION_MS);
     }
 
+    @Nonnull
+    private Map<String, String> decodeRawEventData(@Nullable String rawData) {
+        if (rawData == null || rawData.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return MapCodec.STRING_HASH_MAP_CODEC.decodeJson(
+                    new RawJsonReader(rawData.toCharArray()),
+                    ExtraInfo.THREAD_LOCAL.get()
+            );
+        } catch (IOException | RuntimeException ignored) {
+            return Map.of();
+        }
+    }
+
     private void emitHighlightParticles() {
         if (highlightedNpcUuids.isEmpty()) {
             return;
@@ -789,6 +839,19 @@ public final class NpcDebugInspectorRosterPage
             return value;
         }
         return value.substring(0, 8) + "...";
+    }
+
+    @Nullable
+    private String firstNonBlank(@Nullable String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     /** Event payload emitted by roster button clicks. */

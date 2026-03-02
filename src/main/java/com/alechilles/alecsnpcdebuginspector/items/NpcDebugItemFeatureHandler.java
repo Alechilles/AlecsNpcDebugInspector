@@ -170,6 +170,7 @@ public final class NpcDebugItemFeatureHandler {
                     store,
                     new NpcDebugInspectorPage(
                             uiPlayerRef,
+                            npcUuid,
                             () -> {
                                 World world = player.getWorld();
                                 Ref<EntityStore> targetRef = world != null ? world.getEntityRef(npcUuid) : null;

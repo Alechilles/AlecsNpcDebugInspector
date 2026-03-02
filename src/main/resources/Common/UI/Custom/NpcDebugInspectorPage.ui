@@ -4,7 +4,7 @@ $C.@PageOverlay {
   LayoutMode: Middle;
 
   $C.@DecoratedContainer #NpcDebugInspectorRoot {
-    Anchor: (Width: 1220, Height: 780);
+    Anchor: (Width: 1040, Height: 780);
 
     #Title {
       $C.@Title #NpcDebugInspectorTitle {
@@ -42,87 +42,17 @@ $C.@PageOverlay {
         @Anchor = (Top: 4, Bottom: 8);
       }
 
-      Group {
+      Group #NpcDebugInspectorFieldViewport {
         Anchor: (Top: 2);
         FlexWeight: 1;
-        LayoutMode: Left;
+        LayoutMode: TopScrolling;
+        KeepScrollPosition: true;
+        ScrollbarStyle: $C.@DefaultScrollbarStyle;
+        Padding: (Right: 6);
 
-        Group #NpcDebugInspectorFieldViewport {
-          Anchor: (Width: 820);
-          LayoutMode: TopScrolling;
-          KeepScrollPosition: true;
-          ScrollbarStyle: $C.@DefaultScrollbarStyle;
-          Padding: (Right: 6);
-
-          Group #NpcDebugInspectorFieldList {
-            LayoutMode: Top;
-            Anchor: (Bottom: 6);
-          }
-        }
-
-        Group {
-          Anchor: (Width: 10);
-        }
-
-        Group #NpcDebugInspectorPinnedPanel {
-          Anchor: (Width: 350);
+        Group #NpcDebugInspectorFieldList {
           LayoutMode: Top;
-          Padding: (Left: 8, Right: 8, Top: 8, Bottom: 8);
-          Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
-          Visible: false;
-
-          Label {
-            Anchor: (Height: 22);
-            Text: "Pinned Overlay";
-            Style: (
-              FontSize: 14,
-              RenderBold: true,
-              TextColor: #eaf2fd,
-              HorizontalAlignment: Start,
-              VerticalAlignment: Center
-            );
-          }
-
-          Label #NpcDebugPinnedCount {
-            Anchor: (Top: 2, Height: 18);
-            Text: "Pinned fields: 0";
-            Style: (
-              FontSize: 12,
-              TextColor: #b7c8dc,
-              HorizontalAlignment: Start,
-              VerticalAlignment: Center
-            );
-          }
-
-          $C.@PanelSeparatorFancy {
-            @Anchor = (Top: 4, Bottom: 8);
-          }
-
-          Group #NpcDebugPinnedViewport {
-            Anchor: (Top: 2);
-            FlexWeight: 1;
-            LayoutMode: TopScrolling;
-            KeepScrollPosition: true;
-            ScrollbarStyle: $C.@DefaultScrollbarStyle;
-            Padding: (Right: 4);
-
-            Group {
-              LayoutMode: Top;
-              Anchor: (Bottom: 6);
-
-              Label #NpcDebugPinnedText {
-                Anchor: (Width: 320, Height: 2100);
-                Text: "";
-                Style: (
-                  FontSize: 12,
-                  TextColor: #e7f0fb,
-                  HorizontalAlignment: Start,
-                  VerticalAlignment: Start,
-                  Wrap: true
-                );
-              }
-            }
-          }
+          Anchor: (Bottom: 6);
         }
       }
 

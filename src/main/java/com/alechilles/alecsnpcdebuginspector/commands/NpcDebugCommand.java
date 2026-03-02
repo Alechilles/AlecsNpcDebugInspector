@@ -70,6 +70,7 @@ public final class NpcDebugCommand extends AbstractPlayerCommand {
                 store,
                 new NpcDebugInspectorPage(
                         playerRef,
+                        capturedUuid,
                         () -> snapshotService.capture(
                                 capturedUuid,
                                 world.getEntityRef(capturedUuid),

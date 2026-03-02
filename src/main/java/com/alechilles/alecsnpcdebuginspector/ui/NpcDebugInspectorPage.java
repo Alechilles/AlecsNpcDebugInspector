@@ -15,13 +15,9 @@ import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -41,23 +37,35 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final long REFRESH_INTERVAL_MS = 1000L;
 
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
+    @Nullable
+    private final UUID targetNpcUuid;
     private NpcDebugSnapshot latestSnapshot;
-    private InspectorLine[] inspectorLines;
+    private NpcDebugInspectorLine[] inspectorLines;
     private boolean pinModeEnabled;
     private final LinkedHashSet<String> pinnedFieldKeys;
     private volatile boolean dismissed;
     private volatile boolean refreshLoopStarted;
 
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nullable UUID targetNpcUuid,
                                  @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
         super(playerRef, CustomPageLifetime.CanDismiss, PageEventData.CODEC);
         this.snapshotSupplier = snapshotSupplier;
+        this.targetNpcUuid = targetNpcUuid;
         this.latestSnapshot = new NpcDebugSnapshot("NPC Debug Inspector", "", "No data.");
-        this.inspectorLines = new InspectorLine[0];
+        this.inspectorLines = new NpcDebugInspectorLine[0];
         this.pinModeEnabled = false;
         this.pinnedFieldKeys = new LinkedHashSet<>();
         this.dismissed = false;
         this.refreshLoopStarted = false;
+    }
+
+    /**
+     * Legacy constructor kept for compatibility where target UUID is unavailable.
+     */
+    public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
+        this(playerRef, null, snapshotSupplier);
     }
 
     @Override
@@ -67,6 +75,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                       @Nonnull Store<EntityStore> store) {
         commandBuilder.append(UI_PATH);
         refreshSnapshotData();
+        syncPinnedStateFromManager();
         applySnapshot(commandBuilder);
         rebuildFieldRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
@@ -101,9 +110,18 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     private void togglePinMode() {
-        pinModeEnabled = !pinModeEnabled;
-        if (!pinModeEnabled) {
+        if (targetNpcUuid == null) {
+            return;
+        }
+        if (pinModeEnabled) {
+            NpcDebugPinnedOverlayManager.unpinNpc(playerRef, targetNpcUuid);
+            pinModeEnabled = false;
             pinnedFieldKeys.clear();
+        } else {
+            NpcDebugPinnedOverlayManager.pinNpc(playerRef, targetNpcUuid, snapshotSupplier);
+            pinModeEnabled = true;
+            pinnedFieldKeys.clear();
+            NpcDebugPinnedOverlayManager.updatePinnedFieldKeys(playerRef, targetNpcUuid, pinnedFieldKeys);
         }
     }
 
@@ -120,10 +138,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     private void togglePinnedField(int index) {
-        if (!pinModeEnabled || index < 0 || index >= inspectorLines.length) {
+        if (!pinModeEnabled || targetNpcUuid == null || index < 0 || index >= inspectorLines.length) {
             return;
         }
-        InspectorLine line = inspectorLines[index];
+        NpcDebugInspectorLine line = inspectorLines[index];
         if (!line.pinnable || line.key == null) {
             return;
         }
@@ -132,6 +150,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         } else {
             pinnedFieldKeys.add(line.key);
         }
+        NpcDebugPinnedOverlayManager.updatePinnedFieldKeys(playerRef, targetNpcUuid, pinnedFieldKeys);
     }
 
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
@@ -156,51 +175,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pin mode active: check fields to include in the pinned panel."
-                        : "Click Pin NPC to enable per-field pinning."
+                        ? "Pinned overlay active. Select fields to include in the separate overlay."
+                        : "Click Pin NPC to create a separate overlay you can keep open while playing."
         );
-        commandBuilder.set("#NpcDebugInspectorPinnedPanel.Visible", pinModeEnabled);
-        commandBuilder.set("#NpcDebugPinnedCount.Text", "Pinned fields: " + pinnedFieldKeys.size());
-        commandBuilder.set("#NpcDebugPinnedText.Text", buildPinnedPanelText());
-    }
-
-    @Nonnull
-    private String buildPinnedPanelText() {
-        if (!pinModeEnabled) {
-            return "";
-        }
-        if (pinnedFieldKeys.isEmpty()) {
-            return "No pinned fields yet.\n\nSelect checkboxes in the inspector list to track values here.";
-        }
-
-        Map<String, InspectorLine> byKey = new HashMap<>();
-        for (InspectorLine line : inspectorLines) {
-            if (line.pinnable && line.key != null) {
-                byKey.put(line.key, line);
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (String key : pinnedFieldKeys) {
-            InspectorLine line = byKey.get(key);
-            if (line == null) {
-                continue;
-            }
-            if (sb.length() > 0) {
-                sb.append('\n');
-            }
-            sb.append("- ").append(line.pinnedText);
-        }
-        if (sb.length() == 0) {
-            return "Pinned fields are temporarily unavailable in the current snapshot.";
-        }
-        return sb.toString();
     }
 
     private void rebuildFieldRows(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
         commandBuilder.clear("#NpcDebugInspectorFieldList");
         for (int i = 0; i < inspectorLines.length; i++) {
-            InspectorLine line = inspectorLines[i];
+            NpcDebugInspectorLine line = inspectorLines[i];
             String rowSelector = "#NpcDebugInspectorFieldList[" + i + "]";
             commandBuilder.append("#NpcDebugInspectorFieldList", FIELD_ROW_UI_PATH);
             commandBuilder.set(rowSelector + " #FieldText.Text", line.displayText);
@@ -238,76 +221,35 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void refreshSnapshotData() {
         latestSnapshot = resolveSnapshot();
-        inspectorLines = parseInspectorLines(latestSnapshot.details());
+        inspectorLines = NpcDebugInspectorLineParser.parse(latestSnapshot.details());
         prunePinnedKeys();
+    }
+
+    private void syncPinnedStateFromManager() {
+        pinnedFieldKeys.clear();
+        if (targetNpcUuid == null) {
+            pinModeEnabled = false;
+            return;
+        }
+        pinModeEnabled = NpcDebugPinnedOverlayManager.isPinnedToNpc(playerRef, targetNpcUuid);
+        if (!pinModeEnabled) {
+            return;
+        }
+        Set<String> persisted = NpcDebugPinnedOverlayManager.getPinnedFieldKeys(playerRef, targetNpcUuid);
+        pinnedFieldKeys.addAll(persisted);
     }
 
     private void prunePinnedKeys() {
         if (pinnedFieldKeys.isEmpty()) {
             return;
         }
-        Set<String> availableKeys = new HashSet<>();
-        for (InspectorLine line : inspectorLines) {
+        Set<String> availableKeys = new LinkedHashSet<>();
+        for (NpcDebugInspectorLine line : inspectorLines) {
             if (line.pinnable && line.key != null) {
                 availableKeys.add(line.key);
             }
         }
         pinnedFieldKeys.retainAll(availableKeys);
-    }
-
-    @Nonnull
-    private InspectorLine[] parseInspectorLines(@Nullable String details) {
-        if (details == null || details.isBlank()) {
-            return new InspectorLine[] {
-                    new InspectorLine("No inspector lines available.", null, false, "No data")
-            };
-        }
-
-        String currentSection = "General";
-        List<InspectorLine> lines = new ArrayList<>();
-        Map<String, Integer> duplicateCounter = new HashMap<>();
-        String[] rawLines = details.split("\\R");
-        for (String raw : rawLines) {
-            if (raw == null) {
-                continue;
-            }
-            String line = raw.stripTrailing();
-            if (line.isBlank()) {
-                continue;
-            }
-            if (line.startsWith("=== ") && line.endsWith(" ===")) {
-                currentSection = line.substring(4, Math.max(4, line.length() - 4)).trim();
-                String sectionText = currentSection.isBlank() ? "Section" : currentSection;
-                lines.add(new InspectorLine("=== " + sectionText + " ===", null, false, sectionText));
-                continue;
-            }
-
-            String normalized = line;
-            if (line.startsWith(">> ")) {
-                normalized = line.substring(3);
-            } else if (line.startsWith("- ")) {
-                normalized = line.substring(2);
-            }
-
-            int valueSeparator = normalized.indexOf(": ");
-            if (valueSeparator <= 0) {
-                lines.add(new InspectorLine(line, null, false, currentSection));
-                continue;
-            }
-
-            String label = normalized.substring(0, valueSeparator).trim();
-            String value = normalized.substring(valueSeparator + 2).trim();
-            String baseKey = currentSection + "|" + label;
-            int seen = duplicateCounter.merge(baseKey, 1, Integer::sum);
-            String key = seen == 1 ? baseKey : baseKey + "#" + seen;
-            String pinnedText = currentSection + " | " + label + ": " + value;
-            lines.add(new InspectorLine(line, key, true, pinnedText));
-        }
-
-        if (lines.isEmpty()) {
-            lines.add(new InspectorLine("No inspector lines available.", null, false, "No data"));
-        }
-        return lines.toArray(new InspectorLine[0]);
     }
 
     private void startRefreshLoop() {
@@ -356,6 +298,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void sendRefreshUpdate() {
         refreshSnapshotData();
+        syncPinnedStateFromManager();
 
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = new UIEventBuilder();
@@ -363,24 +306,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         rebuildFieldRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
-    }
-
-    private static final class InspectorLine {
-        private final String displayText;
-        @Nullable
-        private final String key;
-        private final boolean pinnable;
-        private final String pinnedText;
-
-        private InspectorLine(@Nonnull String displayText,
-                              @Nullable String key,
-                              boolean pinnable,
-                              @Nonnull String pinnedText) {
-            this.displayText = displayText;
-            this.key = key;
-            this.pinnable = pinnable;
-            this.pinnedText = pinnedText;
-        }
     }
 
     /** Event payload for the inspector page. */

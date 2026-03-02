@@ -49,8 +49,6 @@ public final class NpcDebugInspectorRosterPage
     private static final String EVENT_FILTER_QUERY = "FilterQuery";
 
     private static final String ACTION_CLOSE = "__close__";
-    private static final String ACTION_FILTER_LOADED = "__filter_loaded__";
-    private static final String ACTION_FILTER_FLOCK = "__filter_flock__";
     private static final String ACTION_FILTER_APPLY = "__filter_apply__";
     private static final String ACTION_FILTER_CLEAR = "__filter_clear__";
 
@@ -64,7 +62,6 @@ public final class NpcDebugInspectorRosterPage
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
-    private final Supplier<String> sameFlockIdSupplier;
     private final Consumer<UUID> inspectCallback;
     private final Consumer<UUID> debugFlagsCallback;
     private final Consumer<UUID> unlinkCallback;
@@ -80,11 +77,7 @@ public final class NpcDebugInspectorRosterPage
     private final Map<UUID, String> changeSummaryByUuid;
     private final Set<UUID> highlightedNpcUuids;
 
-    private boolean filterLoadedOnly;
-    private boolean filterSameFlock;
     private String filterQuery;
-    @Nullable
-    private String activeFlockFilterId;
 
     @Nullable
     private String statusMessage;
@@ -99,16 +92,14 @@ public final class NpcDebugInspectorRosterPage
 
     public NpcDebugInspectorRosterPage(@Nonnull PlayerRef playerRef,
                                        @Nonnull Supplier<List<NpcDebugLinkedEntry>> entrySupplier,
-                                       @Nonnull Supplier<String> sameFlockIdSupplier,
                                        @Nonnull Consumer<UUID> inspectCallback,
                                        @Nonnull Consumer<UUID> debugFlagsCallback,
                                        @Nonnull Consumer<UUID> unlinkCallback,
                                        @Nonnull Supplier<Set<UUID>> highlightedNpcSupplier,
                                        @Nonnull BiConsumer<UUID, Boolean> highlightPersistenceCallback,
-                                       @Nullable Consumer<String> notificationCallback) {
+                                        @Nullable Consumer<String> notificationCallback) {
         super(playerRef, CustomPageLifetime.CanDismiss, RosterEventData.CODEC);
         this.entrySupplier = entrySupplier;
-        this.sameFlockIdSupplier = sameFlockIdSupplier;
         this.inspectCallback = inspectCallback;
         this.debugFlagsCallback = debugFlagsCallback;
         this.unlinkCallback = unlinkCallback;
@@ -121,10 +112,7 @@ public final class NpcDebugInspectorRosterPage
         this.previousEntriesByUuid = new HashMap<>();
         this.changeSummaryByUuid = new HashMap<>();
         this.highlightedNpcUuids = new HashSet<>();
-        this.filterLoadedOnly = false;
-        this.filterSameFlock = false;
         this.filterQuery = "";
-        this.activeFlockFilterId = null;
         this.statusMessage = null;
         this.statusMessageUntilMs = 0L;
         this.syncQueryFieldValue = true;
@@ -141,7 +129,6 @@ public final class NpcDebugInspectorRosterPage
         loadPersistedHighlights();
         refreshEntries();
         commandBuilder.append(UI_PATH);
-        applyFilterControlState(commandBuilder);
         applyCopyBufferState(commandBuilder);
         commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
         syncQueryFieldValue = false;
@@ -190,23 +177,6 @@ public final class NpcDebugInspectorRosterPage
 
         if (normalizedAction == null || normalizedAction.isBlank() || ACTION_CLOSE.equals(normalizedAction)) {
             close();
-            return;
-        }
-
-        if (ACTION_FILTER_LOADED.equals(normalizedAction)) {
-            filterLoadedOnly = !filterLoadedOnly;
-            setStatusMessage("Loaded-only filter " + (filterLoadedOnly ? "enabled" : "disabled") + ".", STATUS_MESSAGE_DURATION_MS);
-            refreshEntries();
-            sendRefreshUpdate();
-            rearmRefreshLoopSoon();
-            return;
-        }
-
-        if (ACTION_FILTER_FLOCK.equals(normalizedAction)) {
-            toggleSameFlockFilter();
-            refreshEntries();
-            sendRefreshUpdate();
-            rearmRefreshLoopSoon();
             return;
         }
 
@@ -423,7 +393,6 @@ public final class NpcDebugInspectorRosterPage
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = null;
 
-        applyFilterControlState(commandBuilder);
         applyCopyBufferState(commandBuilder);
         if (syncQueryFieldValue) {
             commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
@@ -482,18 +451,6 @@ public final class NpcDebugInspectorRosterPage
         );
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
-                "#NpcDebugRosterFilterLoadedButton",
-                EventData.of(EVENT_ACTION, ACTION_FILTER_LOADED),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
-                "#NpcDebugRosterFilterFlockButton",
-                EventData.of(EVENT_ACTION, ACTION_FILTER_FLOCK),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
                 "#NpcDebugRosterApplyFilterButton",
                 EventData.of(EVENT_FILTER_QUERY, "#NpcDebugRosterFilterQueryField.Value"),
                 false
@@ -504,20 +461,6 @@ public final class NpcDebugInspectorRosterPage
                 EventData.of(EVENT_ACTION, ACTION_FILTER_CLEAR),
                 false
         );
-    }
-
-    private void applyFilterControlState(@Nonnull UICommandBuilder commandBuilder) {
-        commandBuilder.set(
-                "#NpcDebugRosterFilterLoadedButton.Text",
-                filterLoadedOnly ? "Loaded Only: On" : "Loaded Only: Off"
-        );
-        String flockText = "Same Flock: Off";
-        if (filterSameFlock) {
-            flockText = activeFlockFilterId != null
-                    ? "Same Flock: " + abbreviate(activeFlockFilterId)
-                    : "Same Flock: On";
-        }
-        commandBuilder.set("#NpcDebugRosterFilterFlockButton.Text", flockText);
     }
 
     private void applyCopyBufferState(@Nonnull UICommandBuilder commandBuilder) {
@@ -533,7 +476,6 @@ public final class NpcDebugInspectorRosterPage
             previousEntriesByUuid.clear();
             changeSummaryByUuid.clear();
             highlightedNpcUuids.clear();
-            activeFlockFilterId = null;
             return;
         }
 
@@ -553,7 +495,6 @@ public final class NpcDebugInspectorRosterPage
 
         refreshChangeSummaries();
         pruneHighlights();
-        refreshActiveFlockFilter();
         entries = applyFilters();
     }
 
@@ -625,44 +566,6 @@ public final class NpcDebugInspectorRosterPage
         highlightedNpcUuids.retainAll(currentUuids);
     }
 
-    private void refreshActiveFlockFilter() {
-        if (!filterSameFlock) {
-            activeFlockFilterId = null;
-            return;
-        }
-        String resolved = resolveSameFlockId();
-        if (resolved == null) {
-            filterSameFlock = false;
-            activeFlockFilterId = null;
-            setStatusMessage("Same flock filter disabled (no flock target).", STATUS_MESSAGE_DURATION_MS);
-            return;
-        }
-        activeFlockFilterId = resolved;
-    }
-
-    @Nullable
-    private String resolveSameFlockId() {
-        String bySupplier = sameFlockIdSupplier != null ? normalizeMaybe(sameFlockIdSupplier.get()) : null;
-        if (bySupplier != null) {
-            return bySupplier;
-        }
-        return resolveFallbackFlockId();
-    }
-
-    @Nullable
-    private String resolveFallbackFlockId() {
-        for (NpcDebugLinkedEntry entry : sourceEntries) {
-            if (!entry.loaded()) {
-                continue;
-            }
-            String flockId = normalizeMaybe(entry.flockId());
-            if (flockId != null) {
-                return flockId;
-            }
-        }
-        return null;
-    }
-
     @Nonnull
     private NpcDebugLinkedEntry[] applyFilters() {
         if (sourceEntries.length == 0) {
@@ -672,15 +575,6 @@ public final class NpcDebugInspectorRosterPage
         String loweredQuery = query != null ? query.toLowerCase(Locale.ROOT) : null;
         ArrayList<NpcDebugLinkedEntry> filtered = new ArrayList<>(sourceEntries.length);
         for (NpcDebugLinkedEntry entry : sourceEntries) {
-            if (filterLoadedOnly && !entry.loaded()) {
-                continue;
-            }
-            if (filterSameFlock && activeFlockFilterId != null) {
-                String entryFlockId = normalizeMaybe(entry.flockId());
-                if (entryFlockId == null || !activeFlockFilterId.equals(entryFlockId)) {
-                    continue;
-                }
-            }
             if (loweredQuery != null && !matchesQuery(entry, loweredQuery)) {
                 continue;
             }
@@ -705,21 +599,6 @@ public final class NpcDebugInspectorRosterPage
             return false;
         }
         return text.toLowerCase(Locale.ROOT).contains(loweredQuery);
-    }
-
-    private void toggleSameFlockFilter() {
-        if (filterSameFlock) {
-            filterSameFlock = false;
-            activeFlockFilterId = null;
-            setStatusMessage("Same-flock filter disabled.", STATUS_MESSAGE_DURATION_MS);
-            return;
-        }
-        filterSameFlock = true;
-        refreshActiveFlockFilter();
-        if (!filterSameFlock) {
-            return;
-        }
-        setStatusMessage("Same-flock filter enabled.", STATUS_MESSAGE_DURATION_MS);
     }
 
     private void toggleHighlight(@Nonnull UUID npcUuid) {
@@ -768,12 +647,9 @@ public final class NpcDebugInspectorRosterPage
     }
 
     private void clearFilters() {
-        filterLoadedOnly = false;
-        filterSameFlock = false;
         filterQuery = "";
-        activeFlockFilterId = null;
         syncQueryFieldValue = true;
-        setStatusMessage("All filters cleared.", STATUS_MESSAGE_DURATION_MS);
+        setStatusMessage("Search cleared.", STATUS_MESSAGE_DURATION_MS);
     }
 
     @Nonnull
@@ -803,17 +679,7 @@ public final class NpcDebugInspectorRosterPage
             subtitle.append(" | Showing: ").append(shownCount);
         }
 
-        List<String> activeFilters = new ArrayList<>(3);
-        if (filterLoadedOnly) {
-            activeFilters.add("loaded");
-        }
-        if (filterSameFlock) {
-            activeFilters.add(
-                    activeFlockFilterId != null
-                            ? "flock " + abbreviate(activeFlockFilterId)
-                            : "same flock"
-            );
-        }
+        List<String> activeFilters = new ArrayList<>(1);
         if (!filterQuery.isBlank()) {
             activeFilters.add("query \"" + filterQuery + "\"");
         }
@@ -893,14 +759,6 @@ public final class NpcDebugInspectorRosterPage
             return null;
         }
         return trimmed;
-    }
-
-    @Nonnull
-    private String abbreviate(@Nonnull String value) {
-        if (value.length() <= 12) {
-            return value;
-        }
-        return value.substring(0, 8) + "...";
     }
 
     @Nullable

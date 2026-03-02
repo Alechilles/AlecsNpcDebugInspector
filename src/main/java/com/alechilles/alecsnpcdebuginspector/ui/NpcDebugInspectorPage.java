@@ -573,11 +573,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (subtitle == null || subtitle.isBlank()) {
             return "";
         }
-        int markerIndex = subtitle.indexOf("| Changed lines");
+        String compact = subtitle;
+        int markerIndex = compact.indexOf("| Changed lines");
         if (markerIndex <= 0) {
-            return subtitle;
+            return compact.replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "").trim();
         }
-        return subtitle.substring(0, markerIndex).trim();
+        compact = compact.substring(0, markerIndex).trim();
+        return compact.replaceAll("\\s*\\|\\s*Loaded:\\s*[^|]+", "").trim();
     }
 
     private void rebuildRows(@Nonnull UICommandBuilder commandBuilder,

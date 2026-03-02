@@ -50,8 +50,6 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 ### 2) Linked Roster
 - Card view of linked NPCs with basic live status.
 - Filter controls:
-  - loaded only
-  - same flock
   - text search
 - Per-NPC actions:
   - `Inspect`

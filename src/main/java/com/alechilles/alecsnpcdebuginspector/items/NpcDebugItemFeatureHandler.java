@@ -1,13 +1,11 @@
 package com.alechilles.alecsnpcdebuginspector.items;
 
-import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugTargeting;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorDebugFlagsPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorRosterPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugLinkedEntry;
-import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.Message;
@@ -18,7 +16,6 @@ import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import com.hypixel.hytale.server.flock.FlockMembership;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import java.util.List;
 import java.util.Set;
@@ -110,7 +107,6 @@ public final class NpcDebugItemFeatureHandler {
         NpcDebugInspectorRosterPage page = new NpcDebugInspectorRosterPage(
                 uiPlayerRef,
                 () -> buildEntriesForTool(player, store, toolId),
-                () -> resolveCurrentTargetFlockId(playerRef, store),
                 npcUuid -> openInspectorForUuid(player, playerRef, uiPlayerRef, store, npcUuid),
                 npcUuid -> openDebugFlagsForUuid(player, playerRef, uiPlayerRef, store, toolId, npcUuid),
                 npcUuid -> unlinkNpcFromTool(player, toolId, npcUuid),
@@ -181,24 +177,6 @@ public final class NpcDebugItemFeatureHandler {
             return;
         }
         NpcDebugHighlightManager.ensureTracking(uiPlayerRef, () -> readHighlightsForTool(player, toolId));
-    }
-
-    @Nullable
-    private String resolveCurrentTargetFlockId(@Nonnull Ref<EntityStore> playerRef,
-                                               @Nonnull Store<EntityStore> store) {
-        NpcDebugTargeting.Candidate candidate = NpcDebugTargeting.findTargetNpc(store, playerRef);
-        if (candidate == null || candidate.ref == null || !candidate.ref.isValid()) {
-            return null;
-        }
-        ComponentType<EntityStore, FlockMembership> flockType = FlockMembership.getComponentType();
-        if (flockType == null) {
-            return null;
-        }
-        FlockMembership membership = store.getComponent(candidate.ref, flockType);
-        if (membership == null || membership.getFlockId() == null) {
-            return null;
-        }
-        return String.valueOf(membership.getFlockId());
     }
 
     private void openInspectorForUuid(@Nonnull Player player,

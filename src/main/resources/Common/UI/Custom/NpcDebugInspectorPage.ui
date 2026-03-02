@@ -16,19 +16,29 @@ $C.@PageOverlay {
       LayoutMode: Top;
       Padding: (Left: 10, Right: 10, Top: 8, Bottom: 12);
 
-      Label #NpcDebugInspectorSubtitle {
-        Anchor: (Height: 22);
-        Text: "";
-        Style: (
-          FontSize: 13,
-          TextColor: #c3d5e8,
-          HorizontalAlignment: Start,
-          VerticalAlignment: Center
-        );
+      Group #NpcDebugInspectorHeaderRow {
+        Anchor: (Height: 32);
+
+        Label #NpcDebugInspectorSubtitle {
+          Anchor: (Left: 0, Top: 5, Right: 130, Height: 22);
+          Text: "";
+          Style: (
+            FontSize: 13,
+            TextColor: #c3d5e8,
+            HorizontalAlignment: Start,
+            VerticalAlignment: Center
+          );
+        }
+
+        $C.@SmallSecondaryTextButton #NpcDebugInspectorPinButton {
+          @Sounds = $C.@ButtonSounds;
+          @Text = "Pin NPC";
+          @Anchor = (Right: 0, Top: 0, Width: 120, Height: 30);
+        }
       }
 
       Label #NpcDebugInspectorPinHint {
-        Anchor: (Top: 3, Height: 20);
+        Anchor: (Top: 4, Height: 20);
         Text: "";
         Style: (
           FontSize: 11,
@@ -89,16 +99,6 @@ $C.@PageOverlay {
 
       Group {
         LayoutMode: Right;
-
-        $C.@SmallSecondaryTextButton #NpcDebugInspectorPinButton {
-          @Sounds = $C.@ButtonSounds;
-          @Text = "Pin NPC";
-          @Anchor = (MinWidth: 120);
-        }
-
-        Group {
-          Anchor: (Width: 10);
-        }
 
         $C.@SmallSecondaryTextButton #NpcDebugInspectorCloseButton {
           @Sounds = $C.@ButtonSounds;

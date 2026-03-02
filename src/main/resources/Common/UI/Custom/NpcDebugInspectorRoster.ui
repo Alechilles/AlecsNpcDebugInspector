@@ -31,31 +31,11 @@ $C.@PageOverlay {
         Anchor: (Top: 6, Height: 34);
         LayoutMode: Left;
 
-        $C.@SmallSecondaryTextButton #NpcDebugRosterFilterLoadedButton {
-          @Sounds = $C.@ButtonSounds;
-          @Text = "Loaded Only: Off";
-          @Anchor = (Width: 170);
-        }
-
-        Group {
-          Anchor: (Width: 8);
-        }
-
-        $C.@SmallSecondaryTextButton #NpcDebugRosterFilterFlockButton {
-          @Sounds = $C.@ButtonSounds;
-          @Text = "Same Flock: Off";
-          @Anchor = (Width: 160);
-        }
-
-        Group {
-          Anchor: (Width: 8);
-        }
-
         TextField #NpcDebugRosterFilterQueryField {
           Style: $C.@DefaultInputFieldStyle;
           PlaceholderStyle: $C.@DefaultInputFieldPlaceholderStyle;
           Background: $C.@InputBoxBackground;
-          Anchor: (Width: 260, Height: 30);
+          Anchor: (Width: 600, Height: 30);
           Padding: (Horizontal: 10);
           PlaceholderText: "Name/state contains...";
           MaxLength: 48;

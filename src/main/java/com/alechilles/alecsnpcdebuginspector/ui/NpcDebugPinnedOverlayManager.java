@@ -7,6 +7,7 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,6 @@ import javax.annotation.Nullable;
  * Tracks and updates pinned NPC inspector overlays per player.
  */
 public final class NpcDebugPinnedOverlayManager {
-    private static final long REFRESH_INTERVAL_MS = 1000L;
     private static final int MAX_PINNED_LINES = 40;
     private static final Map<UUID, OverlaySession> SESSIONS = new ConcurrentHashMap<>();
 
@@ -71,6 +71,16 @@ public final class NpcDebugPinnedOverlayManager {
         session.setPinnedFieldKeys(fieldKeys);
     }
 
+    public static void updatePinnedSectionOrder(@Nonnull PlayerRef playerRef,
+                                                @Nonnull UUID npcUuid,
+                                                @Nonnull List<String> sectionOrder) {
+        OverlaySession session = SESSIONS.get(playerRef.getUuid());
+        if (session == null || !session.isPinnedTo(npcUuid)) {
+            return;
+        }
+        session.setPinnedSectionOrder(sectionOrder);
+    }
+
     public static void unpinNpc(@Nonnull PlayerRef playerRef, @Nullable UUID npcUuid) {
         OverlaySession session = SESSIONS.get(playerRef.getUuid());
         if (session == null) {
@@ -89,6 +99,7 @@ public final class NpcDebugPinnedOverlayManager {
         private final Supplier<NpcDebugSnapshot> snapshotSupplier;
         private final NpcDebugPinnedOverlayHud hud;
         private final LinkedHashSet<String> pinnedFieldKeys;
+        private final ArrayList<String> pinnedSectionOrder;
         private volatile boolean active;
         private volatile boolean refreshStarted;
         private volatile boolean hudShown;
@@ -101,6 +112,7 @@ public final class NpcDebugPinnedOverlayManager {
             this.snapshotSupplier = snapshotSupplier;
             this.hud = new NpcDebugPinnedOverlayHud(playerRef);
             this.pinnedFieldKeys = new LinkedHashSet<>();
+            this.pinnedSectionOrder = new ArrayList<>();
             this.active = true;
             this.refreshStarted = false;
             this.hudShown = false;
@@ -125,6 +137,28 @@ public final class NpcDebugPinnedOverlayManager {
             renderNow();
         }
 
+        private void setPinnedSectionOrder(@Nonnull List<String> sectionOrder) {
+            synchronized (pinnedSectionOrder) {
+                pinnedSectionOrder.clear();
+                for (String section : sectionOrder) {
+                    if (section == null || section.isBlank()) {
+                        continue;
+                    }
+                    if (!pinnedSectionOrder.contains(section)) {
+                        pinnedSectionOrder.add(section);
+                    }
+                }
+            }
+            renderNow();
+        }
+
+        @Nonnull
+        private List<String> getPinnedSectionOrder() {
+            synchronized (pinnedSectionOrder) {
+                return List.copyOf(pinnedSectionOrder);
+            }
+        }
+
         private void start() {
             if (refreshStarted) {
                 return;
@@ -140,9 +174,10 @@ public final class NpcDebugPinnedOverlayManager {
         }
 
         private void scheduleTick() {
+            long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
             CompletableFuture.runAsync(
                     this::dispatchTick,
-                    CompletableFuture.delayedExecutor(REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS)
+                    CompletableFuture.delayedExecutor(refreshIntervalMs, TimeUnit.MILLISECONDS)
             );
         }
 
@@ -192,7 +227,7 @@ public final class NpcDebugPinnedOverlayManager {
             NpcDebugSnapshot snapshot = resolveSnapshot();
             NpcDebugInspectorLine[] lines = NpcDebugInspectorLineParser.parse(snapshot.details());
             String body = resolvePinnedBody(snapshot.details(), lines);
-            String subtitle = "NPC: " + npcUuid + " | Pinned: " + countPinned(lines);
+            String subtitle = "NPC: " + resolvePinnedNpcLabel(lines) + " | Pinned: " + countPinned(lines);
             hud.setContent("NPC Debug Pinned Overlay", subtitle, body);
             if (!hudShown) {
                 hud.showOverlay();
@@ -229,13 +264,15 @@ public final class NpcDebugPinnedOverlayManager {
                 return "No pinned fields selected.\n\nOpen NPC inspector and check fields to pin.";
             }
 
-            List<String> entries = new ArrayList<>();
-            boolean includeEventsLog = keys.contains(NpcDebugInspectorLineParser.EVENTS_LOG_PIN_KEY);
-            if (includeEventsLog) {
-                appendEventsLog(entries, details);
+            Map<String, List<String>> entriesBySection = new LinkedHashMap<>();
+            int remainingLines = MAX_PINNED_LINES;
+            if (keys.contains(NpcDebugInspectorLineParser.EVENTS_LOG_PIN_KEY)) {
+                remainingLines = appendPinnedEventsEntries(entriesBySection, details, remainingLines);
             }
-
             for (NpcDebugInspectorLine line : lines) {
+                if (remainingLines <= 0) {
+                    break;
+                }
                 if (!line.pinnable || line.key == null) {
                     continue;
                 }
@@ -245,35 +282,197 @@ public final class NpcDebugPinnedOverlayManager {
                 if (NpcDebugInspectorLineParser.EVENTS_LOG_PIN_KEY.equals(line.key)) {
                     continue;
                 }
-                entries.add("- " + line.pinnedText);
-                if (entries.size() >= MAX_PINNED_LINES) {
-                    break;
+                String sectionName = resolveSectionName(line);
+                String normalizedLine = normalizePinnedLineText(line.displayText);
+                if (normalizedLine.isBlank()) {
+                    continue;
                 }
+                entriesBySection.computeIfAbsent(sectionName, ignored -> new ArrayList<>()).add("- " + normalizedLine);
+                remainingLines--;
             }
-            if (entries.isEmpty()) {
+            if (entriesBySection.isEmpty()) {
                 return "Pinned fields are currently unavailable for this NPC snapshot.";
             }
-            return String.join("\n", entries);
+            return buildSectionedBody(entriesBySection, lines);
         }
 
-        private void appendEventsLog(@Nonnull List<String> entries, @Nullable String details) {
-            if (entries.size() >= MAX_PINNED_LINES) {
-                return;
-            }
-            entries.add("=== Recent Events ===");
-            int remaining = MAX_PINNED_LINES - entries.size();
-            if (remaining <= 0) {
-                return;
+        private int appendPinnedEventsEntries(@Nonnull Map<String, List<String>> entriesBySection,
+                                              @Nullable String details,
+                                              int remainingLines) {
+            if (remainingLines <= 0) {
+                return 0;
             }
             List<String> lines = extractRecentEventsLines(details);
+            List<String> sectionEntries = entriesBySection.computeIfAbsent(
+                    NpcDebugInspectorLineParser.RECENT_EVENTS_SECTION,
+                    ignored -> new ArrayList<>()
+            );
             if (lines.isEmpty()) {
-                entries.add("No recent tracked changes yet.");
-                return;
+                sectionEntries.add("- No recent tracked changes yet.");
+                return Math.max(0, remainingLines - 1);
             }
-            int limit = Math.min(remaining, lines.size());
+            int limit = Math.min(remainingLines, lines.size());
             for (int i = 0; i < limit; i++) {
-                entries.add(lines.get(i));
+                sectionEntries.add("- " + lines.get(i));
             }
+            return remainingLines - limit;
+        }
+
+        @Nonnull
+        private String buildSectionedBody(@Nonnull Map<String, List<String>> entriesBySection,
+                                          @Nonnull NpcDebugInspectorLine[] lines) {
+            List<String> sectionOrder = resolveSectionOrder(entriesBySection, lines);
+            StringBuilder body = new StringBuilder();
+            for (String sectionName : sectionOrder) {
+                List<String> entries = entriesBySection.get(sectionName);
+                if (entries == null || entries.isEmpty()) {
+                    continue;
+                }
+                if (body.length() > 0) {
+                    body.append("\n\n");
+                }
+                body.append("=== ").append(sectionName).append(" ===").append('\n');
+                for (int i = 0; i < entries.size(); i++) {
+                    body.append(entries.get(i));
+                    if (i < entries.size() - 1) {
+                        body.append('\n');
+                    }
+                }
+            }
+            if (body.isEmpty()) {
+                return "Pinned fields are currently unavailable for this NPC snapshot.";
+            }
+            return body.toString();
+        }
+
+        @Nonnull
+        private List<String> resolveSectionOrder(@Nonnull Map<String, List<String>> entriesBySection,
+                                                 @Nonnull NpcDebugInspectorLine[] lines) {
+            List<String> orderedSections = new ArrayList<>(entriesBySection.size());
+            Set<String> seen = new LinkedHashSet<>();
+
+            for (String section : getPinnedSectionOrder()) {
+                if (entriesBySection.containsKey(section) && seen.add(section)) {
+                    orderedSections.add(section);
+                }
+            }
+
+            for (NpcDebugInspectorLine line : lines) {
+                String raw = line.displayText;
+                if (raw == null || !raw.startsWith("=== ") || !raw.endsWith(" ===")) {
+                    continue;
+                }
+                String sectionName = raw.substring(4, Math.max(4, raw.length() - 4)).trim();
+                if (sectionName.isBlank()) {
+                    continue;
+                }
+                if (entriesBySection.containsKey(sectionName) && seen.add(sectionName)) {
+                    orderedSections.add(sectionName);
+                }
+            }
+
+            for (String section : entriesBySection.keySet()) {
+                if (seen.add(section)) {
+                    orderedSections.add(section);
+                }
+            }
+            return orderedSections;
+        }
+
+        @Nonnull
+        private String resolveSectionName(@Nonnull NpcDebugInspectorLine line) {
+            if (line.key != null) {
+                int separatorIndex = line.key.indexOf('|');
+                if (separatorIndex > 0) {
+                    return line.key.substring(0, separatorIndex).trim();
+                }
+            }
+            return "General";
+        }
+
+        @Nonnull
+        private String normalizePinnedLineText(@Nullable String displayText) {
+            if (displayText == null) {
+                return "";
+            }
+            String line = displayText.strip();
+            if (line.startsWith(">> ")) {
+                line = line.substring(3);
+            } else if (line.startsWith("- ")) {
+                line = line.substring(2);
+            }
+            return line.strip();
+        }
+
+        @Nonnull
+        private String resolvePinnedNpcLabel(@Nonnull NpcDebugInspectorLine[] lines) {
+            String displayName = findOverviewFieldValue(lines, "Display Name");
+            String entityNameKey = findOverviewFieldValue(lines, "Entity Name Key");
+            String roleId = findOverviewFieldValue(lines, "Role Id");
+            String preferredName = firstMeaningfulName(displayName, entityNameKey, roleId, "NPC");
+            return preferredName + " (" + npcUuid + ")";
+        }
+
+        @Nullable
+        private String findOverviewFieldValue(@Nonnull NpcDebugInspectorLine[] lines, @Nonnull String label) {
+            String keyPrefix = "Overview|" + label;
+            for (NpcDebugInspectorLine line : lines) {
+                if (line.key == null || !line.key.startsWith(keyPrefix)) {
+                    continue;
+                }
+                String parsedValue = parseLineValue(line.displayText);
+                if (parsedValue != null) {
+                    return parsedValue;
+                }
+            }
+            return null;
+        }
+
+        @Nullable
+        private String parseLineValue(@Nullable String displayText) {
+            String normalized = normalizePinnedLineText(displayText);
+            if (normalized.isBlank()) {
+                return null;
+            }
+            int separatorIndex = normalized.indexOf(": ");
+            if (separatorIndex < 0 || separatorIndex + 2 >= normalized.length()) {
+                return normalized;
+            }
+            return normalized.substring(separatorIndex + 2).trim();
+        }
+
+        @Nonnull
+        private String firstMeaningfulName(@Nullable String displayName,
+                                           @Nullable String entityNameKey,
+                                           @Nullable String roleId,
+                                           @Nonnull String fallback) {
+            if (isMeaningfulName(displayName)) {
+                return displayName.trim();
+            }
+            if (isMeaningfulName(entityNameKey)) {
+                return entityNameKey.trim();
+            }
+            if (isMeaningfulName(roleId)) {
+                return roleId.trim();
+            }
+            return fallback;
+        }
+
+        private boolean isMeaningfulName(@Nullable String value) {
+            if (value == null) {
+                return false;
+            }
+            String normalized = value.trim();
+            if (normalized.isBlank()) {
+                return false;
+            }
+            String lower = normalized.toLowerCase(java.util.Locale.ROOT);
+            return !"<none>".equals(lower)
+                    && !"none".equals(lower)
+                    && !"n/a".equals(lower)
+                    && !"null".equals(lower)
+                    && !"<unknown>".equals(lower)
+                    && !"unknown".equals(lower);
         }
 
         @Nonnull

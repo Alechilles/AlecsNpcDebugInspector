@@ -53,9 +53,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
     private static final String ACTION_REORDER_INTERACTION = "ReorderInteraction";
     private static final String ACTION_REORDER_SECTION = "ReorderSection";
+    private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
+    private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
-    private static final long REFRESH_INTERVAL_MS = 1000L;
     private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 4000L;
     private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
     private static final String[] FROM_INDEX_KEYS = {
@@ -133,6 +134,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         applySnapshot(commandBuilder);
         rebuildRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
+        syncPinnedSectionOrderToOverlay();
         startRefreshLoop();
     }
 
@@ -169,6 +171,11 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
         if (ACTION_REORDER_INTERACTION.equals(data.action)) {
             suppressRefreshTemporarily();
+            return;
+        }
+        if (ACTION_REFRESH_RATE_CHANGED.equals(data.action)) {
+            applyRefreshIntervalFromEvent(data.refreshIntervalMs);
+            sendRefreshUpdate();
             return;
         }
         if (data.action.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
@@ -222,6 +229,19 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             pinModeEnabled = true;
             pinnedFieldKeys.clear();
             NpcDebugPinnedOverlayManager.updatePinnedFieldKeys(playerRef, targetNpcUuid, pinnedFieldKeys);
+            syncPinnedSectionOrderToOverlay();
+        }
+    }
+
+    private void applyRefreshIntervalFromEvent(@Nullable String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return;
+        }
+        try {
+            double parsed = Double.parseDouble(rawValue.trim());
+            NpcDebugUiRefreshSettings.setFromUiValue(playerRef, parsed);
+        } catch (NumberFormatException ignored) {
+            // Ignore malformed UI value.
         }
     }
 
@@ -415,12 +435,24 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 EventData.of(EVENT_ACTION, ACTION_TOGGLE_PIN_MODE),
                 false
         );
+        EventData refreshEventData = new EventData()
+                .append(EVENT_ACTION, ACTION_REFRESH_RATE_CHANGED)
+                .append(EVENT_REFRESH_INTERVAL_MS, "#NpcDebugInspectorRefreshSlider.Value");
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.ValueChanged,
+                "#NpcDebugInspectorRefreshSlider",
+                refreshEventData,
+                false
+        );
     }
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {
+        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
         commandBuilder.set("#NpcDebugInspectorTitle.Text", latestSnapshot.title());
         commandBuilder.set("#NpcDebugInspectorSubtitle.Text", compactSubtitle(latestSnapshot.subtitle()));
         commandBuilder.set("#NpcDebugInspectorPinButton.Text", pinModeEnabled ? "Unpin" : "Pin NPC");
+        commandBuilder.set("#NpcDebugInspectorRefreshLabel.Text", NpcDebugUiRefreshSettings.formatIntervalLabel(refreshIntervalMs));
+        commandBuilder.set("#NpcDebugInspectorRefreshSlider.Value", NpcDebugUiRefreshSettings.toUiValue(refreshIntervalMs));
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
@@ -724,9 +756,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     private void scheduleRefreshTick() {
+        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
         CompletableFuture.runAsync(
                 this::dispatchRefreshTick,
-                CompletableFuture.delayedExecutor(REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS)
+                CompletableFuture.delayedExecutor(refreshIntervalMs, TimeUnit.MILLISECONDS)
         );
     }
 
@@ -771,7 +804,23 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         applySnapshot(commandBuilder);
         rebuildRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
+        syncPinnedSectionOrderToOverlay();
         sendUpdate(commandBuilder, eventBuilder, false);
+    }
+
+    private void syncPinnedSectionOrderToOverlay() {
+        if (!pinModeEnabled || targetNpcUuid == null) {
+            return;
+        }
+        List<String> orderedTitles = new ArrayList<>(sectionOrder.size());
+        for (String sectionId : sectionOrder) {
+            InspectorSection section = sectionsById.get(sectionId);
+            if (section == null || section.title == null || section.title.isBlank()) {
+                continue;
+            }
+            orderedTitles.add(section.title);
+        }
+        NpcDebugPinnedOverlayManager.updatePinnedSectionOrder(playerRef, targetNpcUuid, orderedTitles);
     }
 
     private static final class InspectorSection {
@@ -818,8 +867,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 data -> data.action
             )
             .add()
+            .append(
+                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.STRING),
+                (data, value) -> data.refreshIntervalMs = value,
+                data -> data.refreshIntervalMs
+            )
+            .add()
             .build();
 
         private String action;
+        private String refreshIntervalMs;
     }
 }

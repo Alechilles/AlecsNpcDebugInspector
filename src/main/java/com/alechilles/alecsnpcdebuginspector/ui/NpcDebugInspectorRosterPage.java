@@ -55,7 +55,6 @@ public final class NpcDebugInspectorRosterPage
     private static final String COPY_PREFIX = "__copy__:";
     private static final String HIGHLIGHT_PREFIX = "__highlight__:";
 
-    private static final long REFRESH_INTERVAL_MS = 1000L;
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
     private static final String HIGHLIGHT_PARTICLE_ID = "Particles/NPC/Emotions/Question_Subtle";
 
@@ -294,9 +293,10 @@ public final class NpcDebugInspectorRosterPage
     }
 
     private void scheduleRefreshTick() {
+        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
         CompletableFuture.runAsync(
                 this::dispatchRefreshTick,
-                CompletableFuture.delayedExecutor(REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS)
+                CompletableFuture.delayedExecutor(refreshIntervalMs, TimeUnit.MILLISECONDS)
         );
     }
 

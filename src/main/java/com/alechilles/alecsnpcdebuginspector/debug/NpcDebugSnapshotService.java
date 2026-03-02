@@ -150,7 +150,26 @@ public final class NpcDebugSnapshotService {
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "overview.displayName", "Display Name", resolveDisplayName(npcRef, store, npc), true, false);
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "overview.displayName",
+                "Display Name",
+                safeText(resolveDisplayNameOnly(npcRef, store, npc), "<none>"),
+                true,
+                false
+        );
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "overview.entityNameKey",
+                "Entity Name Key",
+                safeText(resolveEntityNameFromNameKey(npc), "<none>"),
+                true,
+                false
+        );
         appendTrackedLine(sb, npcUuid, now, "overview.roleName", "Role Name", safeText(npc.getRoleName(), "<unknown>"), true, false);
         appendTrackedLine(sb, npcUuid, now, "overview.roleId", "Role Id", resolveRoleId(npc), true, true);
         appendTrackedLine(sb, npcUuid, now, "overview.state", "State", resolveStateName(npc), true, true);
@@ -184,14 +203,13 @@ public final class NpcDebugSnapshotService {
                                   @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "ai.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "ai.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
         }
 
         Role role = npc.getRole();
         StateSupport stateSupport = role.getStateSupport();
         EntitySupport entitySupport = role.getEntitySupport();
-        appendTrackedLine(sb, npcUuid, now, "ai.available", "Available", "true", true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.stateIndex", "State Index", String.valueOf(stateSupport.getStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.subStateIndex", "Sub-State Index", String.valueOf(stateSupport.getSubStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.busy", "In Busy State", String.valueOf(stateSupport.isInBusyState()), true, true);
@@ -218,11 +236,10 @@ public final class NpcDebugSnapshotService {
                                          @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "targeting.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "targeting.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "targeting.available", "Available", "true", true, false);
         Role role = npc.getRole();
         MarkedEntitySupport marked = role.getMarkedEntitySupport();
         if (marked != null) {
@@ -273,11 +290,10 @@ public final class NpcDebugSnapshotService {
                                        @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npcRef == null || !npcRef.isValid() || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "pathing.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "pathing.status", "Status", "Pathing data unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "pathing.available", "Available", "true", true, false);
         PathManager pathManager = npc.getPathManager();
         appendTrackedLine(sb, npcUuid, now, "pathing.following", "Following Path", String.valueOf(pathManager.isFollowingPath()), true, true);
         appendTrackedLine(sb, npcUuid, now, "pathing.pathHint", "Path Hint", String.valueOf(pathManager.getCurrentPathHint()), true, false);
@@ -323,11 +339,10 @@ public final class NpcDebugSnapshotService {
                                      @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "timers.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "timers.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "timers.available", "Available", "true", true, false);
         String despawnSeconds = formatNumber(npc.getDespawnTime());
         appendTrackedLine(sb, npcUuid, now, "timers.despawnSeconds", "Despawn Countdown (s)", despawnSeconds, true, false);
         trackTimerTransition(npcUuid, now, "despawnSeconds", "Despawn Countdown (s)", despawnSeconds);
@@ -365,11 +380,10 @@ public final class NpcDebugSnapshotService {
                                          @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "lifecycle.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "lifecycle.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "lifecycle.available", "Available", "true", true, false);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.spawnLockTime", "Spawn Lock Time (s)", formatNumber(npc.getRole().getSpawnLockTime()), true, false);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.isDespawning", "Is Despawning", String.valueOf(npc.isDespawning()), true, true);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.isPlayingDespawnAnim", "Playing Despawn Animation", String.valueOf(npc.isPlayingDespawnAnim()), true, false);
@@ -398,11 +412,10 @@ public final class NpcDebugSnapshotService {
                                              @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null || npcRef == null || !npcRef.isValid()) {
-            appendTrackedLine(sb, npcUuid, now, "relationships.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "relationships.status", "Status", "Relationship data unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "relationships.available", "Available", "true", true, false);
         appendTrackedLine(sb, npcUuid, now, "relationships.leashPoint", "Leash Point", formatVector(npc.getLeashPoint()), true, false);
 
         Role role = npc.getRole();
@@ -443,11 +456,9 @@ public final class NpcDebugSnapshotService {
                                       @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null) {
-            appendTrackedLine(sb, npcUuid, now, "combat.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "combat.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
         }
-
-        appendTrackedLine(sb, npcUuid, now, "combat.available", "Available", "true", true, false);
 
         CombatSupport combatSupport = npc.getRole().getCombatSupport();
         appendTrackedLine(sb, npcUuid, now, "combat.executing", "Executing Attack", String.valueOf(combatSupport.isExecutingAttack()), true, true);
@@ -488,13 +499,13 @@ public final class NpcDebugSnapshotService {
                                          @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null) {
-            appendTrackedLine(sb, npcUuid, now, "inventory.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "inventory.status", "Status", "NPC unavailable", true, false);
             return sb.toString().trim();
         }
 
         Inventory inventory = npc.getInventory();
-        appendTrackedLine(sb, npcUuid, now, "inventory.available", "Available", String.valueOf(inventory != null), true, false);
         if (inventory == null) {
+            appendTrackedLine(sb, npcUuid, now, "inventory.status", "Status", "No inventory container", true, false);
             return sb.toString().trim();
         }
 
@@ -511,7 +522,7 @@ public final class NpcDebugSnapshotService {
                                      @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null) {
-            appendTrackedLine(sb, npcUuid, now, "alarms.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "alarms.status", "Status", "NPC unavailable", true, false);
             return sb.toString().trim();
         }
 
@@ -547,11 +558,10 @@ public final class NpcDebugSnapshotService {
                                     @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npc.getRole() == null || npc.getRole().getEntitySupport() == null) {
-            appendTrackedLine(sb, npcUuid, now, "flags.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "flags.status", "Status", "Flag data unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "flags.available", "Available", "true", true, false);
         Role role = npc.getRole();
         boolean[] roleFlags = readBooleanArrayField(role, "flags");
         if (roleFlags != null) {
@@ -589,11 +599,10 @@ public final class NpcDebugSnapshotService {
                                          @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npcRef == null || !npcRef.isValid() || npc == null) {
-            appendTrackedLine(sb, npcUuid, now, "components.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "components.status", "Status", "Component data unavailable", true, false);
             return sb.toString().trim();
         }
 
-        appendTrackedLine(sb, npcUuid, now, "components.available", "Available", "true", true, false);
         appendTrackedLine(sb, npcUuid, now, "components.npcEntity", "NPCEntity", "true", false, false);
         appendTrackedLine(sb, npcUuid, now, "components.transform", "TransformComponent", String.valueOf(store.getComponent(npcRef, TransformComponent.getComponentType()) != null), true, false);
         appendTrackedLine(sb, npcUuid, now, "components.stats", "EntityStatMap", String.valueOf(store.getComponent(npcRef, EntityStatMap.getComponentType()) != null), true, false);
@@ -615,7 +624,7 @@ public final class NpcDebugSnapshotService {
                                      @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
         if (npc == null || npcRef == null || !npcRef.isValid()) {
-            appendTrackedLine(sb, npcUuid, now, "flock.available", "Available", "false", true, false);
+            appendTrackedLine(sb, npcUuid, now, "flock.status", "Status", "Flock data unavailable", true, false);
             return sb.toString().trim();
         }
 

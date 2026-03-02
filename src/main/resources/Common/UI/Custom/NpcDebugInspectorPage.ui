@@ -38,6 +38,37 @@ $C.@PageOverlay {
         );
       }
 
+      Group #NpcDebugInspectorRefreshRow {
+        LayoutMode: Left;
+        Anchor: (Top: 4, Height: 32);
+        Background: #23344c(0.70);
+        Padding: (Left: 8, Right: 10, Top: 7, Bottom: 7);
+
+        Label #NpcDebugInspectorRefreshLabel {
+          Anchor: (Width: 190, Height: 18);
+          Text: "Update Rate: 1000 ms (1.00s)";
+          Style: (
+            FontSize: 11,
+            TextColor: #d9e7f6,
+            HorizontalAlignment: Start,
+            VerticalAlignment: Center
+          );
+        }
+
+        FloatSliderNumberField #NpcDebugInspectorRefreshSlider {
+          FlexWeight: 1;
+          Anchor: (Height: 5, Right: 0);
+          SliderStyle: $C.@DefaultSliderStyle;
+          NumberFieldContainerAnchor: (Left: 12, Width: 48, Height: 16);
+          NumberFieldStyle: (...$C.@DefaultInputFieldStyle, FontSize: 11, TextColor: #dce8f5);
+          NumberFieldMaxDecimalPlaces: 0;
+          Min: 150;
+          Max: 2000;
+          Step: 50;
+          Value: 1000;
+        }
+      }
+
       $C.@PanelSeparatorFancy {
         @Anchor = (Top: 4, Bottom: 8);
       }

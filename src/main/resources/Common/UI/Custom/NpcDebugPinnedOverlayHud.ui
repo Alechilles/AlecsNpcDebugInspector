@@ -4,6 +4,11 @@ Group #NpcDebugPinnedOverlayRoot {
   Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
   Visible: true;
 
+  Group #NpcDebugPinnedOverlayBackdrop {
+    Anchor: (Left: 2, Right: 2, Top: 2, Bottom: 2);
+    Background: #0c1a2c(0.96);
+  }
+
   Label #NpcDebugPinnedOverlayTitle {
     Anchor: (Top: 0, Left: 0, Right: 0, Height: 22);
     Text: "NPC Debug Pinned Overlay";

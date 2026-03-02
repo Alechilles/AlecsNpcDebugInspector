@@ -392,12 +392,6 @@ public final class NpcDebugInspectorRosterPage
         );
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
-                "#NpcDebugRosterFilterQueryField",
-                EventData.of(EVENT_FILTER_QUERY, "#NpcDebugRosterFilterQueryField.Value"),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
                 "#NpcDebugRosterClearFilterButton",
                 EventData.of(EVENT_ACTION, ACTION_FILTER_CLEAR),
                 false

@@ -1,0 +1,21 @@
+$C = "Common.ui";
+
+Group {
+  Anchor: (Top: 1, Left: 0, Right: 0, Height: 24);
+
+  $C.@CheckBox #FieldCheck {
+    Anchor: (Left: 0, Top: 1, Width: 22, Height: 22);
+    Visible: false;
+  }
+
+  Label #FieldText {
+    Anchor: (Left: 28, Right: 0, Height: 22);
+    Text: "";
+    Style: (
+      FontSize: 12,
+      TextColor: #e7f0fb,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+}

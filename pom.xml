@@ -19,6 +19,8 @@
         <hytale.install.path.release>C:/Users/22ale/AppData/Roaming/Hytale/install/release/package/game/latest</hytale.install.path.release>
         <hytale.install.path.prerelease>C:/Users/22ale/AppData/Roaming/Hytale/install/pre-release/package/game/latest</hytale.install.path.prerelease>
         <hytale.install.path>${hytale.install.path.release}</hytale.install.path>
+        <hytale.userdata.path>C:/Users/22ale/AppData/Roaming/Hytale/UserData</hytale.userdata.path>
+        <hytale.jdk.path>C:/Program Files/Eclipse Adoptium/jdk-25.0.1.8-hotspot</hytale.jdk.path>
     </properties>
 
     <dependencies>
@@ -109,6 +111,137 @@
                 <hytale.install.path>${hytale.install.path.prerelease}</hytale.install.path>
             </properties>
         </profile>
+
+        <!-- Run the Hytale server with the plugin installed -->
+        <profile>
+            <id>run-server</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-plugin-to-server</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${hytale.install.path}/Server/mods</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}</directory>
+                                            <includes>
+                                                <include>${project.build.finalName}.jar</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>copy-plugin-to-userdata</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${hytale.userdata.path}/Mods</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}</directory>
+                                            <includes>
+                                                <include>${project.build.finalName}.jar</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.4.1</version>
+                        <executions>
+                            <execution>
+                                <id>run-hytale-server</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${hytale.jdk.path}/bin/java</executable>
+                                    <workingDirectory>${hytale.install.path}/Server</workingDirectory>
+                                    <arguments>
+                                        <argument>--enable-native-access=ALL-UNNAMED</argument>
+                                        <argument>-jar</argument>
+                                        <argument>HytaleServer.jar</argument>
+                                        <argument>--assets</argument>
+                                        <argument>${hytale.install.path}/Assets.zip</argument>
+                                        <argument>--assets</argument>
+                                        <argument>${project.basedir}/src/main/resources</argument>
+                                        <argument>--allow-op</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Install plugin to server and userdata mods folders without running -->
+        <profile>
+            <id>install-plugin</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-plugin-to-server</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${hytale.install.path}/Server/mods</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}</directory>
+                                            <includes>
+                                                <include>${project.build.finalName}.jar</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>copy-plugin-to-userdata</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${hytale.userdata.path}/Mods</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}</directory>
+                                            <includes>
+                                                <include>${project.build.finalName}.jar</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
-

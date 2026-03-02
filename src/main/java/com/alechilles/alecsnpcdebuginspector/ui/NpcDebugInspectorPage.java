@@ -485,14 +485,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     false
             );
             eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionMoveButton",
-                    EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
-                    false
-            );
-            eventBuilder.addEventBinding(
                     CustomUIEventBindingType.MouseEntered,
-                    sectionSelector + " #SectionMoveButton",
+                    sectionSelector + " #SectionToggleButton",
                     EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
                     false
             );

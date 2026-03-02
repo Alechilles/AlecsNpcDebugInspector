@@ -1,0 +1,42 @@
+$C = "Common.ui";
+
+Group {
+  Anchor: (Top: 4, Left: 0, Right: 0, Height: 36);
+  Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
+  Padding: (Left: 6, Right: 6, Top: 5, Bottom: 5);
+
+  $C.@SmallSecondaryTextButton #SectionToggleButton {
+    @Sounds = $C.@ButtonSounds;
+    @Text = "▾";
+    @Anchor = (Left: 0, Top: 0, Width: 30, Height: 24);
+  }
+
+  Label #SectionTitle {
+    Anchor: (Left: 36, Top: 0, Right: 98, Height: 24);
+    Text: "OVERVIEW";
+    Style: (
+      FontSize: 14,
+      RenderBold: true,
+      TextColor: #eff4fa,
+      HorizontalAlignment: Start,
+      VerticalAlignment: Center
+    );
+  }
+
+  Label #SectionCount {
+    Anchor: (Right: 38, Top: 0, Width: 56, Height: 24);
+    Text: "0 fields";
+    Style: (
+      FontSize: 11,
+      TextColor: #b7c8dc,
+      HorizontalAlignment: End,
+      VerticalAlignment: Center
+    );
+  }
+
+  $C.@SmallSecondaryTextButton #SectionMoveButton {
+    @Sounds = $C.@ButtonSounds;
+    @Text = "≡";
+    @Anchor = (Right: 0, Top: 0, Width: 32, Height: 24);
+  }
+}

@@ -15,7 +15,13 @@ import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -29,20 +35,31 @@ import javax.annotation.Nullable;
  */
 public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebugInspectorPage.PageEventData> {
     public static final String UI_PATH = "NpcDebugInspectorPage.ui";
+    private static final String SECTION_HEADER_UI_PATH = "NpcDebugInspectorSectionHeaderRow.ui";
     private static final String FIELD_ROW_UI_PATH = "NpcDebugInspectorFieldRow.ui";
+
     private static final String EVENT_ACTION = "Action";
     private static final String ACTION_CLOSE = "Close";
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
+    private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
+    private static final String ACTION_MOVE_SECTION_PREFIX = "MoveSection:";
+
+    private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_INTERVAL_MS = 1000L;
 
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
     @Nullable
     private final UUID targetNpcUuid;
+
     private NpcDebugSnapshot latestSnapshot;
-    private NpcDebugInspectorLine[] inspectorLines;
-    private boolean pinModeEnabled;
+    private final Map<String, InspectorSection> sectionsById;
+    private final ArrayList<String> sectionOrder;
+    private final LinkedHashSet<String> collapsedSectionIds;
     private final LinkedHashSet<String> pinnedFieldKeys;
+    private final ArrayList<String> renderedFieldKeys;
+    private boolean pinModeEnabled;
+    private boolean sectionStateInitialized;
     private volatile boolean dismissed;
     private volatile boolean refreshLoopStarted;
 
@@ -53,9 +70,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.snapshotSupplier = snapshotSupplier;
         this.targetNpcUuid = targetNpcUuid;
         this.latestSnapshot = new NpcDebugSnapshot("NPC Debug Inspector", "", "No data.");
-        this.inspectorLines = new NpcDebugInspectorLine[0];
-        this.pinModeEnabled = false;
+        this.sectionsById = new LinkedHashMap<>();
+        this.sectionOrder = new ArrayList<>();
+        this.collapsedSectionIds = new LinkedHashSet<>();
         this.pinnedFieldKeys = new LinkedHashSet<>();
+        this.renderedFieldKeys = new ArrayList<>();
+        this.pinModeEnabled = false;
+        this.sectionStateInitialized = false;
         this.dismissed = false;
         this.refreshLoopStarted = false;
     }
@@ -76,8 +97,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.append(UI_PATH);
         refreshSnapshotData();
         syncPinnedStateFromManager();
+        prunePinnedKeys();
         applySnapshot(commandBuilder);
-        rebuildFieldRows(commandBuilder, eventBuilder);
+        rebuildRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
         startRefreshLoop();
     }
@@ -93,6 +115,22 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (ACTION_TOGGLE_PIN_MODE.equals(data.action)) {
             togglePinMode();
             sendRefreshUpdate();
+            return;
+        }
+        if (data.action.startsWith(ACTION_TOGGLE_SECTION_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_TOGGLE_SECTION_PREFIX);
+            if (sectionId != null) {
+                toggleSectionCollapsed(sectionId);
+                sendRefreshUpdate();
+            }
+            return;
+        }
+        if (data.action.startsWith(ACTION_MOVE_SECTION_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_PREFIX);
+            if (sectionId != null) {
+                moveSectionDown(sectionId);
+                sendRefreshUpdate();
+            }
             return;
         }
         if (data.action.startsWith(ACTION_TOGGLE_FIELD_PREFIX)) {
@@ -125,6 +163,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
+    @Nullable
+    private String parseActionSuffix(@Nonnull String action, @Nonnull String prefix) {
+        String raw = action.substring(prefix.length()).trim();
+        if (raw.isBlank()) {
+            return null;
+        }
+        return raw;
+    }
+
     private int parseFieldIndex(@Nonnull String action) {
         String value = action.substring(ACTION_TOGGLE_FIELD_PREFIX.length()).trim();
         if (value.isBlank()) {
@@ -138,19 +185,43 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     private void togglePinnedField(int index) {
-        if (!pinModeEnabled || targetNpcUuid == null || index < 0 || index >= inspectorLines.length) {
+        if (!pinModeEnabled || targetNpcUuid == null || index < 0 || index >= renderedFieldKeys.size()) {
             return;
         }
-        NpcDebugInspectorLine line = inspectorLines[index];
-        if (!line.pinnable || line.key == null) {
+        String key = renderedFieldKeys.get(index);
+        if (key == null || key.isBlank()) {
             return;
         }
-        if (pinnedFieldKeys.contains(line.key)) {
-            pinnedFieldKeys.remove(line.key);
+        if (pinnedFieldKeys.contains(key)) {
+            pinnedFieldKeys.remove(key);
         } else {
-            pinnedFieldKeys.add(line.key);
+            pinnedFieldKeys.add(key);
         }
         NpcDebugPinnedOverlayManager.updatePinnedFieldKeys(playerRef, targetNpcUuid, pinnedFieldKeys);
+    }
+
+    private void toggleSectionCollapsed(@Nonnull String sectionId) {
+        if (!sectionsById.containsKey(sectionId)) {
+            return;
+        }
+        if (collapsedSectionIds.contains(sectionId)) {
+            collapsedSectionIds.remove(sectionId);
+        } else {
+            collapsedSectionIds.add(sectionId);
+        }
+    }
+
+    private void moveSectionDown(@Nonnull String sectionId) {
+        if (sectionOrder.size() < 2) {
+            return;
+        }
+        int index = sectionOrder.indexOf(sectionId);
+        if (index < 0) {
+            return;
+        }
+        String removed = sectionOrder.remove(index);
+        int targetIndex = index >= sectionOrder.size() ? 0 : index + 1;
+        sectionOrder.add(targetIndex, removed);
     }
 
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
@@ -170,35 +241,86 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {
         commandBuilder.set("#NpcDebugInspectorTitle.Text", latestSnapshot.title());
-        commandBuilder.set("#NpcDebugInspectorSubtitle.Text", latestSnapshot.subtitle());
+        commandBuilder.set("#NpcDebugInspectorSubtitle.Text", compactSubtitle(latestSnapshot.subtitle()));
         commandBuilder.set("#NpcDebugInspectorPinButton.Text", pinModeEnabled ? "Unpin" : "Pin NPC");
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Select fields to include in the separate overlay."
-                        : "Click Pin NPC to create a separate overlay you can keep open while playing."
+                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and ≡ to reorder."
+                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and ≡ to reorder."
         );
     }
 
-    private void rebuildFieldRows(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
+    @Nonnull
+    private String compactSubtitle(@Nullable String subtitle) {
+        if (subtitle == null || subtitle.isBlank()) {
+            return "";
+        }
+        int markerIndex = subtitle.indexOf("| Changed lines");
+        if (markerIndex <= 0) {
+            return subtitle;
+        }
+        return subtitle.substring(0, markerIndex).trim();
+    }
+
+    private void rebuildRows(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
         commandBuilder.clear("#NpcDebugInspectorFieldList");
-        for (int i = 0; i < inspectorLines.length; i++) {
-            NpcDebugInspectorLine line = inspectorLines[i];
-            String rowSelector = "#NpcDebugInspectorFieldList[" + i + "]";
-            commandBuilder.append("#NpcDebugInspectorFieldList", FIELD_ROW_UI_PATH);
-            commandBuilder.set(rowSelector + " #FieldText.Text", line.displayText);
+        renderedFieldKeys.clear();
 
-            boolean showCheck = pinModeEnabled && line.pinnable && line.key != null;
-            commandBuilder.set(rowSelector + " #FieldCheck.Visible", showCheck);
-            commandBuilder.set(rowSelector + " #FieldCheck.Value", showCheck && pinnedFieldKeys.contains(line.key));
+        int rowIndex = 0;
+        for (String sectionId : sectionOrder) {
+            InspectorSection section = sectionsById.get(sectionId);
+            if (section == null) {
+                continue;
+            }
 
-            if (showCheck) {
-                eventBuilder.addEventBinding(
-                        CustomUIEventBindingType.ValueChanged,
-                        rowSelector + " #FieldCheck",
-                        EventData.of(EVENT_ACTION, ACTION_TOGGLE_FIELD_PREFIX + i),
-                        false
-                );
+            String sectionSelector = "#NpcDebugInspectorFieldList[" + rowIndex + "]";
+            rowIndex++;
+            commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
+            boolean collapsed = collapsedSectionIds.contains(section.id);
+            commandBuilder.set(sectionSelector + " #SectionToggleButton.Text", collapsed ? "▸" : "▾");
+            commandBuilder.set(sectionSelector + " #SectionTitle.Text", section.title.toUpperCase(Locale.ROOT));
+            commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
+            commandBuilder.set(sectionSelector + " #SectionMoveButton.Text", "≡");
+
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionToggleButton",
+                    EventData.of(EVENT_ACTION, ACTION_TOGGLE_SECTION_PREFIX + section.id),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionMoveButton",
+                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_PREFIX + section.id),
+                    false
+            );
+
+            if (collapsed) {
+                continue;
+            }
+
+            for (InspectorField field : section.fields) {
+                String fieldSelector = "#NpcDebugInspectorFieldList[" + rowIndex + "]";
+                rowIndex++;
+                commandBuilder.append("#NpcDebugInspectorFieldList", FIELD_ROW_UI_PATH);
+                commandBuilder.set(fieldSelector + " #FieldText.Text", field.displayText);
+                commandBuilder.set(fieldSelector + " #FieldChanged.Visible", field.changed);
+
+                boolean showCheck = pinModeEnabled && field.pinnable && field.key != null;
+                commandBuilder.set(fieldSelector + " #FieldCheck.Visible", showCheck);
+                commandBuilder.set(fieldSelector + " #FieldCheck.Value", showCheck && pinnedFieldKeys.contains(field.key));
+
+                if (showCheck) {
+                    int fieldIndex = renderedFieldKeys.size();
+                    renderedFieldKeys.add(field.key);
+                    eventBuilder.addEventBinding(
+                            CustomUIEventBindingType.ValueChanged,
+                            fieldSelector + " #FieldCheck",
+                            EventData.of(EVENT_ACTION, ACTION_TOGGLE_FIELD_PREFIX + fieldIndex),
+                            false
+                    );
+                }
             }
         }
     }
@@ -221,8 +343,132 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void refreshSnapshotData() {
         latestSnapshot = resolveSnapshot();
-        inspectorLines = NpcDebugInspectorLineParser.parse(latestSnapshot.details());
-        prunePinnedKeys();
+        NpcDebugInspectorLine[] lines = NpcDebugInspectorLineParser.parse(latestSnapshot.details());
+        rebuildSections(lines);
+        syncSectionState();
+    }
+
+    private void rebuildSections(@Nonnull NpcDebugInspectorLine[] lines) {
+        sectionsById.clear();
+        List<InspectorSection> sections = new ArrayList<>();
+        Map<String, Integer> idCounts = new HashMap<>();
+
+        String currentTitle = null;
+        String currentId = null;
+        List<InspectorField> currentFields = new ArrayList<>();
+
+        for (NpcDebugInspectorLine line : lines) {
+            if (isSectionHeaderLine(line.displayText)) {
+                if (currentTitle != null && currentId != null) {
+                    sections.add(new InspectorSection(currentId, currentTitle, currentFields.toArray(new InspectorField[0])));
+                }
+                currentTitle = extractSectionTitle(line.displayText);
+                currentId = buildSectionId(currentTitle, idCounts);
+                currentFields = new ArrayList<>();
+                continue;
+            }
+
+            if (currentTitle == null) {
+                currentTitle = "Overview";
+                currentId = OVERVIEW_SECTION_ID;
+                idCounts.put(currentId, 1);
+            }
+            InspectorField field = toInspectorField(line);
+            if (field != null) {
+                currentFields.add(field);
+            }
+        }
+
+        if (currentTitle != null && currentId != null) {
+            sections.add(new InspectorSection(currentId, currentTitle, currentFields.toArray(new InspectorField[0])));
+        }
+
+        if (sections.isEmpty()) {
+            sections.add(new InspectorSection(
+                    OVERVIEW_SECTION_ID,
+                    "Overview",
+                    new InspectorField[] {
+                            new InspectorField(null, "No inspector fields available.", false, false)
+                    }
+            ));
+        }
+
+        for (InspectorSection section : sections) {
+            sectionsById.put(section.id, section);
+        }
+    }
+
+    private void syncSectionState() {
+        List<String> snapshotOrder = new ArrayList<>(sectionsById.size());
+        for (InspectorSection section : sectionsById.values()) {
+            snapshotOrder.add(section.id);
+        }
+
+        if (!sectionStateInitialized) {
+            sectionOrder.clear();
+            sectionOrder.addAll(snapshotOrder);
+            collapsedSectionIds.clear();
+            for (String id : sectionOrder) {
+                if (!OVERVIEW_SECTION_ID.equals(id)) {
+                    collapsedSectionIds.add(id);
+                }
+            }
+            sectionStateInitialized = true;
+            return;
+        }
+
+        sectionOrder.removeIf(id -> !sectionsById.containsKey(id));
+        for (String id : snapshotOrder) {
+            if (!sectionOrder.contains(id)) {
+                sectionOrder.add(id);
+            }
+        }
+        collapsedSectionIds.removeIf(id -> !sectionsById.containsKey(id));
+    }
+
+    private boolean isSectionHeaderLine(@Nullable String value) {
+        if (value == null) {
+            return false;
+        }
+        return value.startsWith("=== ") && value.endsWith(" ===");
+    }
+
+    @Nonnull
+    private String extractSectionTitle(@Nonnull String sectionLine) {
+        String trimmed = sectionLine.substring(4, Math.max(4, sectionLine.length() - 4)).trim();
+        return trimmed.isBlank() ? "Section" : trimmed;
+    }
+
+    @Nonnull
+    private String buildSectionId(@Nonnull String title, @Nonnull Map<String, Integer> idCounts) {
+        String normalized = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", ".");
+        normalized = normalized.replaceAll("^\\.+", "").replaceAll("\\.+$", "");
+        String baseId = normalized.isBlank() ? "section.unknown" : "section." + normalized;
+        int seen = idCounts.merge(baseId, 1, Integer::sum);
+        return seen == 1 ? baseId : baseId + "." + seen;
+    }
+
+    @Nullable
+    private InspectorField toInspectorField(@Nonnull NpcDebugInspectorLine line) {
+        String raw = line.displayText;
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+
+        boolean changed = raw.startsWith(">> ");
+        String value = raw;
+        if (value.startsWith(">> ")) {
+            value = value.substring(3);
+        } else if (value.startsWith("- ")) {
+            value = value.substring(2);
+        }
+        value = value.trim();
+        if (value.isBlank()) {
+            return null;
+        }
+
+        boolean pinnable = line.pinnable && line.key != null;
+        return new InspectorField(line.key, value, changed, pinnable);
     }
 
     private void syncPinnedStateFromManager() {
@@ -244,12 +490,17 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return;
         }
         Set<String> availableKeys = new LinkedHashSet<>();
-        for (NpcDebugInspectorLine line : inspectorLines) {
-            if (line.pinnable && line.key != null) {
-                availableKeys.add(line.key);
+        for (InspectorSection section : sectionsById.values()) {
+            for (InspectorField field : section.fields) {
+                if (field.pinnable && field.key != null) {
+                    availableKeys.add(field.key);
+                }
             }
         }
         pinnedFieldKeys.retainAll(availableKeys);
+        if (pinModeEnabled && targetNpcUuid != null) {
+            NpcDebugPinnedOverlayManager.updatePinnedFieldKeys(playerRef, targetNpcUuid, pinnedFieldKeys);
+        }
     }
 
     private void startRefreshLoop() {
@@ -299,13 +550,46 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private void sendRefreshUpdate() {
         refreshSnapshotData();
         syncPinnedStateFromManager();
+        prunePinnedKeys();
 
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = new UIEventBuilder();
         applySnapshot(commandBuilder);
-        rebuildFieldRows(commandBuilder, eventBuilder);
+        rebuildRows(commandBuilder, eventBuilder);
         bindGlobalEvents(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
+    }
+
+    private static final class InspectorSection {
+        private final String id;
+        private final String title;
+        private final InspectorField[] fields;
+
+        private InspectorSection(@Nonnull String id,
+                                 @Nonnull String title,
+                                 @Nonnull InspectorField[] fields) {
+            this.id = id;
+            this.title = title;
+            this.fields = fields;
+        }
+    }
+
+    private static final class InspectorField {
+        @Nullable
+        private final String key;
+        private final String displayText;
+        private final boolean changed;
+        private final boolean pinnable;
+
+        private InspectorField(@Nullable String key,
+                               @Nonnull String displayText,
+                               boolean changed,
+                               boolean pinnable) {
+            this.key = key;
+            this.displayText = displayText;
+            this.changed = changed;
+            this.pinnable = pinnable;
+        }
     }
 
     /** Event payload for the inspector page. */

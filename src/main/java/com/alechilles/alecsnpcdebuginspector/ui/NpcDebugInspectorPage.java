@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,7 +53,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
     private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
     private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
-    private static final String ACTION_REORDER_INTERACTION = "ReorderInteraction";
     private static final String ACTION_REORDER_SECTION = "ReorderSection";
     private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
     private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
@@ -63,7 +63,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     );
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
-    private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 4000L;
+    private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 600L;
+    private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
     private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
     private static final String[] FROM_INDEX_KEYS = {
             "FromIndex",
@@ -100,6 +101,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private volatile boolean dismissed;
     private volatile boolean refreshLoopStarted;
     private volatile long refreshSuppressedUntilMs;
+    private final AtomicLong refreshTickGeneration;
 
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
                                  @Nullable UUID targetNpcUuid,
@@ -118,6 +120,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.dismissed = false;
         this.refreshLoopStarted = false;
         this.refreshSuppressedUntilMs = 0L;
+        this.refreshTickGeneration = new AtomicLong();
     }
 
     /**
@@ -166,12 +169,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction) || resolvedRefreshInterval != null) {
             applyRefreshIntervalFromEvent(resolvedRefreshInterval);
             sendRefreshUpdate();
+            rearmRefreshLoopSoon();
             return;
         }
         if (ACTION_REORDER_SECTION.equals(resolvedAction)) {
             suppressRefreshTemporarily();
             if (applySectionReorder(rawEventData)) {
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -193,10 +198,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (ACTION_TOGGLE_PIN_MODE.equals(resolvedAction)) {
             togglePinMode();
             sendRefreshUpdate();
-            return;
-        }
-        if (ACTION_REORDER_INTERACTION.equals(resolvedAction)) {
-            suppressRefreshTemporarily();
+            rearmRefreshLoopSoon();
             return;
         }
         if (resolvedAction.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
@@ -204,6 +206,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             if (sectionId != null && moveSectionByOffset(sectionId, -1)) {
                 suppressRefreshTemporarily();
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -212,6 +215,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             if (sectionId != null && moveSectionByOffset(sectionId, 1)) {
                 suppressRefreshTemporarily();
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -220,6 +224,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             if (sectionId != null) {
                 toggleSectionCollapsed(sectionId);
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -228,6 +233,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             if (index >= 0) {
                 togglePinnedField(index);
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
         }
     }
@@ -612,13 +618,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     sectionSelector + " #SectionMoveDownButton",
                     EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
                     false
-            );
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.MouseEntered,
-                    sectionSelector + " #SectionToggleButton",
-                    EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
-                    false
-            );
+                );
 
             if (collapsed) {
                 continue;
@@ -849,19 +849,24 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return;
         }
         refreshLoopStarted = true;
-        scheduleRefreshTick();
+        scheduleRefreshTickAfter(NpcDebugUiRefreshSettings.getIntervalMs(playerRef));
     }
 
     private void scheduleRefreshTick() {
-        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
+        scheduleRefreshTickAfter(NpcDebugUiRefreshSettings.getIntervalMs(playerRef));
+    }
+
+    private void scheduleRefreshTickAfter(long delayMs) {
+        long generation = refreshTickGeneration.incrementAndGet();
+        long safeDelayMs = Math.max(0L, delayMs);
         CompletableFuture.runAsync(
-                this::dispatchRefreshTick,
-                CompletableFuture.delayedExecutor(refreshIntervalMs, TimeUnit.MILLISECONDS)
+                () -> dispatchRefreshTick(generation),
+                CompletableFuture.delayedExecutor(safeDelayMs, TimeUnit.MILLISECONDS)
         );
     }
 
-    private void dispatchRefreshTick() {
-        if (dismissed) {
+    private void dispatchRefreshTick(long generation) {
+        if (dismissed || generation != refreshTickGeneration.get()) {
             return;
         }
         Ref<EntityStore> ref = playerRef.getReference();
@@ -876,19 +881,28 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (world == null) {
             return;
         }
-        world.execute(this::runRefreshTickOnWorldThread);
+        world.execute(() -> runRefreshTickOnWorldThread(generation));
     }
 
-    private void runRefreshTickOnWorldThread() {
-        if (dismissed) {
+    private void runRefreshTickOnWorldThread(long generation) {
+        if (dismissed || generation != refreshTickGeneration.get()) {
             return;
         }
         if (!isRefreshSuppressed()) {
             sendRefreshUpdate();
         }
-        if (!dismissed) {
+        if (!dismissed && generation == refreshTickGeneration.get()) {
             scheduleRefreshTick();
         }
+    }
+
+    private void rearmRefreshLoopSoon() {
+        if (!refreshLoopStarted || dismissed) {
+            return;
+        }
+        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
+        long delayMs = Math.min(IMMEDIATE_REARM_DELAY_MS, refreshIntervalMs);
+        scheduleRefreshTickAfter(delayMs);
     }
 
     private void sendRefreshUpdate() {

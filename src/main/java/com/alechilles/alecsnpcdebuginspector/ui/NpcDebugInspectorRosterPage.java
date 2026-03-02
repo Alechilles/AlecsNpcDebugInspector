@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.annotation.Nonnull;
@@ -61,6 +62,7 @@ public final class NpcDebugInspectorRosterPage
     private static final String HIGHLIGHT_PREFIX = "__highlight__:";
 
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
+    private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
     private static final String HIGHLIGHT_PARTICLE_ID = "Particles/NPC/Emotions/Question_Subtle";
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
@@ -92,6 +94,7 @@ public final class NpcDebugInspectorRosterPage
 
     private volatile boolean refreshLoopStarted;
     private volatile boolean dismissed;
+    private final AtomicLong refreshTickGeneration;
 
     public NpcDebugInspectorRosterPage(@Nonnull PlayerRef playerRef,
                                        @Nonnull Supplier<List<NpcDebugLinkedEntry>> entrySupplier,
@@ -120,6 +123,7 @@ public final class NpcDebugInspectorRosterPage
         this.syncQueryFieldValue = true;
         this.copyBufferValue = "";
         this.copyBufferVisible = false;
+        this.refreshTickGeneration = new AtomicLong();
     }
 
     @Override
@@ -172,6 +176,7 @@ public final class NpcDebugInspectorRosterPage
             applyFilterQuery(dataFilterQuery);
             refreshEntries();
             sendRefreshUpdate();
+            rearmRefreshLoopSoon();
             return;
         }
 
@@ -185,6 +190,7 @@ public final class NpcDebugInspectorRosterPage
             setStatusMessage("Loaded-only filter " + (filterLoadedOnly ? "enabled" : "disabled") + ".", STATUS_MESSAGE_DURATION_MS);
             refreshEntries();
             sendRefreshUpdate();
+            rearmRefreshLoopSoon();
             return;
         }
 
@@ -192,6 +198,7 @@ public final class NpcDebugInspectorRosterPage
             toggleSameFlockFilter();
             refreshEntries();
             sendRefreshUpdate();
+            rearmRefreshLoopSoon();
             return;
         }
 
@@ -199,6 +206,7 @@ public final class NpcDebugInspectorRosterPage
             clearFilters();
             refreshEntries();
             sendRefreshUpdate();
+            rearmRefreshLoopSoon();
             return;
         }
 
@@ -218,6 +226,7 @@ public final class NpcDebugInspectorRosterPage
                 setStatusMessage("Unlinked " + npcUuid + ".", STATUS_MESSAGE_DURATION_MS);
                 refreshEntries();
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -230,6 +239,7 @@ public final class NpcDebugInspectorRosterPage
                 copyBufferVisible = true;
                 setStatusMessage("UUID ready in copy buffer. Click the field and press Ctrl+C.", STATUS_MESSAGE_DURATION_MS);
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
             return;
         }
@@ -240,6 +250,7 @@ public final class NpcDebugInspectorRosterPage
                 toggleHighlight(npcUuid);
                 refreshEntries();
                 sendRefreshUpdate();
+                rearmRefreshLoopSoon();
             }
         }
     }
@@ -319,19 +330,24 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
         refreshLoopStarted = true;
-        scheduleRefreshTick();
+        scheduleRefreshTickAfter(NpcDebugUiRefreshSettings.getIntervalMs(playerRef));
     }
 
     private void scheduleRefreshTick() {
-        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
+        scheduleRefreshTickAfter(NpcDebugUiRefreshSettings.getIntervalMs(playerRef));
+    }
+
+    private void scheduleRefreshTickAfter(long delayMs) {
+        long generation = refreshTickGeneration.incrementAndGet();
+        long safeDelayMs = Math.max(0L, delayMs);
         CompletableFuture.runAsync(
-                this::dispatchRefreshTick,
-                CompletableFuture.delayedExecutor(refreshIntervalMs, TimeUnit.MILLISECONDS)
+                () -> dispatchRefreshTick(generation),
+                CompletableFuture.delayedExecutor(safeDelayMs, TimeUnit.MILLISECONDS)
         );
     }
 
-    private void dispatchRefreshTick() {
-        if (dismissed) {
+    private void dispatchRefreshTick(long generation) {
+        if (dismissed || generation != refreshTickGeneration.get()) {
             return;
         }
         Ref<EntityStore> ref = playerRef.getReference();
@@ -346,11 +362,11 @@ public final class NpcDebugInspectorRosterPage
         if (world == null) {
             return;
         }
-        world.execute(this::runRefreshTickOnWorldThread);
+        world.execute(() -> runRefreshTickOnWorldThread(generation));
     }
 
-    private void runRefreshTickOnWorldThread() {
-        if (dismissed) {
+    private void runRefreshTickOnWorldThread(long generation) {
+        if (dismissed || generation != refreshTickGeneration.get()) {
             return;
         }
         if (!isCurrentPageActive()) {
@@ -360,9 +376,18 @@ public final class NpcDebugInspectorRosterPage
         refreshEntries();
         emitHighlightParticles();
         sendRefreshUpdate();
-        if (!dismissed && isCurrentPageActive()) {
+        if (!dismissed && isCurrentPageActive() && generation == refreshTickGeneration.get()) {
             scheduleRefreshTick();
         }
+    }
+
+    private void rearmRefreshLoopSoon() {
+        if (!refreshLoopStarted || dismissed) {
+            return;
+        }
+        long refreshIntervalMs = NpcDebugUiRefreshSettings.getIntervalMs(playerRef);
+        long delayMs = Math.min(IMMEDIATE_REARM_DELAY_MS, refreshIntervalMs);
+        scheduleRefreshTickAfter(delayMs);
     }
 
     private void sendRefreshUpdate() {

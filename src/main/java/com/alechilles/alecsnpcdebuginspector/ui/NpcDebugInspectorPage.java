@@ -98,6 +98,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private final ArrayList<String> renderedFieldKeys;
     private boolean pinModeEnabled;
     private boolean sectionStateInitialized;
+    @Nullable
+    private String lastRenderedStructureSignature;
     private volatile boolean dismissed;
     private volatile boolean refreshLoopStarted;
     private volatile long refreshSuppressedUntilMs;
@@ -117,6 +119,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.renderedFieldKeys = new ArrayList<>();
         this.pinModeEnabled = false;
         this.sectionStateInitialized = false;
+        this.lastRenderedStructureSignature = null;
         this.dismissed = false;
         this.refreshLoopStarted = false;
         this.refreshSuppressedUntilMs = 0L;
@@ -141,8 +144,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         syncPinnedStateFromManager();
         prunePinnedKeys();
         applySnapshot(commandBuilder);
-        rebuildRows(commandBuilder, eventBuilder);
+        rebuildRows(commandBuilder, eventBuilder, true);
         bindGlobalEvents(eventBuilder);
+        lastRenderedStructureSignature = buildStructureSignature();
         syncPinnedSectionOrderToOverlay();
         startRefreshLoop();
     }
@@ -576,9 +580,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         return subtitle.substring(0, markerIndex).trim();
     }
 
-    private void rebuildRows(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
-        commandBuilder.clear("#NpcDebugInspectorFieldList");
-        renderedFieldKeys.clear();
+    private void rebuildRows(@Nonnull UICommandBuilder commandBuilder,
+                             @Nullable UIEventBuilder eventBuilder,
+                             boolean rebuildStructure) {
+        if (rebuildStructure) {
+            commandBuilder.clear("#NpcDebugInspectorFieldList");
+            renderedFieldKeys.clear();
+        }
 
         int sectionIndex = 0;
         for (String sectionId : sectionOrder) {
@@ -589,36 +597,42 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
             String sectionSelector = "#NpcDebugInspectorFieldList[" + sectionIndex + "]";
             sectionIndex++;
-            commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
+            if (rebuildStructure) {
+                commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
+            }
             boolean collapsed = collapsedSectionIds.contains(section.id);
             commandBuilder.set(sectionSelector + " #SectionToggleExpandedIcon.Visible", !collapsed);
             commandBuilder.set(sectionSelector + " #SectionToggleCollapsedIcon.Visible", collapsed);
             commandBuilder.set(sectionSelector + " #SectionTitle.Text", section.title.toUpperCase(Locale.ROOT));
             commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
-            commandBuilder.clear(sectionSelector + " #SectionFields");
+            if (rebuildStructure) {
+                commandBuilder.clear(sectionSelector + " #SectionFields");
+            }
             commandBuilder.set(sectionSelector + " #SectionFields.Visible", !collapsed);
             int sectionOrderIndex = sectionOrder.indexOf(section.id);
             commandBuilder.set(sectionSelector + " #SectionMoveUpButton.Visible", sectionOrderIndex > 0);
             commandBuilder.set(sectionSelector + " #SectionMoveDownButton.Visible", sectionOrderIndex >= 0 && sectionOrderIndex < sectionOrder.size() - 1);
 
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionToggleButton",
-                    EventData.of(EVENT_ACTION, ACTION_TOGGLE_SECTION_PREFIX + section.id),
-                    false
-            );
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionMoveUpButton",
-                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_UP_PREFIX + section.id),
-                    false
-            );
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionMoveDownButton",
-                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
-                    false
+            if (rebuildStructure && eventBuilder != null) {
+                eventBuilder.addEventBinding(
+                        CustomUIEventBindingType.Activating,
+                        sectionSelector + " #SectionToggleButton",
+                        EventData.of(EVENT_ACTION, ACTION_TOGGLE_SECTION_PREFIX + section.id),
+                        false
                 );
+                eventBuilder.addEventBinding(
+                        CustomUIEventBindingType.Activating,
+                        sectionSelector + " #SectionMoveUpButton",
+                        EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_UP_PREFIX + section.id),
+                        false
+                );
+                eventBuilder.addEventBinding(
+                        CustomUIEventBindingType.Activating,
+                        sectionSelector + " #SectionMoveDownButton",
+                        EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
+                        false
+                );
+            }
 
             if (collapsed) {
                 continue;
@@ -628,7 +642,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             for (InspectorField field : section.fields) {
                 String fieldSelector = sectionSelector + " #SectionFields[" + fieldRowIndex + "]";
                 fieldRowIndex++;
-                commandBuilder.append(sectionSelector + " #SectionFields", FIELD_ROW_UI_PATH);
+                if (rebuildStructure) {
+                    commandBuilder.append(sectionSelector + " #SectionFields", FIELD_ROW_UI_PATH);
+                }
                 commandBuilder.set(fieldSelector + " #FieldText.Text", field.displayText);
                 commandBuilder.set(fieldSelector + " #FieldChanged.Visible", field.changed);
 
@@ -636,7 +652,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 commandBuilder.set(fieldSelector + " #FieldCheck.Visible", showCheck);
                 commandBuilder.set(fieldSelector + " #FieldCheck.Value", showCheck && pinnedFieldKeys.contains(field.key));
 
-                if (showCheck) {
+                if (showCheck && rebuildStructure && eventBuilder != null) {
                     int fieldIndex = renderedFieldKeys.size();
                     renderedFieldKeys.add(field.key);
                     eventBuilder.addEventBinding(
@@ -649,21 +665,23 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
 
-        EventData reorderEventData = new EventData()
-                .append(EVENT_ACTION, ACTION_REORDER_SECTION)
-                .append("FromIndex", "#NpcDebugInspectorFieldList.FromIndex")
-                .append("ToIndex", "#NpcDebugInspectorFieldList.ToIndex")
-                .append("OldIndex", "#NpcDebugInspectorFieldList.OldIndex")
-                .append("NewIndex", "#NpcDebugInspectorFieldList.NewIndex")
-                .append("DragIndex", "#NpcDebugInspectorFieldList.DragIndex")
-                .append("DropIndex", "#NpcDebugInspectorFieldList.DropIndex")
-                .append("Index", "#NpcDebugInspectorFieldList.Index");
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.ElementReordered,
-                "#NpcDebugInspectorFieldList",
-                reorderEventData,
-                false
-        );
+        if (rebuildStructure && eventBuilder != null) {
+            EventData reorderEventData = new EventData()
+                    .append(EVENT_ACTION, ACTION_REORDER_SECTION)
+                    .append("FromIndex", "#NpcDebugInspectorFieldList.FromIndex")
+                    .append("ToIndex", "#NpcDebugInspectorFieldList.ToIndex")
+                    .append("OldIndex", "#NpcDebugInspectorFieldList.OldIndex")
+                    .append("NewIndex", "#NpcDebugInspectorFieldList.NewIndex")
+                    .append("DragIndex", "#NpcDebugInspectorFieldList.DragIndex")
+                    .append("DropIndex", "#NpcDebugInspectorFieldList.DropIndex")
+                    .append("Index", "#NpcDebugInspectorFieldList.Index");
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.ElementReordered,
+                    "#NpcDebugInspectorFieldList",
+                    reorderEventData,
+                    false
+            );
+        }
     }
 
     @Nonnull
@@ -910,13 +928,40 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         syncPinnedStateFromManager();
         prunePinnedKeys();
 
+        String currentSignature = buildStructureSignature();
+        boolean rebuildStructure = !currentSignature.equals(lastRenderedStructureSignature);
         UICommandBuilder commandBuilder = new UICommandBuilder();
-        UIEventBuilder eventBuilder = new UIEventBuilder();
+        UIEventBuilder eventBuilder = rebuildStructure ? new UIEventBuilder() : null;
         applySnapshot(commandBuilder);
-        rebuildRows(commandBuilder, eventBuilder);
-        bindGlobalEvents(eventBuilder);
+        rebuildRows(commandBuilder, eventBuilder, rebuildStructure);
+        if (rebuildStructure && eventBuilder != null) {
+            bindGlobalEvents(eventBuilder);
+            lastRenderedStructureSignature = currentSignature;
+        }
         syncPinnedSectionOrderToOverlay();
         sendUpdate(commandBuilder, eventBuilder, false);
+    }
+
+    @Nonnull
+    private String buildStructureSignature() {
+        StringBuilder signature = new StringBuilder(256);
+        signature.append(pinModeEnabled ? '1' : '0');
+        for (String sectionId : sectionOrder) {
+            InspectorSection section = sectionsById.get(sectionId);
+            if (section == null) {
+                continue;
+            }
+            signature.append('|').append(section.id);
+            signature.append(':').append(collapsedSectionIds.contains(section.id) ? '1' : '0');
+            signature.append(':').append(section.fields.length);
+            for (InspectorField field : section.fields) {
+                signature.append(';').append(field.pinnable ? '1' : '0');
+                if (field.key != null) {
+                    signature.append('#').append(field.key);
+                }
+            }
+        }
+        return signature.toString();
     }
 
     private void syncPinnedSectionOrderToOverlay() {

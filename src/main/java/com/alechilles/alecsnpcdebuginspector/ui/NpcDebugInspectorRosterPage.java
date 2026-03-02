@@ -270,15 +270,16 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
         for (int i = 0; i < entries.length; i++) {
-            bindCard(commandBuilder, eventBuilder, i, entries[i], true);
+            bindCard(commandBuilder, eventBuilder, i, entries[i], true, true);
         }
     }
 
     private void bindCard(@Nonnull UICommandBuilder commandBuilder,
-                          @Nonnull UIEventBuilder eventBuilder,
+                          @Nullable UIEventBuilder eventBuilder,
                           int index,
                           @Nonnull NpcDebugLinkedEntry entry,
-                          boolean appendCard) {
+                          boolean appendCard,
+                          boolean bindEvents) {
         String entrySelector = "#NpcDebugRosterList[" + index + "]";
         if (appendCard) {
             commandBuilder.append("#NpcDebugRosterList", CARD_UI_PATH);
@@ -299,30 +300,32 @@ public final class NpcDebugInspectorRosterPage
                 highlightedNpcUuids.contains(entry.npcUuid()) ? "Highlight: On" : ""
         );
 
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
-                entrySelector + " #InspectButton",
-                EventData.of(EVENT_ACTION, INSPECT_PREFIX + entry.npcUuid()),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
-                entrySelector + " #UnlinkButton",
-                EventData.of(EVENT_ACTION, UNLINK_PREFIX + entry.npcUuid()),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
-                entrySelector + " #CopyButton",
-                EventData.of(EVENT_ACTION, COPY_PREFIX + entry.npcUuid()),
-                false
-        );
-        eventBuilder.addEventBinding(
-                CustomUIEventBindingType.Activating,
-                entrySelector + " #HighlightButton",
-                EventData.of(EVENT_ACTION, HIGHLIGHT_PREFIX + entry.npcUuid()),
-                false
-        );
+        if (bindEvents && eventBuilder != null) {
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    entrySelector + " #InspectButton",
+                    EventData.of(EVENT_ACTION, INSPECT_PREFIX + entry.npcUuid()),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    entrySelector + " #UnlinkButton",
+                    EventData.of(EVENT_ACTION, UNLINK_PREFIX + entry.npcUuid()),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    entrySelector + " #CopyButton",
+                    EventData.of(EVENT_ACTION, COPY_PREFIX + entry.npcUuid()),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    entrySelector + " #HighlightButton",
+                    EventData.of(EVENT_ACTION, HIGHLIGHT_PREFIX + entry.npcUuid()),
+                    false
+            );
+        }
     }
 
     private void startRefreshLoop() {
@@ -397,7 +400,7 @@ public final class NpcDebugInspectorRosterPage
         }
 
         UICommandBuilder commandBuilder = new UICommandBuilder();
-        UIEventBuilder eventBuilder = new UIEventBuilder();
+        UIEventBuilder eventBuilder = null;
 
         applyFilterControlState(commandBuilder);
         applyCopyBufferState(commandBuilder);
@@ -413,20 +416,23 @@ public final class NpcDebugInspectorRosterPage
 
         boolean structureChanged = renderedCardCount != entries.length;
         if (structureChanged) {
+            eventBuilder = new UIEventBuilder();
             commandBuilder.clear("#NpcDebugRosterList");
             renderedCardCount = entries.length;
             if (hasEntries) {
                 for (int i = 0; i < entries.length; i++) {
-                    bindCard(commandBuilder, eventBuilder, i, entries[i], true);
+                    bindCard(commandBuilder, eventBuilder, i, entries[i], true, true);
                 }
             }
         } else if (hasEntries) {
             for (int i = 0; i < entries.length; i++) {
-                bindCard(commandBuilder, eventBuilder, i, entries[i], false);
+                bindCard(commandBuilder, null, i, entries[i], false, false);
             }
         }
 
-        bindGlobalEvents(eventBuilder);
+        if (eventBuilder != null) {
+            bindGlobalEvents(eventBuilder);
+        }
         sendUpdate(commandBuilder, eventBuilder, false);
     }
 

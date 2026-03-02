@@ -58,7 +58,7 @@ Group {
 
     Group {
       LayoutMode: Right;
-      Anchor: (Width: 122, Height: 28);
+      Anchor: (Width: 168, Height: 28);
       Padding: (Right: 2);
 
       Label #SectionCount {
@@ -70,6 +70,46 @@ Group {
           HorizontalAlignment: End,
           VerticalAlignment: Center
         );
+      }
+
+      Button #SectionMoveUpButton {
+        Anchor: (Width: 20, Height: 20, Top: 4);
+        TooltipText: "Move section up";
+        Style: ButtonStyle(
+          Default: (Background: (Color: #00000000)),
+          Hovered: (Background: (Color: #ffffff14)),
+          Pressed: (Background: (Color: #ffffff0d))
+        );
+
+        Group {
+          LayoutMode: Middle;
+          Anchor: (Full: 0);
+
+          Group {
+            Anchor: (Width: 10, Height: 6);
+            Background: "NpcDebugInspectorCaretUp.png";
+          }
+        }
+      }
+
+      Button #SectionMoveDownButton {
+        Anchor: (Width: 20, Height: 20, Top: 4);
+        TooltipText: "Move section down";
+        Style: ButtonStyle(
+          Default: (Background: (Color: #00000000)),
+          Hovered: (Background: (Color: #ffffff14)),
+          Pressed: (Background: (Color: #ffffff0d))
+        );
+
+        Group {
+          LayoutMode: Middle;
+          Anchor: (Full: 0);
+
+          Group {
+            Anchor: (Width: 10, Height: 6);
+            Background: "NpcDebugInspectorCaretDown.png";
+          }
+        }
       }
 
       ReorderableListGrip #SectionMoveButton {

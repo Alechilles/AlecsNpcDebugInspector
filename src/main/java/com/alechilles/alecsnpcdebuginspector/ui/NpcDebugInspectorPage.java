@@ -49,10 +49,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
+    private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
+    private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
     private static final String ACTION_REORDER_SECTION = "ReorderSection";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_INTERVAL_MS = 1000L;
+    private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 1750L;
     private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
     private static final String[] FROM_INDEX_KEYS = {
             "FromIndex",
@@ -88,6 +91,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private boolean sectionStateInitialized;
     private volatile boolean dismissed;
     private volatile boolean refreshLoopStarted;
+    private volatile long refreshSuppressedUntilMs;
 
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
                                  @Nullable UUID targetNpcUuid,
@@ -105,6 +109,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.sectionStateInitialized = false;
         this.dismissed = false;
         this.refreshLoopStarted = false;
+        this.refreshSuppressedUntilMs = 0L;
     }
 
     /**
@@ -136,6 +141,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                                 @Nonnull String rawData) {
         Map<String, String> rawEventData = decodeRawEventData(rawData);
         if (ACTION_REORDER_SECTION.equals(rawEventData.get(EVENT_ACTION))) {
+            suppressRefreshTemporarily();
             if (applySectionReorder(rawEventData)) {
                 sendRefreshUpdate();
             }
@@ -158,6 +164,22 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (ACTION_TOGGLE_PIN_MODE.equals(data.action)) {
             togglePinMode();
             sendRefreshUpdate();
+            return;
+        }
+        if (data.action.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_UP_PREFIX);
+            if (sectionId != null && moveSectionByOffset(sectionId, -1)) {
+                suppressRefreshTemporarily();
+                sendRefreshUpdate();
+            }
+            return;
+        }
+        if (data.action.startsWith(ACTION_MOVE_SECTION_DOWN_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_DOWN_PREFIX);
+            if (sectionId != null && moveSectionByOffset(sectionId, 1)) {
+                suppressRefreshTemporarily();
+                sendRefreshUpdate();
+            }
             return;
         }
         if (data.action.startsWith(ACTION_TOGGLE_SECTION_PREFIX)) {
@@ -300,6 +322,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         int first = -1;
         int second = -1;
         for (String value : rawEventData.values()) {
+            if (value == null || !value.contains("NpcDebugInspectorFieldList[")) {
+                continue;
+            }
             Integer parsed = parseIndexValue(value);
             if (parsed == null) {
                 continue;
@@ -356,6 +381,22 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         return true;
     }
 
+    private boolean moveSectionByOffset(@Nonnull String sectionId, int offset) {
+        int fromIndex = sectionOrder.indexOf(sectionId);
+        if (fromIndex < 0) {
+            return false;
+        }
+        return moveSection(fromIndex, fromIndex + offset);
+    }
+
+    private void suppressRefreshTemporarily() {
+        refreshSuppressedUntilMs = System.currentTimeMillis() + REFRESH_SUPPRESS_AFTER_REORDER_MS;
+    }
+
+    private boolean isRefreshSuppressed() {
+        return System.currentTimeMillis() < refreshSuppressedUntilMs;
+    }
+
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.Activating,
@@ -378,8 +419,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and the handle to reorder."
-                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and the handle to reorder."
+                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and drag or move buttons to reorder."
+                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and drag or move buttons to reorder."
         );
     }
 
@@ -416,11 +457,26 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
             commandBuilder.clear(sectionSelector + " #SectionFields");
             commandBuilder.set(sectionSelector + " #SectionFields.Visible", !collapsed);
+            int sectionOrderIndex = sectionOrder.indexOf(section.id);
+            commandBuilder.set(sectionSelector + " #SectionMoveUpButton.Visible", sectionOrderIndex > 0);
+            commandBuilder.set(sectionSelector + " #SectionMoveDownButton.Visible", sectionOrderIndex >= 0 && sectionOrderIndex < sectionOrder.size() - 1);
 
             eventBuilder.addEventBinding(
                     CustomUIEventBindingType.Activating,
                     sectionSelector + " #SectionToggleButton",
                     EventData.of(EVENT_ACTION, ACTION_TOGGLE_SECTION_PREFIX + section.id),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionMoveUpButton",
+                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_UP_PREFIX + section.id),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionMoveDownButton",
+                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
                     false
             );
 
@@ -453,10 +509,19 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
 
+        EventData reorderEventData = new EventData()
+                .append(EVENT_ACTION, ACTION_REORDER_SECTION)
+                .append("FromIndex", "#NpcDebugInspectorFieldList.FromIndex")
+                .append("ToIndex", "#NpcDebugInspectorFieldList.ToIndex")
+                .append("OldIndex", "#NpcDebugInspectorFieldList.OldIndex")
+                .append("NewIndex", "#NpcDebugInspectorFieldList.NewIndex")
+                .append("DragIndex", "#NpcDebugInspectorFieldList.DragIndex")
+                .append("DropIndex", "#NpcDebugInspectorFieldList.DropIndex")
+                .append("Index", "#NpcDebugInspectorFieldList.Index");
         eventBuilder.addEventBinding(
                 CustomUIEventBindingType.ElementReordered,
                 "#NpcDebugInspectorFieldList",
-                EventData.of(EVENT_ACTION, ACTION_REORDER_SECTION),
+                reorderEventData,
                 false
         );
     }
@@ -677,7 +742,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         if (dismissed) {
             return;
         }
-        sendRefreshUpdate();
+        if (!isRefreshSuppressed()) {
+            sendRefreshUpdate();
+        }
         if (!dismissed) {
             scheduleRefreshTick();
         }

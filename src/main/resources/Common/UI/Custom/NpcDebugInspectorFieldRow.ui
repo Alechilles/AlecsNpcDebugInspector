@@ -30,7 +30,7 @@ Group {
   }
 
   Label #FieldName {
-    Anchor: (Left: 20, Width: 162, Height: 18);
+    Anchor: (Left: 20, Width: 150, Height: 18);
     Text: "";
     Visible: false;
     Style: (
@@ -43,7 +43,7 @@ Group {
   }
 
   Label #FieldValue {
-    Anchor: (Left: 184, Right: 32, Height: 18);
+    Anchor: (Left: 172, Right: 32, Height: 18);
     Text: "";
     Visible: false;
     Style: (

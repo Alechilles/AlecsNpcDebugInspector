@@ -64,6 +64,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     );
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
+    private static final int MAX_SPLIT_FIELD_NAME_CHARS = 18;
+    private static final int MAX_SPLIT_FIELD_VALUE_CHARS = 28;
     private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 600L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
     private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
@@ -683,7 +685,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     commandBuilder.append(sectionSelector + " #SectionFields", FIELD_ROW_UI_PATH);
                 }
                 FieldNameValue nameValue = splitFieldNameAndValue(field.displayText);
-                boolean showSplitField = nameValue != null;
+                boolean showSplitField = shouldRenderSplitField(nameValue);
                 commandBuilder.set(fieldSelector + " #FieldText.Visible", !showSplitField);
                 commandBuilder.set(fieldSelector + " #FieldName.Visible", showSplitField);
                 commandBuilder.set(fieldSelector + " #FieldValue.Visible", showSplitField);
@@ -919,6 +921,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return null;
         }
         return new FieldNameValue(name, value);
+    }
+
+    private boolean shouldRenderSplitField(@Nullable FieldNameValue nameValue) {
+        if (nameValue == null) {
+            return false;
+        }
+        return nameValue.nameText.length() <= MAX_SPLIT_FIELD_NAME_CHARS
+                && nameValue.valueText.length() <= MAX_SPLIT_FIELD_VALUE_CHARS;
     }
 
     private void syncPinnedStateFromManager() {

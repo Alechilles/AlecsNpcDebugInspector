@@ -152,7 +152,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 rawEventData.get("type")
         );
         Double resolvedRefreshInterval = resolveRefreshIntervalValue(rawEventData);
-        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction) || resolvedRefreshInterval != null) {
+        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)
+                || resolvedRefreshInterval != null
+                || hasRefreshIntervalPayload(rawEventData)) {
             applyRefreshIntervalFromEvent(resolvedRefreshInterval);
             sendRefreshUpdate();
             return;
@@ -289,13 +291,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     @Nullable
     private Double resolveRefreshIntervalValue(@Nonnull PageEventData data) {
-        if (data.refreshIntervalMs != null) {
-            return data.refreshIntervalMs.doubleValue();
-        }
-        if (data.refreshIntervalMsAt != null) {
-            return data.refreshIntervalMsAt.doubleValue();
-        }
         return parseDouble(firstNonBlank(
+                data.refreshIntervalMs,
+                data.refreshIntervalMsAt,
                 data.value,
                 data.newValue,
                 data.sliderValue
@@ -325,6 +323,24 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private boolean hasRefreshIntervalPayload(@Nonnull Map<String, String> rawEventData) {
+        if (rawEventData.containsKey(EVENT_REFRESH_INTERVAL_MS)
+                || rawEventData.containsKey(EVENT_REFRESH_INTERVAL_MS_AT)) {
+            return true;
+        }
+        for (Map.Entry<String, String> entry : rawEventData.entrySet()) {
+            String key = entry.getKey();
+            if (key == null) {
+                continue;
+            }
+            String lowered = key.toLowerCase(Locale.ROOT);
+            if (lowered.contains("refresh") && lowered.contains("interval")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Nullable
@@ -958,15 +974,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             )
             .add()
             .append(
-                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.FLOAT),
-                (data, value) -> data.refreshIntervalMs = value,
-                data -> data.refreshIntervalMs
+                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS_AT, Codec.STRING),
+                (data, value) -> data.refreshIntervalMsAt = value,
+                data -> data.refreshIntervalMsAt
             )
             .add()
             .append(
-                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS_AT, Codec.FLOAT),
-                (data, value) -> data.refreshIntervalMsAt = value,
-                data -> data.refreshIntervalMsAt
+                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.STRING),
+                (data, value) -> data.refreshIntervalMs = value,
+                data -> data.refreshIntervalMs
             )
             .add()
             .append(
@@ -991,8 +1007,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
         private String action;
         private String type;
-        private Float refreshIntervalMs;
-        private Float refreshIntervalMsAt;
+        private String refreshIntervalMs;
+        private String refreshIntervalMsAt;
         private String value;
         private String newValue;
         private String sliderValue;

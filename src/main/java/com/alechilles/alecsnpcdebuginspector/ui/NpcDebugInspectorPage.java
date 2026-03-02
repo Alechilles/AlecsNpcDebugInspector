@@ -43,7 +43,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
-    private static final String ACTION_MOVE_SECTION_PREFIX = "MoveSection:";
+    private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
+    private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_INTERVAL_MS = 1000L;
@@ -128,8 +129,16 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
             return;
         }
-        if (data.action.startsWith(ACTION_MOVE_SECTION_PREFIX)) {
-            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_PREFIX);
+        if (data.action.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_UP_PREFIX);
+            if (sectionId != null) {
+                moveSectionUp(sectionId);
+                sendRefreshUpdate();
+            }
+            return;
+        }
+        if (data.action.startsWith(ACTION_MOVE_SECTION_DOWN_PREFIX)) {
+            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_DOWN_PREFIX);
             if (sectionId != null) {
                 moveSectionDown(sectionId);
                 sendRefreshUpdate();
@@ -219,12 +228,23 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return;
         }
         int index = sectionOrder.indexOf(sectionId);
-        if (index < 0) {
+        if (index < 0 || index >= (sectionOrder.size() - 1)) {
             return;
         }
         String removed = sectionOrder.remove(index);
-        int targetIndex = index >= sectionOrder.size() ? 0 : index + 1;
-        sectionOrder.add(targetIndex, removed);
+        sectionOrder.add(index + 1, removed);
+    }
+
+    private void moveSectionUp(@Nonnull String sectionId) {
+        if (sectionOrder.size() < 2) {
+            return;
+        }
+        int index = sectionOrder.indexOf(sectionId);
+        if (index <= 0) {
+            return;
+        }
+        String removed = sectionOrder.remove(index);
+        sectionOrder.add(index - 1, removed);
     }
 
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
@@ -249,8 +269,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and the handle to reorder."
-                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and the handle to reorder."
+                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and move buttons to reorder."
+                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and move buttons to reorder."
         );
     }
 
@@ -269,6 +289,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private void rebuildRows(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
         commandBuilder.clear("#NpcDebugInspectorFieldList");
         renderedFieldKeys.clear();
+        int totalSections = 0;
+        for (String sectionId : sectionOrder) {
+            if (sectionsById.containsKey(sectionId)) {
+                totalSections++;
+            }
+        }
 
         int sectionIndex = 0;
         for (String sectionId : sectionOrder) {
@@ -277,6 +303,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 continue;
             }
 
+            int currentSectionIndex = sectionIndex;
             String sectionSelector = "#NpcDebugInspectorFieldList[" + sectionIndex + "]";
             sectionIndex++;
             commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
@@ -285,6 +312,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             commandBuilder.set(sectionSelector + " #SectionToggleCollapsedIcon.Visible", collapsed);
             commandBuilder.set(sectionSelector + " #SectionTitle.Text", section.title.toUpperCase(Locale.ROOT));
             commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
+            commandBuilder.set(sectionSelector + " #SectionMoveUpButton.Visible", currentSectionIndex > 0);
+            commandBuilder.set(sectionSelector + " #SectionMoveDownButton.Visible", currentSectionIndex < (totalSections - 1));
             commandBuilder.clear(sectionSelector + " #SectionFields");
             commandBuilder.set(sectionSelector + " #SectionFields.Visible", !collapsed);
 
@@ -296,8 +325,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             );
             eventBuilder.addEventBinding(
                     CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionMoveButton",
-                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_PREFIX + section.id),
+                    sectionSelector + " #SectionMoveUpButton",
+                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_UP_PREFIX + section.id),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    sectionSelector + " #SectionMoveDownButton",
+                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
                     false
             );
 

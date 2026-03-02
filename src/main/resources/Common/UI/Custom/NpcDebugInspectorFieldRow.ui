@@ -29,29 +29,34 @@ Group {
     );
   }
 
-  Label #FieldName {
-    Anchor: (Left: 20, Width: 150, Height: 18);
-    Text: "";
+  Group #FieldSplitRow {
+    LayoutMode: Left;
+    Anchor: (Left: 20, Right: 32, Height: 18);
     Visible: false;
-    Style: (
-      FontSize: 13,
-      RenderBold: true,
-      TextColor: #e7f0fb,
-      HorizontalAlignment: Start,
-      VerticalAlignment: Center
-    );
-  }
 
-  Label #FieldValue {
-    Anchor: (Left: 172, Right: 32, Height: 18);
-    Text: "";
-    Visible: false;
-    Style: (
-      FontSize: 13,
-      TextColor: #e7f0fb,
-      HorizontalAlignment: Start,
-      VerticalAlignment: Center
-    );
+    Label #FieldName {
+      Anchor: (Height: 18);
+      Text: "";
+      Style: (
+        FontSize: 13,
+        RenderBold: true,
+        TextColor: #e7f0fb,
+        HorizontalAlignment: Start,
+        VerticalAlignment: Center
+      );
+    }
+
+    Label #FieldValue {
+      Anchor: (Height: 18);
+      FlexWeight: 1;
+      Text: "";
+      Style: (
+        FontSize: 13,
+        TextColor: #e7f0fb,
+        HorizontalAlignment: Start,
+        VerticalAlignment: Center
+      );
+    }
   }
 
   $C.@CheckBox #FieldCheck {

@@ -8,7 +8,7 @@ $C.@PageOverlay {
 
     #Title {
       $C.@Title #NpcDebugFlagsTitle {
-        @Text = "NPC Debug Inspector - Debug Flags";
+        @Text = "Debug Flags";
       }
     }
 

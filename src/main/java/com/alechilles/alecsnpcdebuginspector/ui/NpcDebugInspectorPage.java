@@ -155,17 +155,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull String rawData) {
         Map<String, String> rawEventData = decodeRawEventData(rawData);
-        String resolvedAction = firstNonBlank(rawEventData.get(EVENT_ACTION), rawEventData.get(EVENT_TYPE));
-        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)) {
-            applyRefreshIntervalFromEvent(resolveRefreshIntervalValue(rawEventData));
-            sendRefreshUpdate();
-            return;
-        }
-        if (ACTION_REORDER_SECTION.equals(resolvedAction)) {
-            suppressRefreshTemporarily();
-            if (applySectionReorder(rawEventData)) {
-                sendRefreshUpdate();
-            }
+        String resolvedAction = firstNonBlank(
+                rawEventData.get(EVENT_ACTION),
+                rawEventData.get(EVENT_TYPE),
+                rawEventData.get("action"),
+                rawEventData.get("type")
+        );
+        if (resolvedAction != null && !resolvedAction.isBlank()) {
+            handleResolvedAction(resolvedAction, resolveRefreshIntervalValue(rawEventData), rawEventData);
             return;
         }
         super.handleDataEvent(ref, store, rawData);
@@ -175,7 +172,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull PageEventData data) {
-        String resolvedAction = firstNonBlank(data.action, data.type);
+        handleResolvedAction(firstNonBlank(data.action, data.type), resolveRefreshIntervalValue(data), null);
+    }
+
+    private void handleResolvedAction(@Nullable String resolvedAction,
+                                      @Nullable Double refreshIntervalValue,
+                                      @Nullable Map<String, String> rawEventData) {
         if (resolvedAction == null || resolvedAction.isBlank()) {
             return;
         }
@@ -197,8 +199,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return;
         }
         if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)) {
-            applyRefreshIntervalFromEvent(resolveRefreshIntervalValue(data));
+            applyRefreshIntervalFromEvent(refreshIntervalValue);
             sendRefreshUpdate();
+            return;
+        }
+        if (ACTION_REORDER_SECTION.equals(resolvedAction)) {
+            suppressRefreshTemporarily();
+            if (rawEventData != null && applySectionReorder(rawEventData)) {
+                sendRefreshUpdate();
+            }
             return;
         }
         if (resolvedAction.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
@@ -604,13 +613,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_DOWN_PREFIX + section.id),
                     false
             );
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.MouseEntered,
-                    sectionSelector + " #SectionToggleButton",
-                    EventData.of(EVENT_ACTION, ACTION_REORDER_INTERACTION),
-                    false
-            );
-
             if (collapsed) {
                 continue;
             }

@@ -11,6 +11,7 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
@@ -352,15 +353,24 @@ public final class NpcDebugInspectorRosterPage
         if (dismissed) {
             return;
         }
+        if (!isCurrentPageActive()) {
+            dismissed = true;
+            return;
+        }
         refreshEntries();
         emitHighlightParticles();
         sendRefreshUpdate();
-        if (!dismissed) {
+        if (!dismissed && isCurrentPageActive()) {
             scheduleRefreshTick();
         }
     }
 
     private void sendRefreshUpdate() {
+        if (dismissed || !isCurrentPageActive()) {
+            dismissed = true;
+            return;
+        }
+
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = new UIEventBuilder();
 
@@ -393,6 +403,22 @@ public final class NpcDebugInspectorRosterPage
 
         bindGlobalEvents(eventBuilder);
         sendUpdate(commandBuilder, eventBuilder, false);
+    }
+
+    private boolean isCurrentPageActive() {
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return false;
+        }
+        Store<EntityStore> store = ref.getStore();
+        if (store == null) {
+            return false;
+        }
+        Player playerComponent = store.getComponent(ref, Player.getComponentType());
+        if (playerComponent == null || playerComponent.getPageManager() == null) {
+            return false;
+        }
+        return playerComponent.getPageManager().getCustomPage() == this;
     }
 
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {

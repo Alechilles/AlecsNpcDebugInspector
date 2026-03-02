@@ -57,6 +57,10 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
     private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
     private static final String EVENT_REFRESH_INTERVAL_MS_AT = "@RefreshIntervalMs";
+    private static final Pattern REFRESH_INTERVAL_VALUE_PATTERN = Pattern.compile(
+            "\"(?:@?RefreshIntervalMs|Value|NewValue|SliderValue)\"\\s*:\\s*(?:\"([^\"]*)\"|(-?\\d+(?:\\.\\d+)?))",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 4000L;
@@ -144,6 +148,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull String rawData) {
+        Double resolvedRefreshIntervalFromRaw = resolveRefreshIntervalValueFromRawPayload(rawData);
+        if (isRefreshEventPayload(rawData) || resolvedRefreshIntervalFromRaw != null) {
+            applyRefreshIntervalFromEvent(resolvedRefreshIntervalFromRaw);
+            sendRefreshUpdate();
+            return;
+        }
+
         Map<String, String> rawEventData = decodeRawEventData(rawData);
         String resolvedAction = firstNonBlank(
                 rawEventData.get(EVENT_ACTION),
@@ -152,9 +163,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 rawEventData.get("type")
         );
         Double resolvedRefreshInterval = resolveRefreshIntervalValue(rawEventData);
-        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction)
-                || resolvedRefreshInterval != null
-                || hasRefreshIntervalPayload(rawEventData)) {
+        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction) || resolvedRefreshInterval != null) {
             applyRefreshIntervalFromEvent(resolvedRefreshInterval);
             sendRefreshUpdate();
             return;
@@ -174,14 +183,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                                 @Nonnull Store<EntityStore> store,
                                 @Nonnull PageEventData data) {
         String resolvedAction = firstNonBlank(data.action, data.type);
-        Double resolvedRefreshInterval = resolveRefreshIntervalValue(data);
-        if (ACTION_REFRESH_RATE_CHANGED.equals(resolvedAction) || resolvedRefreshInterval != null) {
-            applyRefreshIntervalFromEvent(resolvedRefreshInterval);
-            sendRefreshUpdate();
-            if (resolvedAction == null || resolvedAction.isBlank()) {
-                return;
-            }
-        }
         if (resolvedAction == null || resolvedAction.isBlank()) {
             return;
         }
@@ -290,14 +291,18 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     }
 
     @Nullable
-    private Double resolveRefreshIntervalValue(@Nonnull PageEventData data) {
-        return parseDouble(firstNonBlank(
-                data.refreshIntervalMs,
-                data.refreshIntervalMsAt,
-                data.value,
-                data.newValue,
-                data.sliderValue
-        ));
+    private Double resolveRefreshIntervalValueFromRawPayload(@Nullable String rawData) {
+        if (rawData == null || rawData.isBlank()) {
+            return null;
+        }
+        Matcher matcher = REFRESH_INTERVAL_VALUE_PATTERN.matcher(rawData);
+        while (matcher.find()) {
+            Double parsed = parseDouble(firstNonBlank(matcher.group(1), matcher.group(2)));
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+        return null;
     }
 
     @Nullable
@@ -325,22 +330,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
-    private boolean hasRefreshIntervalPayload(@Nonnull Map<String, String> rawEventData) {
-        if (rawEventData.containsKey(EVENT_REFRESH_INTERVAL_MS)
-                || rawEventData.containsKey(EVENT_REFRESH_INTERVAL_MS_AT)) {
-            return true;
+    private boolean isRefreshEventPayload(@Nullable String rawData) {
+        if (rawData == null || rawData.isBlank()) {
+            return false;
         }
-        for (Map.Entry<String, String> entry : rawEventData.entrySet()) {
-            String key = entry.getKey();
-            if (key == null) {
-                continue;
-            }
-            String lowered = key.toLowerCase(Locale.ROOT);
-            if (lowered.contains("refresh") && lowered.contains("interval")) {
-                return true;
-            }
-        }
-        return false;
+        String lowered = rawData.toLowerCase(Locale.ROOT);
+        return lowered.contains("\"" + EVENT_REFRESH_INTERVAL_MS.toLowerCase(Locale.ROOT) + "\"")
+                || lowered.contains("\"" + EVENT_REFRESH_INTERVAL_MS_AT.toLowerCase(Locale.ROOT) + "\"")
+                || lowered.contains(ACTION_REFRESH_RATE_CHANGED.toLowerCase(Locale.ROOT));
     }
 
     @Nullable
@@ -973,44 +970,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 data -> data.type
             )
             .add()
-            .append(
-                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS_AT, Codec.STRING),
-                (data, value) -> data.refreshIntervalMsAt = value,
-                data -> data.refreshIntervalMsAt
-            )
-            .add()
-            .append(
-                new KeyedCodec<>(EVENT_REFRESH_INTERVAL_MS, Codec.STRING),
-                (data, value) -> data.refreshIntervalMs = value,
-                data -> data.refreshIntervalMs
-            )
-            .add()
-            .append(
-                new KeyedCodec<>("Value", Codec.STRING),
-                (data, value) -> data.value = value,
-                data -> data.value
-            )
-            .add()
-            .append(
-                new KeyedCodec<>("NewValue", Codec.STRING),
-                (data, value) -> data.newValue = value,
-                data -> data.newValue
-            )
-            .add()
-            .append(
-                new KeyedCodec<>("SliderValue", Codec.STRING),
-                (data, value) -> data.sliderValue = value,
-                data -> data.sliderValue
-            )
-            .add()
             .build();
 
         private String action;
         private String type;
-        private String refreshIntervalMs;
-        private String refreshIntervalMsAt;
-        private String value;
-        private String newValue;
-        private String sliderValue;
     }
 }

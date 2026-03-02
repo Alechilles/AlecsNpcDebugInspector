@@ -226,14 +226,23 @@ public final class NpcDebugSnapshotService {
             for (int i = 0; i < slotCount; i++) {
                 String slotName = safeText(marked.getSlotName(i), "Slot" + i);
                 Ref<EntityStore> target = marked.getMarkedEntityRef(i);
-                String targetText = target != null && target.isValid() ? String.valueOf(target) : "<none>";
+                String targetText = resolveEntityTargetLabel(target, store);
                 appendTrackedLine(sb, npcUuid, now, "targeting.slot." + slotName, "Target " + slotName, targetText, true, true);
             }
         }
 
         StateSupport stateSupport = role.getStateSupport();
         Ref<EntityStore> interactionTarget = stateSupport.getInteractionIterationTarget();
-        appendTrackedLine(sb, npcUuid, now, "targeting.interactionTarget", "Interaction Iteration Target", interactionTarget != null ? String.valueOf(interactionTarget) : "<none>", true, false);
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "targeting.interactionTarget",
+                "Interaction Iteration Target",
+                resolveEntityTargetLabel(interactionTarget, store),
+                true,
+                false
+        );
 
         StdScope scope = role.getEntitySupport() != null ? role.getEntitySupport().getSensorScope() : null;
         Map<String, String> scopeValues = snapshotScopeValues(scope);
@@ -244,7 +253,7 @@ public final class NpcDebugSnapshotService {
         appendTopEntries(sb, npcUuid, now, "targeting.scope", targetingKeys, 12, true);
 
         if (npcRef != null && npcRef.isValid()) {
-            appendTrackedLine(sb, npcUuid, now, "targeting.selfRef", "Self Ref", String.valueOf(npcRef), true, false);
+            appendTrackedLine(sb, npcUuid, now, "targeting.selfRef", "Self Ref", resolveEntityTargetLabel(npcRef, store), true, false);
         }
         return sb.toString().trim();
     }
@@ -397,7 +406,16 @@ public final class NpcDebugSnapshotService {
             for (int i = 0; i < slotCount; i++) {
                 String slotName = safeText(marked.getSlotName(i), "Slot" + i);
                 Ref<EntityStore> ref = marked.getMarkedEntityRef(i);
-                appendTrackedLine(sb, npcUuid, now, "relationships.marked." + slotName, "Relation " + slotName, ref != null ? String.valueOf(ref) : "<none>", true, true);
+                appendTrackedLine(
+                        sb,
+                        npcUuid,
+                        now,
+                        "relationships.marked." + slotName,
+                        "Relation " + slotName,
+                        resolveEntityTargetLabel(ref, store),
+                        true,
+                        true
+                );
             }
         }
 
@@ -431,8 +449,8 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "combat.maxSuffered", "Max Damage Suffered", formatNumber(damageData.getMaxDamageSuffered()), true, false);
         Ref<EntityStore> victim = damageData.getMostDamagedVictim();
         Ref<EntityStore> attacker = damageData.getMostDamagingAttacker();
-        appendTrackedLine(sb, npcUuid, now, "combat.victim", "Most Damaged Victim", victim != null ? String.valueOf(victim) : "<none>", true, true);
-        appendTrackedLine(sb, npcUuid, now, "combat.attacker", "Most Damaging Attacker", attacker != null ? String.valueOf(attacker) : "<none>", true, true);
+        appendTrackedLine(sb, npcUuid, now, "combat.victim", "Most Damaged Victim", resolveEntityTargetLabel(victim, store), true, true);
+        appendTrackedLine(sb, npcUuid, now, "combat.attacker", "Most Damaging Attacker", resolveEntityTargetLabel(attacker, store), true, true);
 
         List<String> damageByCause = new ArrayList<>();
         for (DamageCause cause : DamageCause.getAssetMap().getAssetMap().values()) {
@@ -616,7 +634,7 @@ public final class NpcDebugSnapshotService {
                 boolean hasLeader = leaderRef != null && leaderRef.isValid();
                 appendTrackedLine(sb, npcUuid, now, "flock.hasLeader", "Has Leader", String.valueOf(hasLeader), true, true);
                 if (hasLeader) {
-                    appendTrackedLine(sb, npcUuid, now, "flock.leaderRef", "Leader Ref", String.valueOf(leaderRef), true, false);
+                    appendTrackedLine(sb, npcUuid, now, "flock.leaderRef", "Leader Ref", resolveEntityTargetLabel(leaderRef, store), true, false);
                     appendTrackedLine(sb, npcUuid, now, "flock.distanceToLeader", "Distance To Leader", resolveDistanceBetween(npcRef, leaderRef, store), true, false);
                 }
             }
@@ -1023,6 +1041,17 @@ public final class NpcDebugSnapshotService {
     private String resolveDisplayName(@Nullable Ref<EntityStore> npcRef,
                                       @Nonnull Store<EntityStore> store,
                                       @Nonnull NPCEntity npc) {
+        String preferred = resolveDisplayNameOnly(npcRef, store, npc);
+        if (preferred != null) {
+            return preferred;
+        }
+        return resolveRoleId(npc);
+    }
+
+    @Nullable
+    private String resolveDisplayNameOnly(@Nullable Ref<EntityStore> npcRef,
+                                          @Nonnull Store<EntityStore> store,
+                                          @Nonnull NPCEntity npc) {
         if (npcRef != null && npcRef.isValid()) {
             Object displayNameComponent = store.getComponent(npcRef, com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent.getComponentType());
             if (displayNameComponent != null) {
@@ -1045,7 +1074,58 @@ public final class NpcDebugSnapshotService {
         if (legacy != null && !legacy.isBlank()) {
             return legacy;
         }
-        return resolveRoleId(npc);
+        return null;
+    }
+
+    @Nonnull
+    private String resolveEntityTargetLabel(@Nullable Ref<EntityStore> ref,
+                                            @Nonnull Store<EntityStore> store) {
+        if (ref == null || !ref.isValid()) {
+            return "<none>";
+        }
+
+        NPCEntity targetNpc = store.getComponent(ref, NPCEntity.getComponentType());
+        if (targetNpc == null) {
+            return String.valueOf(ref);
+        }
+
+        String preferredName = firstNonBlank(
+                resolveDisplayNameOnly(ref, store, targetNpc),
+                resolveEntityNameFromNameKey(targetNpc),
+                resolveRoleId(targetNpc)
+        );
+        UUID targetUuid = targetNpc.getUuid();
+        String uuidText = targetUuid != null ? targetUuid.toString() : "<unknown-uuid>";
+        return preferredName + " (" + uuidText + ")";
+    }
+
+    @Nullable
+    private String resolveEntityNameFromNameKey(@Nonnull NPCEntity npc) {
+        Role role = npc.getRole();
+        if (role != null) {
+            String nameTranslationKey = readField(role, "nameTranslationKey", String.class);
+            if (nameTranslationKey != null && !nameTranslationKey.isBlank()) {
+                return nameTranslationKey;
+            }
+        }
+        String npcTypeId = npc.getNPCTypeId();
+        if (npcTypeId != null && !npcTypeId.isBlank()) {
+            return npcTypeId;
+        }
+        return null;
+    }
+
+    @Nonnull
+    private String firstNonBlank(@Nullable String... values) {
+        if (values == null || values.length == 0) {
+            return "<unknown>";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "<unknown>";
     }
 
     @Nonnull

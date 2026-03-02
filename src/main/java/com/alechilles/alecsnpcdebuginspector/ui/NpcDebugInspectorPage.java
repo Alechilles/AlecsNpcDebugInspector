@@ -84,6 +84,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
     @Nullable
     private final UUID targetNpcUuid;
+    @Nullable
+    private final Runnable onCloseAction;
 
     private NpcDebugSnapshot latestSnapshot;
     private final Map<String, InspectorSection> sectionsById;
@@ -100,9 +102,17 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
                                  @Nullable UUID targetNpcUuid,
                                  @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
+        this(playerRef, targetNpcUuid, snapshotSupplier, null);
+    }
+
+    public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
+                                 @Nullable UUID targetNpcUuid,
+                                 @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier,
+                                 @Nullable Runnable onCloseAction) {
         super(playerRef, CustomPageLifetime.CanDismiss, PageEventData.CODEC);
         this.snapshotSupplier = snapshotSupplier;
         this.targetNpcUuid = targetNpcUuid;
+        this.onCloseAction = onCloseAction;
         this.latestSnapshot = new NpcDebugSnapshot("NPC Debug Inspector", "", "No data.");
         this.sectionsById = new LinkedHashMap<>();
         this.sectionOrder = new ArrayList<>();
@@ -121,7 +131,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
      */
     public NpcDebugInspectorPage(@Nonnull PlayerRef playerRef,
                                  @Nonnull Supplier<NpcDebugSnapshot> snapshotSupplier) {
-        this(playerRef, null, snapshotSupplier);
+        this(playerRef, null, snapshotSupplier, null);
     }
 
     @Override
@@ -170,7 +180,11 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             return;
         }
         if (ACTION_CLOSE.equals(resolvedAction)) {
-            close();
+            if (onCloseAction != null) {
+                onCloseAction.run();
+            } else {
+                close();
+            }
             return;
         }
         if (ACTION_TOGGLE_PIN_MODE.equals(resolvedAction)) {

@@ -2,8 +2,11 @@ package com.alechilles.alecsnpcdebuginspector.ui;
 
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import com.hypixel.hytale.codec.Codec;
+import com.hypixel.hytale.codec.ExtraInfo;
 import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
+import com.hypixel.hytale.codec.codecs.map.MapCodec;
+import com.hypixel.hytale.codec.util.RawJsonReader;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
@@ -15,6 +18,7 @@ import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -27,6 +31,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -43,10 +49,30 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_PIN_MODE = "TogglePinMode";
     private static final String ACTION_TOGGLE_FIELD_PREFIX = "TogglePinnedField:";
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
-    private static final String ACTION_MOVE_SECTION_PREFIX = "MoveSection:";
+    private static final String ACTION_REORDER_SECTION = "ReorderSection";
 
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_INTERVAL_MS = 1000L;
+    private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
+    private static final String[] FROM_INDEX_KEYS = {
+            "FromIndex",
+            "OldIndex",
+            "SourceIndex",
+            "DragIndex",
+            "DraggedIndex",
+            "StartIndex",
+            "Index",
+            "From"
+    };
+    private static final String[] TO_INDEX_KEYS = {
+            "ToIndex",
+            "NewIndex",
+            "TargetIndex",
+            "DropIndex",
+            "DroppedIndex",
+            "EndIndex",
+            "To"
+    };
 
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
     @Nullable
@@ -107,8 +133,25 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     @Override
     public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
                                 @Nonnull Store<EntityStore> store,
+                                @Nonnull String rawData) {
+        Map<String, String> rawEventData = decodeRawEventData(rawData);
+        if (ACTION_REORDER_SECTION.equals(rawEventData.get(EVENT_ACTION))) {
+            if (applySectionReorder(rawEventData)) {
+                sendRefreshUpdate();
+            }
+            return;
+        }
+        super.handleDataEvent(ref, store, rawData);
+    }
+
+    @Override
+    public void handleDataEvent(@Nonnull Ref<EntityStore> ref,
+                                @Nonnull Store<EntityStore> store,
                                 @Nonnull PageEventData data) {
-        if (data.action == null || data.action.isBlank() || ACTION_CLOSE.equals(data.action)) {
+        if (data.action == null || data.action.isBlank()) {
+            return;
+        }
+        if (ACTION_CLOSE.equals(data.action)) {
             close();
             return;
         }
@@ -121,14 +164,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             String sectionId = parseActionSuffix(data.action, ACTION_TOGGLE_SECTION_PREFIX);
             if (sectionId != null) {
                 toggleSectionCollapsed(sectionId);
-                sendRefreshUpdate();
-            }
-            return;
-        }
-        if (data.action.startsWith(ACTION_MOVE_SECTION_PREFIX)) {
-            String sectionId = parseActionSuffix(data.action, ACTION_MOVE_SECTION_PREFIX);
-            if (sectionId != null) {
-                moveSectionDown(sectionId);
                 sendRefreshUpdate();
             }
             return;
@@ -211,17 +246,114 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
-    private void moveSectionDown(@Nonnull String sectionId) {
+    @Nonnull
+    private Map<String, String> decodeRawEventData(@Nullable String rawData) {
+        if (rawData == null || rawData.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return MapCodec.STRING_HASH_MAP_CODEC.decodeJson(
+                    new RawJsonReader(rawData.toCharArray()),
+                    ExtraInfo.THREAD_LOCAL.get()
+            );
+        } catch (IOException | RuntimeException ignored) {
+            return Map.of();
+        }
+    }
+
+    private boolean applySectionReorder(@Nonnull Map<String, String> rawEventData) {
+        Integer fromIndex = findEventIndex(rawEventData, FROM_INDEX_KEYS);
+        Integer toIndex = findEventIndex(rawEventData, TO_INDEX_KEYS);
+
+        if (fromIndex == null || toIndex == null) {
+            int[] fallbackPair = parseFallbackIndexPair(rawEventData);
+            if (fromIndex == null && fallbackPair[0] >= 0) {
+                fromIndex = fallbackPair[0];
+            }
+            if (toIndex == null && fallbackPair[1] >= 0) {
+                toIndex = fallbackPair[1];
+            }
+        }
+        if (fromIndex == null || toIndex == null) {
+            return false;
+        }
+        return moveSection(fromIndex, toIndex);
+    }
+
+    @Nullable
+    private Integer findEventIndex(@Nonnull Map<String, String> rawEventData, @Nonnull String[] candidateKeys) {
+        for (String candidateKey : candidateKeys) {
+            for (Map.Entry<String, String> entry : rawEventData.entrySet()) {
+                if (entry.getKey() == null || !entry.getKey().equalsIgnoreCase(candidateKey)) {
+                    continue;
+                }
+                Integer parsed = parseIndexValue(entry.getValue());
+                if (parsed != null) {
+                    return parsed;
+                }
+            }
+        }
+        return null;
+    }
+
+    private int[] parseFallbackIndexPair(@Nonnull Map<String, String> rawEventData) {
+        int first = -1;
+        int second = -1;
+        for (String value : rawEventData.values()) {
+            Integer parsed = parseIndexValue(value);
+            if (parsed == null) {
+                continue;
+            }
+            if (first < 0) {
+                first = parsed;
+                continue;
+            }
+            second = parsed;
+            break;
+        }
+        return new int[] { first, second };
+    }
+
+    @Nullable
+    private Integer parseIndexValue(@Nullable String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        String value = rawValue.trim();
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            // Fallback to selector-style parsing below.
+        }
+
+        Matcher matcher = BRACKET_INDEX_PATTERN.matcher(value);
+        Integer lastIndex = null;
+        while (matcher.find()) {
+            try {
+                lastIndex = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed match and continue scanning.
+            }
+        }
+        return lastIndex;
+    }
+
+    private boolean moveSection(int fromIndex, int toIndex) {
         if (sectionOrder.size() < 2) {
-            return;
+            return false;
         }
-        int index = sectionOrder.indexOf(sectionId);
-        if (index < 0) {
-            return;
+        if (fromIndex < 0 || fromIndex >= sectionOrder.size()) {
+            return false;
         }
-        String removed = sectionOrder.remove(index);
-        int targetIndex = index >= sectionOrder.size() ? 0 : index + 1;
-        sectionOrder.add(targetIndex, removed);
+        int boundedToIndex = Math.max(0, Math.min(toIndex, sectionOrder.size() - 1));
+        if (fromIndex == boundedToIndex) {
+            return false;
+        }
+
+        String removed = sectionOrder.remove(fromIndex);
+        int insertIndex = Math.max(0, Math.min(boundedToIndex, sectionOrder.size()));
+        sectionOrder.add(insertIndex, removed);
+        return true;
     }
 
     private void bindGlobalEvents(@Nonnull UIEventBuilder eventBuilder) {
@@ -267,20 +399,23 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.clear("#NpcDebugInspectorFieldList");
         renderedFieldKeys.clear();
 
-        int rowIndex = 0;
+        int sectionIndex = 0;
         for (String sectionId : sectionOrder) {
             InspectorSection section = sectionsById.get(sectionId);
             if (section == null) {
                 continue;
             }
 
-            String sectionSelector = "#NpcDebugInspectorFieldList[" + rowIndex + "]";
-            rowIndex++;
+            String sectionSelector = "#NpcDebugInspectorFieldList[" + sectionIndex + "]";
+            sectionIndex++;
             commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
             boolean collapsed = collapsedSectionIds.contains(section.id);
-            commandBuilder.set(sectionSelector + " #SectionToggleGlyph.Text", collapsed ? ">" : "v");
+            commandBuilder.set(sectionSelector + " #SectionToggleExpandedIcon.Visible", !collapsed);
+            commandBuilder.set(sectionSelector + " #SectionToggleCollapsedIcon.Visible", collapsed);
             commandBuilder.set(sectionSelector + " #SectionTitle.Text", section.title.toUpperCase(Locale.ROOT));
             commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
+            commandBuilder.clear(sectionSelector + " #SectionFields");
+            commandBuilder.set(sectionSelector + " #SectionFields.Visible", !collapsed);
 
             eventBuilder.addEventBinding(
                     CustomUIEventBindingType.Activating,
@@ -288,21 +423,16 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                     EventData.of(EVENT_ACTION, ACTION_TOGGLE_SECTION_PREFIX + section.id),
                     false
             );
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.Activating,
-                    sectionSelector + " #SectionMoveButton",
-                    EventData.of(EVENT_ACTION, ACTION_MOVE_SECTION_PREFIX + section.id),
-                    false
-            );
 
             if (collapsed) {
                 continue;
             }
 
+            int fieldRowIndex = 0;
             for (InspectorField field : section.fields) {
-                String fieldSelector = "#NpcDebugInspectorFieldList[" + rowIndex + "]";
-                rowIndex++;
-                commandBuilder.append("#NpcDebugInspectorFieldList", FIELD_ROW_UI_PATH);
+                String fieldSelector = sectionSelector + " #SectionFields[" + fieldRowIndex + "]";
+                fieldRowIndex++;
+                commandBuilder.append(sectionSelector + " #SectionFields", FIELD_ROW_UI_PATH);
                 commandBuilder.set(fieldSelector + " #FieldText.Text", field.displayText);
                 commandBuilder.set(fieldSelector + " #FieldChanged.Visible", field.changed);
 
@@ -322,6 +452,13 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 }
             }
         }
+
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.ElementReordered,
+                "#NpcDebugInspectorFieldList",
+                EventData.of(EVENT_ACTION, ACTION_REORDER_SECTION),
+                false
+        );
     }
 
     @Nonnull

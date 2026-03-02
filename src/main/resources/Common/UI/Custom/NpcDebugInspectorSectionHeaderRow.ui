@@ -23,20 +23,25 @@ Group {
         Pressed: (Background: (Color: #ffffff08))
       );
 
-      Label #SectionToggleGlyph {
+      Group #SectionToggleIconContainer {
         Anchor: (Width: 20, Height: 28);
-        Text: "v";
-        Style: (
-          FontSize: 14,
-          RenderBold: true,
-          TextColor: #d7dfeb,
-          HorizontalAlignment: Center,
-          VerticalAlignment: Center
-        );
+        LayoutMode: Middle;
+
+        Group #SectionToggleExpandedIcon {
+          Anchor: (Width: 12, Height: 7);
+          Background: "NpcDebugInspectorCaretUp.png";
+          Visible: true;
+        }
+
+        Group #SectionToggleCollapsedIcon {
+          Anchor: (Width: 12, Height: 7);
+          Background: "NpcDebugInspectorCaretDown.png";
+          Visible: false;
+        }
       }
 
       Label #SectionTitle {
-        Anchor: (Left: 22, Right: 126, Height: 28);
+        Anchor: (Left: 22, Right: 4, Height: 28);
         Text: "OVERVIEW";
         Style: (
           FontSize: 13,
@@ -49,8 +54,15 @@ Group {
         );
       }
 
+    }
+
+    Group {
+      LayoutMode: Right;
+      Anchor: (Width: 122, Height: 28);
+      Padding: (Right: 2);
+
       Label #SectionCount {
-        Anchor: (Right: 10, Width: 96, Height: 28);
+        Anchor: (Width: 88, Height: 28);
         Text: "0 fields";
         Style: (
           FontSize: 11,
@@ -59,40 +71,42 @@ Group {
           VerticalAlignment: Center
         );
       }
-    }
 
-    Button #SectionMoveButton {
-      Anchor: (Width: 28, Height: 28);
-      Style: ButtonStyle(
-        Default: (Background: (Color: #00000000)),
-        Hovered: (Background: (Color: #ffffff10)),
-        Pressed: (Background: (Color: #ffffff08))
-      );
-
-      Group {
-        LayoutMode: Middle;
-        Anchor: (Full: 0);
+      ReorderableListGrip #SectionMoveButton {
+        Anchor: (Width: 28, Height: 28);
+        TooltipText: %client.settings.dragToReorder;
+        TextTooltipStyle: $C.@ButtonTextTooltipStyle;
 
         Group {
-          LayoutMode: Top;
-          Anchor: (Width: 12, Height: 10);
+          LayoutMode: Middle;
+          Anchor: (Full: 0);
 
           Group {
-            Anchor: (Height: 2, Bottom: 2);
-            Background: #8f9eb3;
-          }
+            LayoutMode: Top;
+            Anchor: (Width: 12, Height: 10);
 
-          Group {
-            Anchor: (Height: 2, Bottom: 2);
-            Background: #8f9eb3;
-          }
+            Group {
+              Anchor: (Height: 2, Bottom: 2);
+              Background: #8f9eb3;
+            }
 
-          Group {
-            Anchor: (Height: 2);
-            Background: #8f9eb3;
+            Group {
+              Anchor: (Height: 2, Bottom: 2);
+              Background: #8f9eb3;
+            }
+
+            Group {
+              Anchor: (Height: 2);
+              Background: #8f9eb3;
+            }
           }
         }
       }
     }
+  }
+
+  Group #SectionFields {
+    LayoutMode: Top;
+    Anchor: (Left: 0, Right: 0, Top: 2);
   }
 }

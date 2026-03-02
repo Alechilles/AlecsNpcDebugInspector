@@ -17,13 +17,14 @@ $C.@PageOverlay {
       Padding: (Left: 10, Right: 10, Top: 8, Bottom: 10);
 
       Label #NpcDebugFlagsSubtitle {
-        Anchor: (Height: 22);
+        Anchor: (Height: 38);
         Text: "";
         Style: (
-          FontSize: 13,
+          FontSize: 12,
           TextColor: #c3d5e8,
           HorizontalAlignment: Start,
-          VerticalAlignment: Center
+          VerticalAlignment: Start,
+          Wrap: true
         );
       }
 

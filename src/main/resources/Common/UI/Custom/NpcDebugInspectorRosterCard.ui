@@ -162,10 +162,20 @@ Group {
     Anchor: (Top: 82, Right: 0, Width: 184, Height: 30);
     LayoutMode: Right;
 
+    $C.@SmallSecondaryTextButton #DebugFlagsButton {
+      @Sounds = $C.@ButtonSounds;
+      @Text = "Debug Flags";
+      @Anchor = (Width: 88);
+    }
+
+    Group {
+      Anchor: (Width: 8);
+    }
+
     $C.@SmallSecondaryTextButton #HighlightButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Highlight";
-      @Anchor = (Width: 184);
+      @Anchor = (Width: 88);
     }
   }
 }

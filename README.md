@@ -6,6 +6,7 @@ Standalone in-game NPC inspection mod for Hytale.
 - `/npcdebug` command opens a detailed inspector page for the NPC in your crosshair.
 - Optional `/npcdebug <uuid>` opens details for a specific NPC UUID.
 - Inspector page currently includes overview, state, alarms, scope flags, component summary, and flock summary.
+- Inspector tool roster now includes a `Debug Flags` menu per linked NPC for toggling built-in `/npc debug set <flag>` role debug features, with presets (`default`, `all`, `none`).
 
 ## Build
 ```bash

@@ -1,0 +1,46 @@
+$C = "Common.ui";
+
+Group {
+  Anchor: (Top: 2, Left: 0, Right: 0, Height: 52);
+  Background: #23344c(0.86);
+  Padding: (Left: 10, Right: 10, Top: 7, Bottom: 7);
+  LayoutMode: Left;
+
+  Group {
+    LayoutMode: Top;
+    Anchor: (Left: 0, Right: 90, Height: 38);
+
+    Label #FlagName {
+      Anchor: (Height: 17);
+      Text: "Flag Name";
+      Style: (
+        FontSize: 13,
+        RenderBold: true,
+        TextColor: #e7f0fb,
+        HorizontalAlignment: Start,
+        VerticalAlignment: Center
+      );
+    }
+
+    Label #FlagDescription {
+      Anchor: (Top: 2, Height: 16);
+      Text: "";
+      Style: (
+        FontSize: 11,
+        TextColor: #b7c8dc,
+        HorizontalAlignment: Start,
+        VerticalAlignment: Center
+      );
+    }
+  }
+
+  Group {
+    Anchor: (Width: 10);
+  }
+
+  $C.@SmallSecondaryTextButton #FlagToggleButton {
+    @Sounds = $C.@ButtonSounds;
+    @Text = "OFF";
+    @Anchor = (Width: 80, Height: 28, Top: 5);
+  }
+}

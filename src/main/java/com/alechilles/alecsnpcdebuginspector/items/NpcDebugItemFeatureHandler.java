@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.items;
 import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugTargeting;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
+import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorDebugFlagsPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorRosterPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugLinkedEntry;
@@ -111,6 +112,7 @@ public final class NpcDebugItemFeatureHandler {
                 () -> buildEntriesForTool(player, store, toolId),
                 () -> resolveCurrentTargetFlockId(playerRef, store),
                 npcUuid -> openInspectorForUuid(player, playerRef, uiPlayerRef, store, npcUuid),
+                npcUuid -> openDebugFlagsForUuid(player, playerRef, uiPlayerRef, store, toolId, npcUuid),
                 npcUuid -> unlinkNpcFromTool(player, toolId, npcUuid),
                 () -> readHighlightsForTool(player, toolId),
                 (npcUuid, highlighted) -> setHighlightForTool(player, toolId, npcUuid, highlighted),
@@ -219,6 +221,26 @@ public final class NpcDebugItemFeatureHandler {
                     )
             );
         }
+    }
+
+    private void openDebugFlagsForUuid(@Nonnull Player player,
+                                       @Nonnull Ref<EntityStore> playerRef,
+                                       @Nonnull PlayerRef uiPlayerRef,
+                                       @Nonnull Store<EntityStore> store,
+                                       @Nonnull String toolId,
+                                       @Nonnull UUID npcUuid) {
+        if (player.getPageManager() == null) {
+            return;
+        }
+        player.getPageManager().openCustomPage(
+                playerRef,
+                store,
+                new NpcDebugInspectorDebugFlagsPage(
+                        uiPlayerRef,
+                        npcUuid,
+                        () -> openRosterPage(player, playerRef, uiPlayerRef, store, toolId)
+                )
+        );
     }
 
     @Nullable

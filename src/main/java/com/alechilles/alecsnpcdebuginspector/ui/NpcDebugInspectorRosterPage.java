@@ -55,6 +55,7 @@ public final class NpcDebugInspectorRosterPage
     private static final String ACTION_FILTER_CLEAR = "__filter_clear__";
 
     private static final String INSPECT_PREFIX = "__inspect__:";
+    private static final String DEBUG_FLAGS_PREFIX = "__debug_flags__:";
     private static final String UNLINK_PREFIX = "__unlink__:";
     private static final String COPY_PREFIX = "__copy__:";
     private static final String HIGHLIGHT_PREFIX = "__highlight__:";
@@ -65,6 +66,7 @@ public final class NpcDebugInspectorRosterPage
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
     private final Supplier<String> sameFlockIdSupplier;
     private final Consumer<UUID> inspectCallback;
+    private final Consumer<UUID> debugFlagsCallback;
     private final Consumer<UUID> unlinkCallback;
     private final Supplier<Set<UUID>> highlightedNpcSupplier;
     private final BiConsumer<UUID, Boolean> highlightPersistenceCallback;
@@ -99,6 +101,7 @@ public final class NpcDebugInspectorRosterPage
                                        @Nonnull Supplier<List<NpcDebugLinkedEntry>> entrySupplier,
                                        @Nonnull Supplier<String> sameFlockIdSupplier,
                                        @Nonnull Consumer<UUID> inspectCallback,
+                                       @Nonnull Consumer<UUID> debugFlagsCallback,
                                        @Nonnull Consumer<UUID> unlinkCallback,
                                        @Nonnull Supplier<Set<UUID>> highlightedNpcSupplier,
                                        @Nonnull BiConsumer<UUID, Boolean> highlightPersistenceCallback,
@@ -107,6 +110,7 @@ public final class NpcDebugInspectorRosterPage
         this.entrySupplier = entrySupplier;
         this.sameFlockIdSupplier = sameFlockIdSupplier;
         this.inspectCallback = inspectCallback;
+        this.debugFlagsCallback = debugFlagsCallback;
         this.unlinkCallback = unlinkCallback;
         this.highlightedNpcSupplier = highlightedNpcSupplier;
         this.highlightPersistenceCallback = highlightPersistenceCallback;
@@ -222,6 +226,14 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
 
+        if (normalizedAction.startsWith(DEBUG_FLAGS_PREFIX)) {
+            UUID npcUuid = parseUuidAction(normalizedAction, DEBUG_FLAGS_PREFIX);
+            if (npcUuid != null) {
+                debugFlagsCallback.accept(npcUuid);
+            }
+            return;
+        }
+
         if (normalizedAction.startsWith(UNLINK_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, UNLINK_PREFIX);
             if (npcUuid != null) {
@@ -309,6 +321,12 @@ public final class NpcDebugInspectorRosterPage
                     CustomUIEventBindingType.Activating,
                     entrySelector + " #InspectButton",
                     EventData.of(EVENT_ACTION, INSPECT_PREFIX + entry.npcUuid()),
+                    false
+            );
+            eventBuilder.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    entrySelector + " #DebugFlagsButton",
+                    EventData.of(EVENT_ACTION, DEBUG_FLAGS_PREFIX + entry.npcUuid()),
                     false
             );
             eventBuilder.addEventBinding(

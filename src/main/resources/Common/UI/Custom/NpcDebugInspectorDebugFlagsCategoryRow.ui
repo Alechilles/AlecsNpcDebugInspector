@@ -1,0 +1,30 @@
+$C = "Common.ui";
+
+Group {
+  LayoutMode: Top;
+  Anchor: (Top: 6, Bottom: 2);
+
+  Group {
+    Anchor: (Height: 1, Bottom: 4);
+    Background: #2f3b4f;
+  }
+
+  Group {
+    Anchor: (Height: 24);
+    LayoutMode: Left;
+
+    Label #CategoryTitle {
+      Anchor: (Left: 0, Right: 0, Height: 24);
+      Text: "CATEGORY";
+      Style: (
+        FontSize: 13,
+        RenderBold: true,
+        TextColor: #eff4fa,
+        HorizontalAlignment: Start,
+        VerticalAlignment: Center,
+        RenderUppercase: true,
+        LetterSpacing: 1
+      );
+    }
+  }
+}

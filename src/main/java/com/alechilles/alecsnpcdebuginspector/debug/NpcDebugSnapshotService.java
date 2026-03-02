@@ -181,7 +181,6 @@ public final class NpcDebugSnapshotService {
         StateSupport stateSupport = role.getStateSupport();
         EntitySupport entitySupport = role.getEntitySupport();
         appendTrackedLine(sb, npcUuid, now, "ai.available", "Available", "true", true, false);
-        appendTrackedLine(sb, npcUuid, now, "ai.state", "State", safeText(stateSupport.getStateName(), "<unknown>"), true, true);
         appendTrackedLine(sb, npcUuid, now, "ai.stateIndex", "State Index", String.valueOf(stateSupport.getStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.subStateIndex", "Sub-State Index", String.valueOf(stateSupport.getSubStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.busy", "In Busy State", String.valueOf(stateSupport.isInBusyState()), true, true);
@@ -196,8 +195,6 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "ai.interactionInstruction", "Interaction Instruction", resolveInstructionLabel(role.getInteractionInstruction()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.deathInstruction", "Death Instruction", resolveInstructionLabel(role.getDeathInstruction()), true, false);
 
-        MotionController motionController = role.getActiveMotionController();
-        appendTrackedLine(sb, npcUuid, now, "ai.motionController", "Motion Controller", motionController != null ? motionController.getType() : "<none>", true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.steeringMotion", "Steering Motion", safeText(role.getSteeringMotionName(), "<none>"), true, false);
         return sb.toString().trim();
     }
@@ -309,26 +306,6 @@ public final class NpcDebugSnapshotService {
         }
 
         appendTrackedLine(sb, npcUuid, now, "timers.available", "Available", "true", true, false);
-
-        AlarmStore alarmStore = npc.getAlarmStore();
-        Map<String, Alarm> alarms = readAlarmMap(alarmStore);
-        appendTrackedLine(sb, npcUuid, now, "timers.alarmCount", "Alarm Count", String.valueOf(alarms.size()), true, false);
-        if (!alarms.isEmpty()) {
-            List<Map.Entry<String, Alarm>> ordered = new ArrayList<>(alarms.entrySet());
-            ordered.sort(Comparator.comparing(Map.Entry::getKey, String.CASE_INSENSITIVE_ORDER));
-            int limit = Math.min(12, ordered.size());
-            for (int i = 0; i < limit; i++) {
-                Map.Entry<String, Alarm> entry = ordered.get(i);
-                String status = resolveAlarmStatus(entry.getValue(), now);
-                String remaining = resolveAlarmRemainingText(entry.getValue(), now);
-                String value = remaining != null ? status + " (" + remaining + ")" : status;
-                appendTrackedLine(sb, npcUuid, now, "timers.alarm." + entry.getKey(), "Alarm " + entry.getKey(), value, true, true);
-            }
-            if (ordered.size() > limit) {
-                appendTrackedLine(sb, npcUuid, now, "timers.alarm.overflow", "Additional Alarms", String.valueOf(ordered.size() - limit), false, false);
-            }
-        }
-
         appendTrackedLine(sb, npcUuid, now, "timers.despawnSeconds", "Despawn Countdown (s)", formatNumber(npc.getDespawnTime()), true, false);
 
         CombatSupport combatSupport = npc.getRole().getCombatSupport();
@@ -356,7 +333,6 @@ public final class NpcDebugSnapshotService {
         }
 
         appendTrackedLine(sb, npcUuid, now, "lifecycle.available", "Available", "true", true, false);
-        appendTrackedLine(sb, npcUuid, now, "lifecycle.spawnInstant", "Spawn Instant (UTC)", formatNullableInstant(npc.getSpawnInstant()), true, false);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.spawnLockTime", "Spawn Lock Time (s)", formatNumber(npc.getRole().getSpawnLockTime()), true, false);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.isDespawning", "Is Despawning", String.valueOf(npc.isDespawning()), true, true);
         appendTrackedLine(sb, npcUuid, now, "lifecycle.isPlayingDespawnAnim", "Playing Despawn Animation", String.valueOf(npc.isPlayingDespawnAnim()), true, false);
@@ -404,24 +380,6 @@ public final class NpcDebugSnapshotService {
             }
         }
 
-        ComponentType<EntityStore, FlockMembership> flockType = FlockMembership.getComponentType();
-        FlockMembership membership = flockType != null ? store.getComponent(npcRef, flockType) : null;
-        if (membership == null) {
-            appendTrackedLine(sb, npcUuid, now, "relationships.flock", "Flock", "none", true, true);
-        } else {
-            appendTrackedLine(sb, npcUuid, now, "relationships.flock", "Flock", String.valueOf(membership.getFlockId()), true, true);
-            appendTrackedLine(sb, npcUuid, now, "relationships.membershipType", "Membership Type", String.valueOf(membership.getMembershipType()), true, false);
-            Ref<EntityStore> flockRef = membership.getFlockRef();
-            appendTrackedLine(sb, npcUuid, now, "relationships.flockRef", "Flock Ref Valid", String.valueOf(flockRef != null && flockRef.isValid()), true, false);
-            if (flockRef != null && flockRef.isValid()) {
-                EntityGroup group = store.getComponent(flockRef, EntityGroup.getComponentType());
-                if (group != null) {
-                    Ref<EntityStore> leaderRef = group.getLeaderRef();
-                    appendTrackedLine(sb, npcUuid, now, "relationships.leader", "Leader Ref", leaderRef != null ? String.valueOf(leaderRef) : "<none>", true, true);
-                }
-            }
-        }
-
         Map<String, String> scopeValues = snapshotScopeValues(role.getEntitySupport().getSensorScope());
         List<Map.Entry<String, String>> relationshipKeys = filterScope(scopeValues,
                 "owner", "tamer", "leader", "follower", "flock", "home", "leash", "parent", "mate", "bond");
@@ -442,7 +400,6 @@ public final class NpcDebugSnapshotService {
         }
 
         appendTrackedLine(sb, npcUuid, now, "combat.available", "Available", "true", true, false);
-        appendTrackedLine(sb, npcUuid, now, "combat.health", "Health", resolveHealthText(npcRef, store), true, false);
 
         CombatSupport combatSupport = npc.getRole().getCombatSupport();
         appendTrackedLine(sb, npcUuid, now, "combat.executing", "Executing Attack", String.valueOf(combatSupport.isExecutingAttack()), true, true);
@@ -628,7 +585,6 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "flock.membership", "Membership", String.valueOf(membership.getMembershipType()), true, true);
         appendTrackedLine(sb, npcUuid, now, "flock.id", "Flock Id", String.valueOf(membership.getFlockId()), true, true);
         appendTrackedLine(sb, npcUuid, now, "flock.ref", "Flock Ref Valid", String.valueOf(membership.getFlockRef() != null && membership.getFlockRef().isValid()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "flock.leashPoint", "Leash Point", formatVector(npc.getLeashPoint()), true, false);
 
         Ref<EntityStore> flockRef = membership.getFlockRef();
         if (flockRef != null && flockRef.isValid()) {

@@ -272,14 +272,14 @@ public final class NpcDebugInspectorRosterPage
         }
 
         commandBuilder.set(entrySelector + " #CardName.Text", entry.displayName());
-        commandBuilder.set(entrySelector + " #CardUuid.Text", "UUID: " + entry.npcUuid());
-        commandBuilder.set(entrySelector + " #CardRole.Text", "Role: " + entry.roleId());
-        commandBuilder.set(entrySelector + " #CardStatus.Text", "Status: " + (entry.loaded() ? "Loaded" : "Unloaded"));
-        commandBuilder.set(entrySelector + " #CardState.Text", "State: " + defaultText(entry.stateName(), "n/a"));
-        commandBuilder.set(entrySelector + " #CardHealth.Text", "Health: " + defaultText(entry.healthText(), "n/a"));
-        commandBuilder.set(entrySelector + " #CardFlock.Text", "Flock: " + defaultText(entry.flockText(), "n/a"));
-        commandBuilder.set(entrySelector + " #CardLocation.Text", "Location: " + defaultText(entry.locationText(), "n/a"));
-        commandBuilder.set(entrySelector + " #CardDistance.Text", "Distance: " + defaultText(entry.distanceText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardUuid.Text", entry.npcUuid().toString());
+        commandBuilder.set(entrySelector + " #CardRole.Text", defaultText(entry.roleId(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardStatus.Text", entry.loaded() ? "Loaded" : "Unloaded");
+        commandBuilder.set(entrySelector + " #CardState.Text", defaultText(entry.stateName(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardHealth.Text", defaultText(entry.healthText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardFlock.Text", defaultText(entry.flockText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardLocation.Text", defaultText(entry.locationText(), "n/a"));
+        commandBuilder.set(entrySelector + " #CardDistance.Text", defaultText(entry.distanceText(), "n/a"));
         commandBuilder.set(entrySelector + " #CardChange.Text", defaultText(changeSummaryByUuid.get(entry.npcUuid()), ""));
         commandBuilder.set(
                 entrySelector + " #CardHighlightState.Text",

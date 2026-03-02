@@ -682,7 +682,17 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 if (rebuildStructure) {
                     commandBuilder.append(sectionSelector + " #SectionFields", FIELD_ROW_UI_PATH);
                 }
-                commandBuilder.set(fieldSelector + " #FieldText.Text", field.displayText);
+                FieldNameValue nameValue = splitFieldNameAndValue(field.displayText);
+                boolean showSplitField = nameValue != null;
+                commandBuilder.set(fieldSelector + " #FieldText.Visible", !showSplitField);
+                commandBuilder.set(fieldSelector + " #FieldName.Visible", showSplitField);
+                commandBuilder.set(fieldSelector + " #FieldValue.Visible", showSplitField);
+                if (showSplitField) {
+                    commandBuilder.set(fieldSelector + " #FieldName.Text", nameValue.nameText);
+                    commandBuilder.set(fieldSelector + " #FieldValue.Text", nameValue.valueText);
+                } else {
+                    commandBuilder.set(fieldSelector + " #FieldText.Text", field.displayText);
+                }
                 commandBuilder.set(fieldSelector + " #FieldChanged.Visible", field.changed);
 
                 boolean showCheck = pinModeEnabled && field.pinnable && field.key != null;
@@ -897,6 +907,20 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         return new InspectorField(line.key, value, changed, pinnable);
     }
 
+    @Nullable
+    private FieldNameValue splitFieldNameAndValue(@Nonnull String displayText) {
+        int separatorIndex = displayText.indexOf(": ");
+        if (separatorIndex <= 0 || separatorIndex + 2 > displayText.length()) {
+            return null;
+        }
+        String name = displayText.substring(0, separatorIndex + 1).trim();
+        String value = displayText.substring(separatorIndex + 2).trim();
+        if (name.isBlank() || value.isBlank()) {
+            return null;
+        }
+        return new FieldNameValue(name, value);
+    }
+
     private void syncPinnedStateFromManager() {
         pinnedFieldKeys.clear();
         if (targetNpcUuid == null) {
@@ -1075,6 +1099,16 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             this.displayText = displayText;
             this.changed = changed;
             this.pinnable = pinnable;
+        }
+    }
+
+    private static final class FieldNameValue {
+        private final String nameText;
+        private final String valueText;
+
+        private FieldNameValue(@Nonnull String nameText, @Nonnull String valueText) {
+            this.nameText = nameText;
+            this.valueText = valueText;
         }
     }
 

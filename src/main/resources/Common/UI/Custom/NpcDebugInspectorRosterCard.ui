@@ -30,7 +30,7 @@ Group {
   Padding: (Left: 10, Right: 10, Top: 8, Bottom: 8);
 
   Label #CardName {
-    Anchor: (Top: 0, Left: 0, Right: 240, Height: 22);
+    Anchor: (Top: 0, Left: 0, Right: 260, Height: 22);
     Text: "NPC";
     Style: (
       FontSize: 16,
@@ -42,7 +42,7 @@ Group {
   }
 
   Label #CardUuid {
-    Anchor: (Top: 22, Left: 0, Right: 240, Height: 16);
+    Anchor: (Top: 22, Left: 0, Right: 260, Height: 16);
     Text: "UUID:";
     Style: (
       FontSize: 11,
@@ -53,7 +53,7 @@ Group {
   }
 
   Label #CardRole {
-    Anchor: (Top: 40, Left: 0, Right: 240, Height: 16);
+    Anchor: (Top: 40, Left: 0, Right: 260, Height: 16);
     Text: "Role:";
     Style: (
       FontSize: 12,
@@ -64,7 +64,7 @@ Group {
   }
 
   Label #CardStatus {
-    Anchor: (Top: 58, Left: 0, Width: 255, Height: 16);
+    Anchor: (Top: 58, Left: 0, Width: 170, Height: 16);
     Text: "Status:";
     Style: (
       FontSize: 12,
@@ -75,7 +75,7 @@ Group {
   }
 
   Label #CardHealth {
-    Anchor: (Top: 58, Left: 262, Width: 210, Height: 16);
+    Anchor: (Top: 58, Left: 178, Width: 120, Height: 16);
     Text: "Health:";
     Style: (
       FontSize: 12,
@@ -86,7 +86,7 @@ Group {
   }
 
   Label #CardState {
-    Anchor: (Top: 76, Left: 0, Width: 255, Height: 16);
+    Anchor: (Top: 76, Left: 0, Width: 170, Height: 16);
     Text: "State:";
     Style: (
       FontSize: 12,
@@ -97,7 +97,7 @@ Group {
   }
 
   Label #CardFlock {
-    Anchor: (Top: 76, Left: 262, Width: 210, Height: 16);
+    Anchor: (Top: 76, Left: 178, Width: 120, Height: 16);
     Text: "Flock:";
     Style: (
       FontSize: 12,
@@ -108,7 +108,7 @@ Group {
   }
 
   Label #CardLocation {
-    Anchor: (Top: 94, Left: 0, Width: 255, Height: 16);
+    Anchor: (Top: 94, Left: 0, Width: 170, Height: 16);
     Text: "Location:";
     Style: (
       FontSize: 12,
@@ -119,7 +119,7 @@ Group {
   }
 
   Label #CardDistance {
-    Anchor: (Top: 94, Left: 262, Width: 210, Height: 16);
+    Anchor: (Top: 94, Left: 178, Width: 120, Height: 16);
     Text: "Distance:";
     Style: (
       FontSize: 12,
@@ -130,7 +130,7 @@ Group {
   }
 
   Label #CardChange {
-    Anchor: (Top: 112, Left: 0, Width: 255, Height: 16);
+    Anchor: (Top: 112, Left: 0, Width: 170, Height: 16);
     Text: "";
     Style: (
       FontSize: 12,
@@ -141,7 +141,7 @@ Group {
   }
 
   Label #CardHighlightState {
-    Anchor: (Top: 112, Left: 262, Width: 210, Height: 16);
+    Anchor: (Top: 112, Left: 178, Width: 120, Height: 16);
     Text: "";
     Style: (
       FontSize: 12,
@@ -152,13 +152,13 @@ Group {
   }
 
   Group #CardActionButtonsTop {
-    Anchor: (Top: 48, Right: 0, Width: 220, Height: 30);
+    Anchor: (Top: 48, Right: 0, Width: 248, Height: 30);
     LayoutMode: Left;
 
     $C.@SmallSecondaryTextButton #InspectButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Inspect";
-      @Anchor = (Width: 106);
+      @Anchor = (Width: 120);
     }
 
     Group {
@@ -168,18 +168,18 @@ Group {
     $C.@SmallSecondaryTextButton #DebugFlagsButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Debug Flags";
-      @Anchor = (Width: 106);
+      @Anchor = (Width: 120);
     }
   }
 
   Group #CardActionButtonsBottom {
-    Anchor: (Top: 82, Right: 0, Width: 220, Height: 30);
+    Anchor: (Top: 86, Right: 0, Width: 248, Height: 30);
     LayoutMode: Left;
 
     $C.@SmallSecondaryTextButton #HighlightButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Highlight";
-      @Anchor = (Width: 106);
+      @Anchor = (Width: 120);
     }
 
     Group {
@@ -189,12 +189,12 @@ Group {
     $C.@SmallSecondaryTextButton #CopyButton {
       @Sounds = $C.@ButtonSounds;
       @Text = "Copy UUID";
-      @Anchor = (Width: 106);
+      @Anchor = (Width: 120);
     }
   }
 
   TextButton #UnlinkButton {
-    Anchor: (Top: -2, Right: 0, Width: 28, Height: 28);
+    Anchor: (Top: 1, Right: 2, Width: 28, Height: 28);
     Style: @RosterRemoveIconButtonStyle;
     Text: "";
     TooltipText: "Unlink";

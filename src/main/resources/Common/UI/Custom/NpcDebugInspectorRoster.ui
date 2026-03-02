@@ -4,7 +4,7 @@ $C.@PageOverlay {
   LayoutMode: Middle;
 
   $C.@DecoratedContainer #NpcDebugRosterRoot {
-    Anchor: (Width: 980, Height: 740);
+    Anchor: (Width: 600, Height: 740);
 
     #Title {
       $C.@Title #NpcDebugRosterTitle {
@@ -35,7 +35,7 @@ $C.@PageOverlay {
           Style: $C.@DefaultInputFieldStyle;
           PlaceholderStyle: $C.@DefaultInputFieldPlaceholderStyle;
           Background: $C.@InputBoxBackground;
-          Anchor: (Width: 600, Height: 30);
+          Anchor: (Width: 360, Height: 30);
           Padding: (Horizontal: 10);
           PlaceholderText: "Name/state contains...";
           MaxLength: 48;

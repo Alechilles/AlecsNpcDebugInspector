@@ -77,7 +77,6 @@ public final class NpcDebugInspectorRosterPage
     private final Map<UUID, NpcDebugLinkedEntry> previousEntriesByUuid;
     private final Map<UUID, String> changeSummaryByUuid;
     private final Set<UUID> highlightedNpcUuids;
-    private final NpcDebugHighlightVisualizer highlightVisualizer;
 
     private boolean filterLoadedOnly;
     private boolean filterSameFlock;
@@ -118,7 +117,6 @@ public final class NpcDebugInspectorRosterPage
         this.previousEntriesByUuid = new HashMap<>();
         this.changeSummaryByUuid = new HashMap<>();
         this.highlightedNpcUuids = new HashSet<>();
-        this.highlightVisualizer = new NpcDebugHighlightVisualizer();
         this.filterLoadedOnly = false;
         this.filterSameFlock = false;
         this.filterQuery = "";
@@ -383,7 +381,6 @@ public final class NpcDebugInspectorRosterPage
             return;
         }
         refreshEntries();
-        emitHighlightVisualization();
         sendRefreshUpdate();
         if (!dismissed && isCurrentPageActive() && generation == refreshTickGeneration.get()) {
             scheduleRefreshTick();
@@ -774,25 +771,6 @@ public final class NpcDebugInspectorRosterPage
         } catch (IOException | RuntimeException ignored) {
             return Map.of();
         }
-    }
-
-    private void emitHighlightVisualization() {
-        if (highlightedNpcUuids.isEmpty()) {
-            return;
-        }
-        Ref<EntityStore> ref = playerRef.getReference();
-        if (ref == null || !ref.isValid()) {
-            return;
-        }
-        Store<EntityStore> store = ref.getStore();
-        if (store == null || store.getExternalData() == null) {
-            return;
-        }
-        World world = store.getExternalData().getWorld();
-        if (world == null) {
-            return;
-        }
-        highlightVisualizer.render(playerRef, store, highlightedNpcUuids);
     }
 
     @Nonnull

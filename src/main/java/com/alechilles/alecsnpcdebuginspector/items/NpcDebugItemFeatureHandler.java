@@ -2,6 +2,7 @@ package com.alechilles.alecsnpcdebuginspector.items;
 
 import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugTargeting;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
+import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugInspectorRosterPage;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugLinkedEntry;
@@ -104,6 +105,7 @@ public final class NpcDebugItemFeatureHandler {
         if (player.getPageManager() == null) {
             return false;
         }
+        ensureHighlightTracking(player, toolId);
         NpcDebugInspectorRosterPage page = new NpcDebugInspectorRosterPage(
                 uiPlayerRef,
                 () -> buildEntriesForTool(player, store, toolId),
@@ -168,6 +170,15 @@ public final class NpcDebugItemFeatureHandler {
             inventory.markChanged();
         }
         player.sendInventory();
+        ensureHighlightTracking(player, toolId);
+    }
+
+    private void ensureHighlightTracking(@Nonnull Player player, @Nonnull String toolId) {
+        PlayerRef uiPlayerRef = player.getPlayerRef();
+        if (uiPlayerRef == null || !uiPlayerRef.isValid()) {
+            return;
+        }
+        NpcDebugHighlightManager.ensureTracking(uiPlayerRef, () -> readHighlightsForTool(player, toolId));
     }
 
     @Nullable

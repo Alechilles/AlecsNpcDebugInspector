@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector;
 import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugCommand;
 import com.alechilles.alecsnpcdebuginspector.interactions.NpcDebugInspectorItemInteraction;
 import com.alechilles.alecsnpcdebuginspector.items.NpcDebugItemFeatureHandler;
+import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
@@ -41,6 +42,7 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     @Override
     protected void shutdown() {
+        NpcDebugHighlightManager.stopAll();
         getLogger().at(Level.INFO).log("Alec's NPC Debug Inspector disabled.");
     }
 

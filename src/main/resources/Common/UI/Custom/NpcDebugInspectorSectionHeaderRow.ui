@@ -58,11 +58,11 @@ Group {
 
     Group {
       LayoutMode: Right;
-      Anchor: (Width: 150, Height: 28);
+      Anchor: (Width: 122, Height: 28);
       Padding: (Right: 2);
 
       Label #SectionCount {
-        Anchor: (Width: 90, Height: 28);
+        Anchor: (Width: 88, Height: 28);
         Text: "0 fields";
         Style: (
           FontSize: 11,
@@ -72,42 +72,32 @@ Group {
         );
       }
 
-      Button #SectionMoveUpButton {
-        Anchor: (Width: 26, Height: 28);
-        TooltipText: "Move section up";
-        Style: ButtonStyle(
-          Default: (Background: (Color: #00000000)),
-          Hovered: (Background: (Color: #ffffff10)),
-          Pressed: (Background: (Color: #ffffff08))
-        );
+      ReorderableListGrip #SectionMoveButton {
+        Anchor: (Width: 28, Height: 28);
+        TooltipText: %client.settings.dragToReorder;
 
         Group {
           LayoutMode: Middle;
           Anchor: (Full: 0);
 
-          Group #SectionMoveUpIcon {
-            Anchor: (Width: 12, Height: 7);
-            Background: "NpcDebugInspectorCaretUp.png";
-          }
-        }
-      }
+          Group {
+            LayoutMode: Top;
+            Anchor: (Width: 12, Height: 10);
 
-      Button #SectionMoveDownButton {
-        Anchor: (Width: 26, Height: 28);
-        TooltipText: "Move section down";
-        Style: ButtonStyle(
-          Default: (Background: (Color: #00000000)),
-          Hovered: (Background: (Color: #ffffff10)),
-          Pressed: (Background: (Color: #ffffff08))
-        );
+            Group {
+              Anchor: (Height: 2, Bottom: 2);
+              Background: #8f9eb3;
+            }
 
-        Group {
-          LayoutMode: Middle;
-          Anchor: (Full: 0);
+            Group {
+              Anchor: (Height: 2, Bottom: 2);
+              Background: #8f9eb3;
+            }
 
-          Group #SectionMoveDownIcon {
-            Anchor: (Width: 12, Height: 7);
-            Background: "NpcDebugInspectorCaretDown.png";
+            Group {
+              Anchor: (Height: 2);
+              Background: #8f9eb3;
+            }
           }
         }
       }

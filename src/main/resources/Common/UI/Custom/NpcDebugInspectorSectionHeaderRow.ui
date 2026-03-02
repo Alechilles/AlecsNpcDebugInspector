@@ -1,42 +1,98 @@
 $C = "Common.ui";
 
 Group {
-  Anchor: (Top: 4, Left: 0, Right: 0, Height: 36);
-  Background: (TexturePath: "Common/ContainerPanelPatch.png", Border: 4);
-  Padding: (Left: 6, Right: 6, Top: 5, Bottom: 5);
+  LayoutMode: Top;
+  Anchor: (Top: 4, Bottom: 2);
 
-  $C.@SmallSecondaryTextButton #SectionToggleButton {
-    @Sounds = $C.@ButtonSounds;
-    @Text = "▾";
-    @Anchor = (Left: 0, Top: 0, Width: 30, Height: 24);
+  Group {
+    Anchor: (Height: 1, Bottom: 4);
+    Background: #2f3b4f;
   }
 
-  Label #SectionTitle {
-    Anchor: (Left: 36, Top: 0, Right: 98, Height: 24);
-    Text: "OVERVIEW";
-    Style: (
-      FontSize: 14,
-      RenderBold: true,
-      TextColor: #eff4fa,
-      HorizontalAlignment: Start,
-      VerticalAlignment: Center
-    );
-  }
+  Group {
+    LayoutMode: Left;
+    Anchor: (Height: 28);
 
-  Label #SectionCount {
-    Anchor: (Right: 38, Top: 0, Width: 56, Height: 24);
-    Text: "0 fields";
-    Style: (
-      FontSize: 11,
-      TextColor: #b7c8dc,
-      HorizontalAlignment: End,
-      VerticalAlignment: Center
-    );
-  }
+    Button #SectionToggleButton {
+      LayoutMode: Left;
+      FlexWeight: 1;
+      Anchor: (Height: 28);
+      Style: ButtonStyle(
+        Default: (Background: (Color: #00000000)),
+        Hovered: (Background: (Color: #ffffff10)),
+        Pressed: (Background: (Color: #ffffff08))
+      );
 
-  $C.@SmallSecondaryTextButton #SectionMoveButton {
-    @Sounds = $C.@ButtonSounds;
-    @Text = "≡";
-    @Anchor = (Right: 0, Top: 0, Width: 32, Height: 24);
+      Label #SectionToggleGlyph {
+        Anchor: (Width: 20, Height: 28);
+        Text: "v";
+        Style: (
+          FontSize: 14,
+          RenderBold: true,
+          TextColor: #d7dfeb,
+          HorizontalAlignment: Center,
+          VerticalAlignment: Center
+        );
+      }
+
+      Label #SectionTitle {
+        Anchor: (Left: 22, Right: 126, Height: 28);
+        Text: "OVERVIEW";
+        Style: (
+          FontSize: 13,
+          RenderBold: true,
+          TextColor: #eff4fa,
+          HorizontalAlignment: Start,
+          VerticalAlignment: Center,
+          RenderUppercase: true,
+          LetterSpacing: 1
+        );
+      }
+
+      Label #SectionCount {
+        Anchor: (Right: 10, Width: 96, Height: 28);
+        Text: "0 fields";
+        Style: (
+          FontSize: 11,
+          TextColor: #a9bfd7,
+          HorizontalAlignment: End,
+          VerticalAlignment: Center
+        );
+      }
+    }
+
+    Button #SectionMoveButton {
+      Anchor: (Width: 28, Height: 28);
+      Style: ButtonStyle(
+        Default: (Background: (Color: #00000000)),
+        Hovered: (Background: (Color: #ffffff10)),
+        Pressed: (Background: (Color: #ffffff08))
+      );
+
+      Group {
+        LayoutMode: Middle;
+        Anchor: (Full: 0);
+
+        Group {
+          LayoutMode: Top;
+          Anchor: (Width: 12, Height: 10);
+
+          Group {
+            Anchor: (Height: 2, Bottom: 2);
+            Background: #8f9eb3;
+          }
+
+          Group {
+            Anchor: (Height: 2, Bottom: 2);
+            Background: #8f9eb3;
+          }
+
+          Group {
+            Anchor: (Height: 2);
+            Background: #8f9eb3;
+          }
+        }
+      }
+    }
   }
 }

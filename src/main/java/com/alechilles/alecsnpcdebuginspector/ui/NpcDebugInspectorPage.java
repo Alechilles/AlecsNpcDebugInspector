@@ -246,8 +246,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and ≡ to reorder."
-                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and ≡ to reorder."
+                        ? "Pinned overlay active. Select field checkboxes. Use section arrows to collapse and the handle to reorder."
+                        : "Pin NPC to create a separate overlay. Use section arrows to collapse and the handle to reorder."
         );
     }
 
@@ -278,10 +278,9 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             rowIndex++;
             commandBuilder.append("#NpcDebugInspectorFieldList", SECTION_HEADER_UI_PATH);
             boolean collapsed = collapsedSectionIds.contains(section.id);
-            commandBuilder.set(sectionSelector + " #SectionToggleButton.Text", collapsed ? "▸" : "▾");
+            commandBuilder.set(sectionSelector + " #SectionToggleGlyph.Text", collapsed ? ">" : "v");
             commandBuilder.set(sectionSelector + " #SectionTitle.Text", section.title.toUpperCase(Locale.ROOT));
             commandBuilder.set(sectionSelector + " #SectionCount.Text", section.fields.length + " fields");
-            commandBuilder.set(sectionSelector + " #SectionMoveButton.Text", "≡");
 
             eventBuilder.addEventBinding(
                     CustomUIEventBindingType.Activating,

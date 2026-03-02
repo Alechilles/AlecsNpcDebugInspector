@@ -22,8 +22,7 @@ public final class NpcDebugHighlightVisualizer {
     private static final double MIN_RING_OUTER_RADIUS = 0.35;
     private static final double RING_RADIUS_PADDING = 0.30;
     private static final double RING_THICKNESS = 0.08;
-    private static final double PLAYER_RING_OUTER_RADIUS = 0.50;
-    private static final double PLAYER_RING_INNER_RADIUS = 0.40;
+    private static final double PLAYER_LINE_ENDPOINT_PADDING = 0.0;
     private static final double LINE_THICKNESS = 0.04;
     private static final double MIN_HORIZONTAL_DISTANCE = 0.001;
     private static final float SHAPE_OPACITY = 0.85F;
@@ -53,19 +52,6 @@ public final class NpcDebugHighlightVisualizer {
 
         Vector3d observerPosition = observerTransform.getPosition();
         double observerMidY = observerPosition.y + observerBoundingBox.getBoundingBox().max.y / 2.0;
-        DebugUtils.addDisc(
-                world,
-                observerPosition.x,
-                observerMidY,
-                observerPosition.z,
-                PLAYER_RING_OUTER_RADIUS,
-                PLAYER_RING_INNER_RADIUS,
-                HIGHLIGHT_COLOR,
-                SHAPE_OPACITY,
-                SHAPE_SEGMENT_COUNT,
-                SHAPE_LIFETIME_SECONDS,
-                false
-        );
 
         for (UUID highlightedNpcUuid : highlightedNpcUuids) {
             if (highlightedNpcUuid == null) {
@@ -111,7 +97,7 @@ public final class NpcDebugHighlightVisualizer {
                     observerPosition.x,
                     observerMidY,
                     observerPosition.z,
-                    PLAYER_RING_OUTER_RADIUS
+                    PLAYER_LINE_ENDPOINT_PADDING
             );
         }
     }
@@ -129,7 +115,7 @@ public final class NpcDebugHighlightVisualizer {
                                              double observerX,
                                              double observerY,
                                              double observerZ,
-                                             double observerRadius) {
+                                             double observerPadding) {
         double dirX = observerX - npcX;
         double dirZ = observerZ - npcZ;
         double horizontalDistance = Math.sqrt(dirX * dirX + dirZ * dirZ);
@@ -142,8 +128,8 @@ public final class NpcDebugHighlightVisualizer {
         double horizontalDirZ = dirZ / horizontalDistance;
         double startX = npcX + horizontalDirX * npcRadius;
         double startZ = npcZ + horizontalDirZ * npcRadius;
-        double endX = observerX - horizontalDirX * observerRadius;
-        double endZ = observerZ - horizontalDirZ * observerRadius;
+        double endX = observerX - horizontalDirX * observerPadding;
+        double endZ = observerZ - horizontalDirZ * observerPadding;
         DebugUtils.addLine(
                 world,
                 startX,

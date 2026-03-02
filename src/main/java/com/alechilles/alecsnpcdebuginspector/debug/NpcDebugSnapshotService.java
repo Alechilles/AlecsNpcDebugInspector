@@ -4,6 +4,8 @@ import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.entity.Entity;
+import com.hypixel.hytale.server.core.entity.EntityUtils;
 import com.hypixel.hytale.server.core.entity.group.EntityGroup;
 import com.hypixel.hytale.server.core.inventory.Inventory;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
@@ -51,6 +53,8 @@ import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -68,6 +72,7 @@ public final class NpcDebugSnapshotService {
     private static final String ALARM_STATUS_SET = "set";
     private static final String ALARM_STATUS_UNSET = "unset";
     private static final String ALARM_STATUS_READY = "ready";
+    private static final Pattern REF_INDEX_PATTERN = Pattern.compile("index=(-?\\d+)");
 
     private final NpcDebugHistoryStore historyStore = new NpcDebugHistoryStore();
 
@@ -1056,27 +1061,40 @@ public final class NpcDebugSnapshotService {
     private String resolveDisplayNameOnly(@Nullable Ref<EntityStore> npcRef,
                                           @Nonnull Store<EntityStore> store,
                                           @Nonnull NPCEntity npc) {
-        if (npcRef != null && npcRef.isValid()) {
-            Object displayNameComponent = store.getComponent(npcRef, com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent.getComponentType());
-            if (displayNameComponent != null) {
-                try {
-                    Method getDisplayName = displayNameComponent.getClass().getMethod("getDisplayName");
-                    Object message = getDisplayName.invoke(displayNameComponent);
-                    if (message != null) {
-                        Method getAnsiMessage = message.getClass().getMethod("getAnsiMessage");
-                        Object ansi = getAnsiMessage.invoke(message);
-                        if (ansi instanceof String text && !text.isBlank()) {
-                            return text;
-                        }
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                    // Best-effort only.
-                }
-            }
+        String displayName = resolveDisplayNameFromComponent(npcRef, store);
+        if (displayName != null) {
+            return displayName;
         }
         String legacy = npc.getLegacyDisplayName();
         if (legacy != null && !legacy.isBlank()) {
             return legacy;
+        }
+        return null;
+    }
+
+    @Nullable
+    private String resolveDisplayNameFromComponent(@Nullable Ref<EntityStore> ref,
+                                                   @Nonnull Store<EntityStore> store) {
+        if (ref == null || !ref.isValid()) {
+            return null;
+        }
+        Object displayNameComponent = store.getComponent(ref, com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent.getComponentType());
+        if (displayNameComponent == null) {
+            return null;
+        }
+        try {
+            Method getDisplayName = displayNameComponent.getClass().getMethod("getDisplayName");
+            Object message = getDisplayName.invoke(displayNameComponent);
+            if (message == null) {
+                return null;
+            }
+            Method getAnsiMessage = message.getClass().getMethod("getAnsiMessage");
+            Object ansi = getAnsiMessage.invoke(message);
+            if (ansi instanceof String text && !text.isBlank()) {
+                return text;
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Best-effort only.
         }
         return null;
     }
@@ -1088,17 +1106,27 @@ public final class NpcDebugSnapshotService {
             return "<none>";
         }
 
-        NPCEntity targetNpc = store.getComponent(ref, NPCEntity.getComponentType());
-        if (targetNpc == null) {
+        Entity targetEntity = EntityUtils.getEntity(ref, store);
+        if (targetEntity == null) {
             return String.valueOf(ref);
         }
 
-        String preferredName = firstNonBlank(
-                resolveDisplayNameOnly(ref, store, targetNpc),
-                resolveEntityNameFromNameKey(targetNpc),
-                resolveRoleId(targetNpc)
-        );
-        UUID targetUuid = targetNpc.getUuid();
+        String preferredName;
+        if (targetEntity instanceof NPCEntity targetNpc) {
+            preferredName = firstNonBlank(
+                    resolveDisplayNameOnly(ref, store, targetNpc),
+                    resolveEntityNameFromNameKey(targetNpc),
+                    resolveRoleId(targetNpc)
+            );
+        } else {
+            preferredName = firstNonBlank(
+                    resolveDisplayNameFromComponent(ref, store),
+                    targetEntity.getLegacyDisplayName(),
+                    targetEntity.getClass().getSimpleName()
+            );
+        }
+
+        UUID targetUuid = targetEntity.getUuid();
         String uuidText = targetUuid != null ? targetUuid.toString() : "<unknown-uuid>";
         return preferredName + " (" + uuidText + ")";
     }
@@ -1128,9 +1156,32 @@ public final class NpcDebugSnapshotService {
         }
         Ref<EntityStore> ref = matchMarkedEntityRef(key, value, marked);
         if (ref == null || !ref.isValid()) {
+            ref = parseScopeRef(value, store);
+        }
+        if (ref == null || !ref.isValid()) {
             return value;
         }
         return resolveEntityTargetLabel(ref, store);
+    }
+
+    @Nullable
+    private Ref<EntityStore> parseScopeRef(@Nonnull String value, @Nonnull Store<EntityStore> store) {
+        Matcher matcher = REF_INDEX_PATTERN.matcher(value);
+        if (!matcher.find()) {
+            return null;
+        }
+        int index;
+        try {
+            index = Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+        if (index == Integer.MIN_VALUE) {
+            return null;
+        }
+        Ref<EntityStore> parsedRef = new Ref<>(store, index);
+        Entity parsedEntity = EntityUtils.getEntity(parsedRef, store);
+        return parsedEntity != null ? parsedRef : null;
     }
 
     @Nullable

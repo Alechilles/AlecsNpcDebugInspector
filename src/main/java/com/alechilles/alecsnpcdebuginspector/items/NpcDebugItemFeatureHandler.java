@@ -107,7 +107,7 @@ public final class NpcDebugItemFeatureHandler {
                 uiPlayerRef,
                 () -> buildEntriesForTool(player, store, toolId),
                 () -> resolveCurrentTargetFlockId(playerRef, store),
-                npcUuid -> openInspectorForUuid(player, playerRef, uiPlayerRef, store, toolId, npcUuid),
+                npcUuid -> openInspectorForUuid(player, playerRef, uiPlayerRef, store, npcUuid),
                 npcUuid -> unlinkNpcFromTool(player, toolId, npcUuid),
                 message -> player.sendMessage(Message.raw(message))
         );
@@ -163,7 +163,6 @@ public final class NpcDebugItemFeatureHandler {
                                       @Nonnull Ref<EntityStore> playerRef,
                                       @Nonnull PlayerRef uiPlayerRef,
                                       @Nonnull Store<EntityStore> store,
-                                      @Nonnull String toolId,
                                       @Nonnull UUID npcUuid) {
         if (player.getPageManager() != null) {
             player.getPageManager().openCustomPage(
@@ -176,8 +175,7 @@ public final class NpcDebugItemFeatureHandler {
                                 World world = player.getWorld();
                                 Ref<EntityStore> targetRef = world != null ? world.getEntityRef(npcUuid) : null;
                                 return snapshotService.capture(npcUuid, targetRef, playerRef, store);
-                            },
-                            () -> openRosterPage(player, playerRef, uiPlayerRef, store, toolId)
+                            }
                     )
             );
         }

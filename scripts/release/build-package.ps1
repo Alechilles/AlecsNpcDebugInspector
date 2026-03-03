@@ -261,4 +261,5 @@ if ($env:GITHUB_OUTPUT) {
     "artifact_path=$resolvedArtifactPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 }
 
+$global:LASTEXITCODE = 0
 Write-Output $resolvedArtifactPath

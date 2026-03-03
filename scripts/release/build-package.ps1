@@ -24,6 +24,87 @@ function Get-ArtifactName {
     return $Config.artifactNameTemplate.Replace("{version}", $NormalizedVersion)
 }
 
+function Try-DownloadReleaseAsset {
+    param(
+        [object]$Config,
+        [string]$NormalizedVersion,
+        [string]$ArtifactPath
+    )
+
+    if ($env:GITHUB_ACTIONS -ne "true") {
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        Write-Warning "GITHUB_TOKEN was not available; cannot download prebuilt release asset fallback."
+        return $false
+    }
+
+    $repository = if ([string]::IsNullOrWhiteSpace($Config.repository)) { $env:GITHUB_REPOSITORY } else { $Config.repository }
+    if ([string]::IsNullOrWhiteSpace($repository) -or ($repository -notmatch "/")) {
+        Write-Warning "Repository value '$repository' is invalid for release asset fallback."
+        return $false
+    }
+
+    $parts = $repository.Split("/", 2)
+    $owner = $parts[0]
+    $repo = $parts[1]
+    $tag = "v$NormalizedVersion"
+    $displayName = Get-ArtifactName -Config $Config -NormalizedVersion $NormalizedVersion
+
+    $headers = @{
+        Authorization = "Bearer $env:GITHUB_TOKEN"
+        Accept = "application/vnd.github+json"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+
+    try {
+        $release = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag"
+    } catch {
+        Write-Warning "Unable to load GitHub release '$tag' for fallback artifact: $($_.Exception.Message)"
+        return $false
+    }
+
+    if (-not $release.assets -or $release.assets.Count -eq 0) {
+        Write-Warning "Release '$tag' has no assets to use for fallback build."
+        return $false
+    }
+
+    $asset = $release.assets |
+        Where-Object { $_.label -eq $displayName -or $_.name -eq $displayName } |
+        Select-Object -First 1
+
+    if (-not $asset) {
+        Write-Warning "Release '$tag' does not contain expected asset '$displayName'."
+        return $false
+    }
+
+    $downloadHeaders = @{
+        Authorization = "Bearer $env:GITHUB_TOKEN"
+        Accept = "application/octet-stream"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+
+    try {
+        Invoke-WebRequest -Method Get -Headers $downloadHeaders -Uri "https://api.github.com/repos/$owner/$repo/releases/assets/$($asset.id)" -OutFile $ArtifactPath
+    } catch {
+        Write-Warning "Failed to download fallback release asset '$displayName': $($_.Exception.Message)"
+        return $false
+    }
+
+    if (-not (Test-Path -Path $ArtifactPath)) {
+        return $false
+    }
+
+    $downloaded = Get-Item -Path $ArtifactPath
+    if ($downloaded.Length -le 0) {
+        return $false
+    }
+
+    Write-Warning "Using prebuilt release asset fallback '$displayName' from tag '$tag'."
+    return $true
+}
+
 if (-not (Test-Path -Path $ConfigPath)) {
     throw "Release config '$ConfigPath' was not found."
 }
@@ -80,6 +161,10 @@ switch ($config.packaging) {
         }
 
         if (-not $buildSucceeded) {
+            $buildSucceeded = Try-DownloadReleaseAsset -Config $config -NormalizedVersion $normalizedVersion -ArtifactPath $artifactPath
+        }
+
+        if (-not $buildSucceeded) {
             throw "Maven build failed with exit code $lastExitCode."
         }
 
@@ -88,11 +173,13 @@ switch ($config.packaging) {
             Sort-Object -Property LastWriteTime -Descending |
             Select-Object -First 1
 
-        if ($null -eq $builtJar) {
+        if ($null -eq $builtJar -and -not (Test-Path -Path $artifactPath)) {
             throw "No built jar was found in target/."
         }
 
-        Copy-Item -Path $builtJar.FullName -Destination $artifactPath -Force
+        if ($null -ne $builtJar) {
+            Copy-Item -Path $builtJar.FullName -Destination $artifactPath -Force
+        }
     }
     "zip" {
         $stagingDir = Join-Path $OutputDir "staging"

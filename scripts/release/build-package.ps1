@@ -75,7 +75,16 @@ function Try-DownloadReleaseAsset {
         Select-Object -First 1
 
     if (-not $asset) {
-        Write-Warning "Release '$tag' does not contain expected asset '$displayName'."
+        $sanitizedBase = [regex]::Escape(([System.IO.Path]::GetFileNameWithoutExtension($displayName) -replace '[^A-Za-z0-9._-]', '.'))
+        $extension = [System.IO.Path]::GetExtension($displayName)
+        $asset = $release.assets |
+            Where-Object { $_.name -match "^$sanitizedBase" -and $_.name.EndsWith($extension) } |
+            Sort-Object -Property created_at -Descending |
+            Select-Object -First 1
+    }
+
+    if (-not $asset) {
+        Write-Warning "Release '$tag' does not contain expected asset '$displayName' (or sanitized equivalent)."
         return $false
     }
 

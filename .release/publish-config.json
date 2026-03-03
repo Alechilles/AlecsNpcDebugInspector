@@ -1,8 +1,8 @@
 {
-  "modName": "Alec's NPC Debug Inspector",
+  "modName": "Alec's NPC Inspector!",
   "repository": "Alechilles/AlecsNpcDebugInspector",
   "packaging": "jar",
-  "artifactNameTemplate": "Alec's NPC Debug Inspector v{version}.jar",
+  "artifactNameTemplate": "Alec's NPC Inspector! v{version}.jar",
   "versionSource": "pom",
   "versionFile": "pom.xml",
   "requiresTameworkDependency": false,

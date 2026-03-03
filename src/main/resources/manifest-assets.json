@@ -1,6 +1,6 @@
 {
   "Group": "Alechilles",
-  "Name": "Alec's NPC Debug Inspector (Assets)",
+  "Name": "Alec's NPC Inspector! (Assets)",
   "Version": "${project.version}",
   "Description": "Asset pack for Alec's NPC Debug Inspector.",
   "Authors": [
@@ -17,4 +17,3 @@
   "OptionalDependencies": {},
   "DisabledByDefault": false
 }
-

@@ -1,4 +1,4 @@
-# Alec's NPC Debug Inspector
+# Alec's NPC Inspector!
 
 Standalone in-game NPC debugging mod for Hytale.
 

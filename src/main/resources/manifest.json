@@ -1,6 +1,6 @@
 {
   "Group": "Alechilles",
-  "Name": "Alec's NPC Debug Inspector",
+  "Name": "Alec's NPC Inspector!",
   "Version": "${project.version}",
   "Description": "Standalone NPC debug inspector with in-game detail UI.",
   "Authors": [
@@ -21,4 +21,3 @@
   "IncludesAssetPack": true,
   "SubPlugins": []
 }
-

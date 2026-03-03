@@ -20,7 +20,7 @@ This plugin is independent from Alec's Tamework. It can be used alongside other 
 1. Install the mod jar into your mods folders.
 2. Start server and join.
 3. Spawn and use the item `Npc_Debug_Inspector_Tool` on an NPC.
-  - Optional: Or, use `/npcdebug` while looking at an NPC to open the inspector without an item.
+    - Optional: Or, use `/npcdebug` while looking at an NPC to open the inspector without an item.
 
 ## Commands
 ### `/npcdebug`
@@ -70,21 +70,3 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 - Shows only pinned fields from the currently pinned NPC.
 - Keeps section grouping/order for readability.
 - Includes optional pinned Events Log stream.
-
-## Release Pipeline
-- GitHub Actions workflow: `.github/workflows/publish.yml`
-- Release scripts: `scripts/release/*.ps1`
-- Release config: `.release/publish-config.json`
-
-### Workflow Triggers
-- Manual: `workflow_dispatch` with inputs (`version`, `dry_run`, platform toggles)
-- Tag push: `v*.*.*`
-
-### Required Secrets (when not dry-run)
-- `CURSEFORGE_API_TOKEN`
-- `MODTALE_API_TOKEN` (or `MODTALE_API_KEY` in script env/config)
-
-### First-Time Setup
-1. Set `curseforge.projectId` in `.release/publish-config.json`.
-2. Set `modtale.projectId` in `.release/publish-config.json`.
-3. Ensure `CHANGELOG.md` has a heading matching the release version (for example `## 0.1.0`).

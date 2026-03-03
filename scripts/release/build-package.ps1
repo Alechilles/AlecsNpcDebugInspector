@@ -24,6 +24,16 @@ function Get-ArtifactName {
     return $Config.artifactNameTemplate.Replace("{version}", $NormalizedVersion)
 }
 
+function Get-NormalizedAssetStem {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return ""
+    }
+
+    $stem = [System.IO.Path]::GetFileNameWithoutExtension($Name)
+    return (($stem -replace '[^A-Za-z0-9]', '').ToLowerInvariant())
+}
+
 function Try-DownloadReleaseAsset {
     param(
         [object]$Config,
@@ -75,10 +85,13 @@ function Try-DownloadReleaseAsset {
         Select-Object -First 1
 
     if (-not $asset) {
-        $sanitizedBase = [regex]::Escape(([System.IO.Path]::GetFileNameWithoutExtension($displayName) -replace '[^A-Za-z0-9._-]', '.'))
         $extension = [System.IO.Path]::GetExtension($displayName)
+        $normalizedStem = Get-NormalizedAssetStem -Name $displayName
         $asset = $release.assets |
-            Where-Object { $_.name -match "^$sanitizedBase" -and $_.name.EndsWith($extension) } |
+            Where-Object {
+                $_.name.EndsWith($extension) -and
+                (Get-NormalizedAssetStem -Name $_.name) -eq $normalizedStem
+            } |
             Sort-Object -Property created_at -Descending |
             Select-Object -First 1
     }

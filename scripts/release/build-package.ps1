@@ -168,7 +168,7 @@ switch ($config.packaging) {
             throw "Maven build failed with exit code $lastExitCode."
         }
 
-        $builtJar = Get-ChildItem -Path "target" -Filter "*.jar" |
+        $builtJar = Get-ChildItem -Path "target" -Filter "*.jar" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -notlike "original-*" } |
             Sort-Object -Property LastWriteTime -Descending |
             Select-Object -First 1

@@ -94,6 +94,8 @@ jobs:
       - name: Build package
         id: build
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           .\scripts\release\build-package.ps1 `

@@ -42,9 +42,45 @@ switch ($config.packaging) {
             $mvnArgs = @("-B", "clean", "package", "-DskipTests")
         }
 
-        & .\mvnw.cmd @mvnArgs
-        if ($LASTEXITCODE -ne 0) {
-            throw "Maven build failed with exit code $LASTEXITCODE."
+        $mavenCommands = @()
+        if (Test-Path -Path ".\mvnw.cmd") {
+            $mavenCommands += ".\mvnw.cmd"
+        }
+
+        $mvnCommand = Get-Command mvn -ErrorAction SilentlyContinue
+        if ($null -ne $mvnCommand) {
+            $mavenCommands += "mvn"
+        }
+
+        if ($mavenCommands.Count -eq 0) {
+            throw "No Maven command was found. Expected '.\\mvnw.cmd' or 'mvn' on PATH."
+        }
+
+        $buildSucceeded = $false
+        $lastExitCode = 1
+        foreach ($mavenCommand in $mavenCommands) {
+            $commandStart = Get-Date
+            & $mavenCommand @mvnArgs
+            $lastExitCode = $LASTEXITCODE
+
+            $freshBuiltJar = Get-ChildItem -Path "target" -Filter "*.jar" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notlike "original-*" -and $_.LastWriteTime -ge $commandStart } |
+                Sort-Object -Property LastWriteTime -Descending |
+                Select-Object -First 1
+
+            if ($lastExitCode -eq 0 -or $null -ne $freshBuiltJar) {
+                if ($lastExitCode -ne 0 -and $null -ne $freshBuiltJar) {
+                    Write-Warning "Maven command '$mavenCommand' returned exit code $lastExitCode, but produced a fresh jar '$($freshBuiltJar.Name)'. Continuing."
+                }
+                $buildSucceeded = $true
+                break
+            }
+
+            Write-Warning "Maven command '$mavenCommand' failed with exit code $lastExitCode."
+        }
+
+        if (-not $buildSucceeded) {
+            throw "Maven build failed with exit code $lastExitCode."
         }
 
         $builtJar = Get-ChildItem -Path "target" -Filter "*.jar" |

@@ -1,6 +1,6 @@
 # Alec's NPC Inspector!
 
-Standalone in-game NPC debugging mod for Hytale.
+Standalone in-game NPC debugging tool for Hytale.
 
 This plugin is independent from Alec's Tamework. It can be used alongside other mods and is designed to inspect live NPC behavior with UI tools instead of command spam.
 

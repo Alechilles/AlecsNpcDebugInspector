@@ -70,3 +70,21 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 - Shows only pinned fields from the currently pinned NPC.
 - Keeps section grouping/order for readability.
 - Includes optional pinned Events Log stream.
+
+## Release Pipeline
+- GitHub Actions workflow: `.github/workflows/publish.yml`
+- Release scripts: `scripts/release/*.ps1`
+- Release config: `.release/publish-config.json`
+
+### Workflow Triggers
+- Manual: `workflow_dispatch` with inputs (`version`, `dry_run`, platform toggles)
+- Tag push: `v*.*.*`
+
+### Required Secrets (when not dry-run)
+- `CURSEFORGE_API_TOKEN`
+- `MODTALE_API_TOKEN` (or `MODTALE_API_KEY` in script env/config)
+
+### First-Time Setup
+1. Set `curseforge.projectId` in `.release/publish-config.json`.
+2. Set `modtale.projectId` in `.release/publish-config.json`.
+3. Ensure `CHANGELOG.md` has a heading matching the release version (for example `## 0.1.0`).

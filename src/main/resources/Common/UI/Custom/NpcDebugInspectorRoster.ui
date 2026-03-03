@@ -68,7 +68,7 @@ $C.@PageOverlay {
         Visible: false;
 
         Label #NpcDebugRosterCopyLabel {
-          Anchor: (Width: 120, Height: 30);
+          Anchor: (Width: 88, Height: 30);
           Text: "Copy Buffer:";
           Style: (
             FontSize: 12,
@@ -82,7 +82,7 @@ $C.@PageOverlay {
           Style: $C.@DefaultInputFieldStyle;
           PlaceholderStyle: $C.@DefaultInputFieldPlaceholderStyle;
           Background: $C.@InputBoxBackground;
-          Anchor: (Width: 360, Height: 30);
+          Anchor: (Width: 292, Height: 30);
           Padding: (Horizontal: 10);
           PlaceholderText: "UUID appears here after pressing Copy UUID";
           MaxLength: 64;
@@ -93,8 +93,8 @@ $C.@PageOverlay {
         }
 
         Label #NpcDebugRosterCopyHint {
-          Anchor: (Width: 290, Height: 30);
-          Text: "Select this field and press Ctrl+C";
+          Anchor: (Width: 180, Height: 30);
+          Text: "Select field, then press Ctrl+C";
           Style: (
             FontSize: 11,
             TextColor: #a9bfd7,

@@ -1,0 +1,24 @@
+{
+  "modName": "Alec's NPC Debug Inspector",
+  "repository": "Alechilles/AlecsNpcDebugInspector",
+  "packaging": "jar",
+  "artifactNameTemplate": "Alec's NPC Debug Inspector v{version}.jar",
+  "versionSource": "pom",
+  "versionFile": "pom.xml",
+  "requiresTameworkDependency": false,
+  "zipIncludes": [],
+  "curseforge": {
+    "projectId": "1476193",
+    "releaseType": "release",
+    "gameVersionTypeIds": [65437]
+  },
+  "modtale": {
+    "projectId": "96e3fac6-4d48-43da-ac4c-5e8cc8b36ab1",
+    "releaseChannel": "stable",
+    "gameVersions": ["2026.02.19-1a311a592"],
+    "versionFieldName": "versionNumber",
+    "changelogFieldName": "changelog",
+    "channelFieldName": "channel",
+    "gameVersionFieldName": "gameVersions"
+  }
+}

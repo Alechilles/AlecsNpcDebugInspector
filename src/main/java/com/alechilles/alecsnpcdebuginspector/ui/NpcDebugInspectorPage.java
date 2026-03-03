@@ -54,7 +54,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
     private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
     private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
-    private static final String ACTION_REORDER_SECTION = "ReorderSection";
     private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
     private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
     private static final String EVENT_REFRESH_INTERVAL_MS_AT = "@RefreshIntervalMs";
@@ -66,27 +65,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String OVERVIEW_SECTION_ID = "section.overview";
     private static final long REFRESH_SUPPRESS_AFTER_REORDER_MS = 600L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
-    private static final Pattern BRACKET_INDEX_PATTERN = Pattern.compile("\\[(\\d+)]");
-    private static final String[] FROM_INDEX_KEYS = {
-            "FromIndex",
-            "OldIndex",
-            "SourceIndex",
-            "DragIndex",
-            "DraggedIndex",
-            "StartIndex",
-            "Index",
-            "From"
-    };
-    private static final String[] TO_INDEX_KEYS = {
-            "ToIndex",
-            "NewIndex",
-            "TargetIndex",
-            "DropIndex",
-            "DroppedIndex",
-            "EndIndex",
-            "To"
-    };
-
     private final Supplier<NpcDebugSnapshot> snapshotSupplier;
     @Nullable
     private final UUID targetNpcUuid;
@@ -190,14 +168,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             applyRefreshIntervalFromEvent(resolvedRefreshInterval);
             sendRefreshUpdate();
             rearmRefreshLoopSoon();
-            return;
-        }
-        if (ACTION_REORDER_SECTION.equals(resolvedAction)) {
-            suppressRefreshTemporarily();
-            if (applySectionReorder(rawEventData)) {
-                sendRefreshUpdate();
-                rearmRefreshLoopSoon();
-            }
             return;
         }
         super.handleDataEvent(ref, store, rawData);
@@ -437,86 +407,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
-    private boolean applySectionReorder(@Nonnull Map<String, String> rawEventData) {
-        Integer fromIndex = findEventIndex(rawEventData, FROM_INDEX_KEYS);
-        Integer toIndex = findEventIndex(rawEventData, TO_INDEX_KEYS);
-
-        if (fromIndex == null || toIndex == null) {
-            int[] fallbackPair = parseFallbackIndexPair(rawEventData);
-            if (fromIndex == null && fallbackPair[0] >= 0) {
-                fromIndex = fallbackPair[0];
-            }
-            if (toIndex == null && fallbackPair[1] >= 0) {
-                toIndex = fallbackPair[1];
-            }
-        }
-        if (fromIndex == null || toIndex == null) {
-            return false;
-        }
-        return moveSection(fromIndex, toIndex);
-    }
-
-    @Nullable
-    private Integer findEventIndex(@Nonnull Map<String, String> rawEventData, @Nonnull String[] candidateKeys) {
-        for (String candidateKey : candidateKeys) {
-            for (Map.Entry<String, String> entry : rawEventData.entrySet()) {
-                if (entry.getKey() == null || !entry.getKey().equalsIgnoreCase(candidateKey)) {
-                    continue;
-                }
-                Integer parsed = parseIndexValue(entry.getValue());
-                if (parsed != null) {
-                    return parsed;
-                }
-            }
-        }
-        return null;
-    }
-
-    private int[] parseFallbackIndexPair(@Nonnull Map<String, String> rawEventData) {
-        int first = -1;
-        int second = -1;
-        for (String value : rawEventData.values()) {
-            if (value == null || !value.contains("NpcDebugInspectorFieldList[")) {
-                continue;
-            }
-            Integer parsed = parseIndexValue(value);
-            if (parsed == null) {
-                continue;
-            }
-            if (first < 0) {
-                first = parsed;
-                continue;
-            }
-            second = parsed;
-            break;
-        }
-        return new int[] { first, second };
-    }
-
-    @Nullable
-    private Integer parseIndexValue(@Nullable String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
-            return null;
-        }
-        String value = rawValue.trim();
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException ignored) {
-            // Fallback to selector-style parsing below.
-        }
-
-        Matcher matcher = BRACKET_INDEX_PATTERN.matcher(value);
-        Integer lastIndex = null;
-        while (matcher.find()) {
-            try {
-                lastIndex = Integer.parseInt(matcher.group(1));
-            } catch (NumberFormatException ignored) {
-                // Ignore malformed match and continue scanning.
-            }
-        }
-        return lastIndex;
-    }
-
     private boolean moveSection(int fromIndex, int toIndex) {
         if (sectionOrder.size() < 2) {
             return false;
@@ -597,8 +487,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
-                        ? "Pinned overlay active. Check fields to pin. Use arrows or drag handle to reorder sections."
-                        : "Pin NPC to create an overlay. Use arrows or drag handle to reorder sections."
+                        ? "Pinned overlay active. Check fields to pin. Use arrows to reorder sections."
+                        : "Pin NPC to create an overlay. Use arrows to reorder sections."
         );
     }
 
@@ -743,23 +633,6 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
 
-        if (rebuildStructure && eventBuilder != null) {
-            EventData reorderEventData = new EventData()
-                    .append(EVENT_ACTION, ACTION_REORDER_SECTION)
-                    .append("FromIndex", "#NpcDebugInspectorFieldList.FromIndex")
-                    .append("ToIndex", "#NpcDebugInspectorFieldList.ToIndex")
-                    .append("OldIndex", "#NpcDebugInspectorFieldList.OldIndex")
-                    .append("NewIndex", "#NpcDebugInspectorFieldList.NewIndex")
-                    .append("DragIndex", "#NpcDebugInspectorFieldList.DragIndex")
-                    .append("DropIndex", "#NpcDebugInspectorFieldList.DropIndex")
-                    .append("Index", "#NpcDebugInspectorFieldList.Index");
-            eventBuilder.addEventBinding(
-                    CustomUIEventBindingType.ElementReordered,
-                    "#NpcDebugInspectorFieldList",
-                    reorderEventData,
-                    false
-            );
-        }
     }
 
     @Nonnull

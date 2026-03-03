@@ -156,7 +156,7 @@ $C.@PageOverlay {
         ScrollbarStyle: $C.@DefaultScrollbarStyle;
         Padding: (Right: 6);
 
-        ReorderableList #NpcDebugInspectorFieldList {
+        Group #NpcDebugInspectorFieldList {
           LayoutMode: Top;
           Anchor: (Bottom: 6);
         }

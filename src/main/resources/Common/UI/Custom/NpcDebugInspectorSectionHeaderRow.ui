@@ -58,7 +58,7 @@ Group {
 
     Group {
       LayoutMode: Right;
-      Anchor: (Width: 168, Height: 28);
+      Anchor: (Width: 138, Height: 28);
       Padding: (Right: 2);
 
       Label #SectionCount {
@@ -112,35 +112,6 @@ Group {
         }
       }
 
-      ReorderableListGrip #SectionMoveButton {
-        Anchor: (Width: 28, Height: 28);
-        TooltipText: %client.settings.dragToReorder;
-
-        Group {
-          LayoutMode: Middle;
-          Anchor: (Full: 0);
-
-          Group {
-            LayoutMode: Top;
-            Anchor: (Width: 12, Height: 10);
-
-            Group {
-              Anchor: (Height: 2, Bottom: 2);
-              Background: #8f9eb3;
-            }
-
-            Group {
-              Anchor: (Height: 2, Bottom: 2);
-              Background: #8f9eb3;
-            }
-
-            Group {
-              Anchor: (Height: 2);
-              Background: #8f9eb3;
-            }
-          }
-        }
-      }
     }
   }
 

@@ -2,7 +2,7 @@ $C = "Common.ui";
 
 Group {
   LayoutMode: Top;
-  Anchor: (Top: 6, Bottom: 2);
+  Anchor: (Top: 4, Bottom: 2);
 
   Group {
     Anchor: (Height: 1, Bottom: 4);
@@ -10,21 +10,66 @@ Group {
   }
 
   Group {
-    Anchor: (Height: 24);
     LayoutMode: Left;
+    Anchor: (Height: 28);
 
-    Label #CategoryTitle {
-      Anchor: (Left: 0, Right: 0, Height: 24);
-      Text: "CATEGORY";
-      Style: (
-        FontSize: 13,
-        RenderBold: true,
-        TextColor: #eff4fa,
-        HorizontalAlignment: Start,
-        VerticalAlignment: Center,
-        RenderUppercase: true,
-        LetterSpacing: 1
+    Button #CategoryToggleButton {
+      LayoutMode: Left;
+      FlexWeight: 1;
+      Anchor: (Height: 28);
+      Style: ButtonStyle(
+        Default: (Background: (Color: #00000000)),
+        Hovered: (Background: (Color: #ffffff10)),
+        Pressed: (Background: (Color: #ffffff08))
       );
+
+      Group #CategoryToggleIconContainer {
+        Anchor: (Width: 20, Height: 28);
+        LayoutMode: Middle;
+
+        Group #CategoryToggleExpandedIcon {
+          Anchor: (Width: 12, Height: 7);
+          Background: "NpcDebugInspectorCaretUp.png";
+          Visible: true;
+        }
+
+        Group #CategoryToggleCollapsedIcon {
+          Anchor: (Width: 12, Height: 7);
+          Background: "NpcDebugInspectorCaretDown.png";
+          Visible: false;
+        }
+      }
+
+      Label #CategoryTitle {
+        Anchor: (Left: 22, Right: 4, Height: 28);
+        Text: "CATEGORY";
+        Style: (
+          FontSize: 13,
+          RenderBold: true,
+          TextColor: #eff4fa,
+          HorizontalAlignment: Start,
+          VerticalAlignment: Center,
+          RenderUppercase: true,
+          LetterSpacing: 1
+        );
+      }
+    }
+
+    Group {
+      LayoutMode: Left;
+      Anchor: (Width: 92, Height: 28);
+      Padding: (Right: 2);
+
+      Label #CategoryCount {
+        Anchor: (Width: 88, Height: 28);
+        Text: "0 flags";
+        Style: (
+          FontSize: 11,
+          TextColor: #a9bfd7,
+          HorizontalAlignment: End,
+          VerticalAlignment: Center
+        );
+      }
     }
   }
 }

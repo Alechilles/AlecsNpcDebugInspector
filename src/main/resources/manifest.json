@@ -15,7 +15,9 @@
   "Main": "com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector",
   "ServerVersion": "2026.02.19-1A311A592",
   "Dependencies": {},
-  "OptionalDependencies": {},
+  "OptionalDependencies": {
+    "Alechilles:Alec's Tamework!": "2.x"
+  },
   "LoadBefore": {},
   "DisabledByDefault": false,
   "IncludesAssetPack": true,

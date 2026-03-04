@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.debug;
 
+import com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
@@ -276,11 +277,7 @@ final class NpcDebugTameworkIntegration {
         if (tameworkClassChecked) {
             return tameworkClass;
         }
-        try {
-            tameworkClass = Class.forName(TAMEWORK_MAIN_CLASS, false, Thread.currentThread().getContextClassLoader());
-        } catch (ClassNotFoundException ignored) {
-            tameworkClass = null;
-        }
+        tameworkClass = tryLoadClass(TAMEWORK_MAIN_CLASS);
         tameworkClassChecked = true;
         return tameworkClass;
     }
@@ -304,11 +301,27 @@ final class NpcDebugTameworkIntegration {
 
     @Nullable
     private Class<?> resolveClass(@Nonnull String className) {
-        try {
-            return Class.forName(className, false, Thread.currentThread().getContextClassLoader());
-        } catch (ClassNotFoundException ignored) {
-            return null;
+        return tryLoadClass(className);
+    }
+
+    @Nullable
+    private Class<?> tryLoadClass(@Nonnull String className) {
+        ClassLoader pluginClassLoader = AlecsNpcDebugInspector.class.getClassLoader();
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
+
+        ClassLoader[] candidates = new ClassLoader[] {pluginClassLoader, contextClassLoader, systemClassLoader};
+        for (ClassLoader candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            try {
+                return Class.forName(className, false, candidate);
+            } catch (ClassNotFoundException ignored) {
+                // Try next class loader.
+            }
         }
+        return null;
     }
 
     @Nullable

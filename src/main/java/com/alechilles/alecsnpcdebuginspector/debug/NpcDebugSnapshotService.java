@@ -75,6 +75,7 @@ public final class NpcDebugSnapshotService {
     private static final Pattern REF_INDEX_PATTERN = Pattern.compile("index=(-?\\d+)");
 
     private final NpcDebugHistoryStore historyStore = new NpcDebugHistoryStore();
+    private final NpcDebugTameworkIntegration tameworkIntegration = new NpcDebugTameworkIntegration();
 
     /**
      * Captures a detail snapshot for the target NPC.
@@ -115,6 +116,9 @@ public final class NpcDebugSnapshotService {
 
         StringBuilder details = new StringBuilder();
         appendSection(details, "Overview", buildOverviewSection(resolvedUuid, targetRef, observerRef, store, npc, gameTime));
+        if (tameworkIntegration.isDetected()) {
+            appendSection(details, "Tamework", buildTameworkSection(resolvedUuid, targetRef, store, npc, gameTime));
+        }
         appendSection(details, "AI", buildAiSection(resolvedUuid, npc, gameTime));
         appendSection(details, "Targeting / Sensors", buildTargetingSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Pathing", buildPathingSection(resolvedUuid, targetRef, store, npc, gameTime));
@@ -194,6 +198,33 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "overview.observerDistance", "Distance To Observer", resolveDistanceText(npcRef, observerRef, store), true, false);
         appendTrackedLine(sb, npcUuid, now, "overview.world", "World", resolveWorldName(store), true, false);
         appendTrackedLine(sb, npcUuid, now, "overview.spawnInstant", "Spawn Instant (UTC)", formatNullableInstant(npc.getSpawnInstant()), true, false);
+        return sb.toString().trim();
+    }
+
+    @Nonnull
+    private String buildTameworkSection(@Nullable UUID npcUuid,
+                                        @Nullable Ref<EntityStore> npcRef,
+                                        @Nonnull Store<EntityStore> store,
+                                        @Nullable NPCEntity npc,
+                                        @Nonnull Instant now) {
+        StringBuilder sb = new StringBuilder();
+        List<NpcDebugTameworkField> fields = tameworkIntegration.capture(npcRef, npc, store);
+        if (fields.isEmpty()) {
+            appendTrackedLine(sb, npcUuid, now, "tamework.status", "Status", "Tamework unavailable", true, false);
+            return sb.toString().trim();
+        }
+        for (NpcDebugTameworkField field : fields) {
+            appendTrackedLine(
+                    sb,
+                    npcUuid,
+                    now,
+                    field.key(),
+                    field.label(),
+                    field.value(),
+                    field.trackChange(),
+                    field.recordEvent()
+            );
+        }
         return sb.toString().trim();
     }
 

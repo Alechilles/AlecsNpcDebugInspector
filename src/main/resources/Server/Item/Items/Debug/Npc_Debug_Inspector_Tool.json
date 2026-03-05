@@ -29,18 +29,5 @@
   "Model": "Items/Tools/Brush/Brush.blockymodel",
   "Texture": "Items/Tools/Brush/Brush_Texture.png",
   "Icon": "Icons/Items/AlecsNpcDebugger.png",
-
-  "IconProperties": {
-    "Scale": 0.76,
-    "Translation": [
-      -1,
-      5
-    ],
-    "Rotation": [
-      135,
-      135,
-      0
-    ]
-  },
   "MaxStack": 1
 }

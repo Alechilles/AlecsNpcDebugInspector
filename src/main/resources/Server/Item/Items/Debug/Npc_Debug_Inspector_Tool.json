@@ -23,9 +23,13 @@
       ]
     }
   },
-  "Model": "Items/Consumables/Recipes/Recipe.blockymodel",
-  "Texture": "Items/Consumables/Recipes/Recipe_Texture.png",
-  "Icon": "Icons/ItemsGenerated/Npc_Debug_Inspector_Tool_v2.png",
+  "Categories": [
+    "Tool.BuilderTool"
+  ],
+  "Model": "Items/Tools/Brush/Brush.blockymodel",
+  "Texture": "Items/Tools/Brush/Brush_Texture.png",
+  "Icon": "Icons/Items/AlecsNpcDebugger.png",
+
   "IconProperties": {
     "Scale": 0.76,
     "Translation": [

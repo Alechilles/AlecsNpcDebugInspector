@@ -1,3 +1,7 @@
+builderTools.tools.NpcDebugInspector.name=NPC Debug Inspector
+builderTools.tools.NpcDebugInspector.description=Primary: link/unlink targeted NPC.\nSecondary: open linked NPC roster.
+builderTools.tools.Npc_Debug_Inspector_Tool.name=NPC Debug Inspector
+builderTools.tools.Npc_Debug_Inspector_Tool.description=Primary: link/unlink targeted NPC.\nSecondary: open linked NPC roster.
+
 items.Npc_Debug_Inspector_Tool.name=NPC Debug Inspector
 items.Npc_Debug_Inspector_Tool.description=Primary: link/unlink targeted NPC.\nSecondary: open linked NPC roster.
-

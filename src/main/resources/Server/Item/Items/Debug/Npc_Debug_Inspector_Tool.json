@@ -1,8 +1,8 @@
 {
   "$Comment": "Standalone item for linking NPCs and opening the NPC Debug Inspector roster.",
   "TranslationProperties": {
-    "Name": "server.items.Npc_Debug_Inspector_Tool.name",
-    "Description": "server.items.Npc_Debug_Inspector_Tool.description"
+    "Name": "server.builderTools.tools.NpcDebugInspector.name",
+    "Description": "server.builderTools.tools.NpcDebugInspector.description"
   },
   "Quality": "Tool",
   "PlayerAnimationsId": "Item",
@@ -26,6 +26,15 @@
   "Categories": [
     "Tool.BuilderTool"
   ],
+  "BuilderTool": {
+    "UI": [],
+    "Tools": [
+      {
+        "Id": "NpcDebugInspector",
+        "IsBrush": false
+      }
+    ]
+  },
   "Model": "Items/Tools/Brush/Brush.blockymodel",
   "Texture": "Items/Tools/Brush/Brush_Texture.png",
   "Icon": "Icons/Items/EditorTools/AlecsNpcDebugger.png",

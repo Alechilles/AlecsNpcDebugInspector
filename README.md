@@ -70,3 +70,9 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 - Shows only pinned fields from the currently pinned NPC.
 - Keeps section grouping/order for readability.
 - Includes optional pinned Events Log stream.
+
+## Lait's Entity Inspector Shoutout
+If you are interested in external tools, check out [Lait's Entity Inspector](https://www.curseforge.com/hytale/mods/laits-entity-inspector) for an even more powerful entity inspection tool!
+- View similar data in a web-based GUI
+- Live-edit assets in the interface
+- Detects Hytalor for live asset patching

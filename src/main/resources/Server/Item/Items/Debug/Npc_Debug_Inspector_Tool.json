@@ -28,6 +28,6 @@
   ],
   "Model": "Items/Tools/Brush/Brush.blockymodel",
   "Texture": "Items/Tools/Brush/Brush_Texture.png",
-  "Icon": "Icons/Items/AlecsNpcDebugger.png",
+  "Icon": "Icons/Items/EditorTools/AlecsNpcDebugger.png",
   "MaxStack": 1
 }

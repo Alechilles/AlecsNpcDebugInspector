@@ -1280,7 +1280,20 @@ public final class NpcDebugSnapshotService {
                 || "<unknown>".equalsIgnoreCase(trimmedLocalSubState)) {
             return roleSubStateName;
         }
-        return formatLocalSubStateName(trimmedLocalSubState);
+        String normalizedRoleToken = normalizeSubStateToken(roleSubStateName);
+        String normalizedLocalToken = normalizeSubStateToken(trimmedLocalSubState);
+        if (normalizedLocalToken.isBlank()) {
+            return roleSubStateName;
+        }
+
+        // Prefer role-level substate when it is already meaningful.
+        if (isRoleSubStateUsable(roleSubStateName)) {
+            return roleSubStateName;
+        }
+        if (!normalizedRoleToken.isBlank() && normalizedRoleToken.equalsIgnoreCase(normalizedLocalToken)) {
+            return roleSubStateName;
+        }
+        return formatLocalSubStateName(normalizedLocalToken);
     }
 
     @Nonnull
@@ -1297,6 +1310,33 @@ public final class NpcDebugSnapshotService {
             return token;
         }
         return "[L]" + token;
+    }
+
+    @Nonnull
+    private String normalizeSubStateToken(@Nullable String subStateName) {
+        if (subStateName == null || subStateName.isBlank()) {
+            return "";
+        }
+        String token = subStateName.trim();
+        if (token.regionMatches(true, 0, "[L]", 0, 3)) {
+            token = token.substring(3).trim();
+        }
+        int lastDot = token.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot + 1 < token.length()) {
+            token = token.substring(lastDot + 1).trim();
+        }
+        return token;
+    }
+
+    private boolean isRoleSubStateUsable(@Nullable String roleSubStateName) {
+        if (roleSubStateName == null || roleSubStateName.isBlank()) {
+            return false;
+        }
+        String token = normalizeSubStateToken(roleSubStateName);
+        if (token.isBlank() || isIntegerText(token) || "<unknown>".equalsIgnoreCase(token)) {
+            return false;
+        }
+        return !"default".equalsIgnoreCase(token) && !"start".equalsIgnoreCase(token);
     }
 
     @Nonnull

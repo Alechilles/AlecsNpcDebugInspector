@@ -6,6 +6,7 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.EntityUtils;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.entity.group.EntityGroup;
 import com.hypixel.hytale.server.core.inventory.Inventory;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
@@ -37,6 +38,7 @@ import com.hypixel.hytale.server.npc.util.Alarm;
 import com.hypixel.hytale.server.npc.util.DamageData;
 import com.hypixel.hytale.server.npc.util.expression.StdScope;
 import com.hypixel.hytale.server.npc.util.expression.ValueType;
+import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -49,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
@@ -72,10 +75,13 @@ public final class NpcDebugSnapshotService {
     private static final String ALARM_STATUS_SET = "set";
     private static final String ALARM_STATUS_UNSET = "unset";
     private static final String ALARM_STATUS_READY = "ready";
+    private static final int MAX_VISIBLE_EVENTS = 40;
     private static final Pattern REF_INDEX_PATTERN = Pattern.compile("index=(-?\\d+)");
 
     private final NpcDebugHistoryStore historyStore = new NpcDebugHistoryStore();
     private final NpcDebugTameworkIntegration tameworkIntegration = new NpcDebugTameworkIntegration();
+    private final NpcDebugComponentLocalStateResolver componentLocalStateResolver =
+            new NpcDebugComponentLocalStateResolver();
 
     /**
      * Captures a detail snapshot for the target NPC.
@@ -96,6 +102,9 @@ public final class NpcDebugSnapshotService {
                                     @Nullable Ref<EntityStore> observerRef,
                                     @Nonnull Store<EntityStore> store) {
         Instant gameTime = resolveGameTime(store);
+        UUID viewerUuid = resolveViewerUuid(observerRef, store);
+        Set<NpcDebugEventCategory> enabledEventCategories =
+                NpcDebugEventLogFilterSettings.getEnabledCategories(viewerUuid);
         boolean loaded = targetRef != null && targetRef.isValid();
         NPCEntity npc = loaded ? store.getComponent(targetRef, NPCEntity.getComponentType()) : null;
         if (npc == null) {
@@ -131,7 +140,7 @@ public final class NpcDebugSnapshotService {
         appendSection(details, "Flags", buildFlagSection(resolvedUuid, npc, gameTime));
         appendSection(details, "Components", buildComponentSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Flock", buildFlockSection(resolvedUuid, targetRef, store, npc, gameTime));
-        appendSection(details, "Recent Events", buildEventsSection(resolvedUuid));
+        appendSection(details, "Recent Events", buildEventsSection(resolvedUuid, enabledEventCategories));
 
         return new NpcDebugSnapshot(title, subtitle, details.toString().trim());
     }
@@ -241,10 +250,23 @@ public final class NpcDebugSnapshotService {
         Role role = npc.getRole();
         StateSupport stateSupport = role.getStateSupport();
         EntitySupport entitySupport = role.getEntitySupport();
+        String subStateName = resolveDisplaySubStateName(npc, role, stateSupport);
+        appendTrackedLine(sb, npcUuid, now, "ai.stateName", "State", resolveStateName(npc), true, false);
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "ai.subStateName",
+                "Sub-State",
+                subStateName,
+                true,
+                false
+        );
         appendTrackedLine(sb, npcUuid, now, "ai.stateIndex", "State Index", String.valueOf(stateSupport.getStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.subStateIndex", "Sub-State Index", String.valueOf(stateSupport.getSubStateIndex()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.busy", "In Busy State", String.valueOf(stateSupport.isInBusyState()), true, true);
         appendTrackedLine(sb, npcUuid, now, "ai.transitionsRunning", "Transition Actions Running", String.valueOf(stateSupport.isRunningTransitionActions()), true, false);
+        appendComponentLocalStateLines(sb, npcUuid, now, role, stateSupport);
 
         appendTrackedLine(sb, npcUuid, now, "ai.rootInstruction", "Root Instruction", resolveInstructionLabel(role.getRootInstruction()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.currentTreeModeStep", "Current Tree Step", resolveInstructionLabel(readField(role, "currentTreeModeStep", Instruction.class)), true, true);
@@ -257,6 +279,52 @@ public final class NpcDebugSnapshotService {
 
         appendTrackedLine(sb, npcUuid, now, "ai.steeringMotion", "Steering Motion", safeText(role.getSteeringMotionName(), "<none>"), true, false);
         return sb.toString().trim();
+    }
+
+    private void appendComponentLocalStateLines(@Nonnull StringBuilder sb,
+                                                @Nullable UUID npcUuid,
+                                                @Nonnull Instant now,
+                                                @Nonnull Role role,
+                                                @Nonnull StateSupport stateSupport) {
+        Int2IntMap componentLocalStates = componentLocalStateResolver.readComponentLocalStates(stateSupport);
+        if (componentLocalStates == null || componentLocalStates.isEmpty()) {
+            appendTrackedLine(sb, npcUuid, now, "ai.componentLocalStateCount", "Component Local State Machines", "0", true, false);
+            return;
+        }
+
+        List<Int2IntMap.Entry> entries = new ArrayList<>(componentLocalStates.int2IntEntrySet());
+        entries.sort(Comparator.comparingInt(Int2IntMap.Entry::getIntKey));
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "ai.componentLocalStateCount",
+                "Component Local State Machines",
+                String.valueOf(entries.size()),
+                true,
+                false
+        );
+
+        for (Int2IntMap.Entry entry : entries) {
+            int componentIndex = entry.getIntKey();
+            int localStateIndex = entry.getIntValue();
+            String localStateName = componentLocalStateResolver.resolveComponentLocalStateName(
+                    role,
+                    stateSupport,
+                    componentIndex,
+                    localStateIndex
+            );
+            appendTrackedLine(
+                    sb,
+                    npcUuid,
+                    now,
+                    "ai.componentLocalState." + componentIndex,
+                    "Local State [" + componentIndex + "]",
+                    localStateName,
+                    true,
+                    false
+            );
+        }
     }
 
     @Nonnull
@@ -390,6 +458,7 @@ public final class NpcDebugSnapshotService {
         Map<String, String> scopeValues = snapshotScopeValues(npc.getRole().getEntitySupport().getSensorScope());
         List<Map.Entry<String, String>> timerKeys = filterScope(scopeValues,
                 "timer", "time", "cooldown", "window", "delay", "pause", "until", "respawn", "lock");
+        appendTrackedLine(sb, npcUuid, now, "timers.scopeCount", "Scope Timer Keys", String.valueOf(timerKeys.size()), true, false);
         for (Map.Entry<String, String> timerEntry : timerKeys) {
             trackTimerTransition(
                     npcUuid,
@@ -465,7 +534,7 @@ public final class NpcDebugSnapshotService {
                         "Relation " + slotName,
                         resolveEntityTargetLabel(ref, store),
                         true,
-                        true
+                        false
                 );
             }
         }
@@ -475,7 +544,7 @@ public final class NpcDebugSnapshotService {
                 "owner", "tamer", "leader", "follower", "flock", "home", "leash", "parent", "mate", "bond");
         List<Map.Entry<String, String>> resolvedRelationshipKeys =
                 resolveScopeEntityRefs(relationshipKeys, marked, store);
-        appendTopEntries(sb, npcUuid, now, "relationships.scope", resolvedRelationshipKeys, 12, true);
+        appendTopEntries(sb, npcUuid, now, "relationships.scope", resolvedRelationshipKeys, 12, false);
         return sb.toString().trim();
     }
 
@@ -692,20 +761,48 @@ public final class NpcDebugSnapshotService {
     }
 
     @Nonnull
-    private String buildEventsSection(@Nullable UUID npcUuid) {
-        List<String> events = historyStore.events(npcUuid);
+    private String buildEventsSection(@Nullable UUID npcUuid, @Nonnull Set<NpcDebugEventCategory> enabledEventCategories) {
+        List<String> events = historyStore.events(npcUuid, enabledEventCategories);
+        int totalEventCount = historyStore.totalEventCount(npcUuid);
         StringBuilder sb = new StringBuilder();
         sb.append(EVENTS_LOG_HINT).append('\n');
+        sb.append("Enabled Filters: ").append(formatEnabledEventCategories(enabledEventCategories)).append('\n');
         if (events.isEmpty()) {
-            sb.append("Event Count: 0").append('\n');
+            if (totalEventCount <= 0) {
+                sb.append("Event Count: 0").append('\n');
+            } else {
+                sb.append("Event Count: 0 (").append(totalEventCount).append(" filtered)").append('\n');
+            }
             sb.append("- No recent tracked changes yet.");
             return sb.toString().trim();
         }
-        sb.append("Event Count: ").append(events.size()).append('\n');
-        for (String event : events) {
-            sb.append("- ").append(event).append('\n');
+        sb.append("Event Count: ").append(events.size());
+        if (events.size() != totalEventCount) {
+            sb.append(" (").append(totalEventCount).append(" total)");
+        }
+        sb.append('\n');
+        int limit = Math.min(MAX_VISIBLE_EVENTS, events.size());
+        for (int i = 0; i < limit; i++) {
+            sb.append("- ").append(events.get(i)).append('\n');
+        }
+        if (events.size() > limit) {
+            sb.append("- Additional filtered events: ").append(events.size() - limit).append('\n');
         }
         return sb.toString().trim();
+    }
+
+    @Nonnull
+    private String formatEnabledEventCategories(@Nonnull Set<NpcDebugEventCategory> enabledEventCategories) {
+        if (enabledEventCategories.isEmpty()) {
+            return "<none>";
+        }
+        List<String> labels = new ArrayList<>(NpcDebugEventCategory.values().length);
+        for (NpcDebugEventCategory category : NpcDebugEventCategory.values()) {
+            if (enabledEventCategories.contains(category)) {
+                labels.add(category.label());
+            }
+        }
+        return labels.isEmpty() ? "<none>" : String.join(", ", labels);
     }
 
     private void appendContainerSummary(@Nonnull StringBuilder sb,
@@ -967,9 +1064,21 @@ public final class NpcDebugSnapshotService {
                                    @Nonnull String value,
                                    boolean trackChange,
                                    boolean recordEvent) {
+        appendTrackedLine(sb, npcUuid, now, key, label, value, trackChange, recordEvent, resolveFieldEventCategory(key));
+    }
+
+    private void appendTrackedLine(@Nonnull StringBuilder sb,
+                                   @Nullable UUID npcUuid,
+                                   @Nonnull Instant now,
+                                   @Nonnull String key,
+                                   @Nonnull String label,
+                                   @Nonnull String value,
+                                   boolean trackChange,
+                                   boolean recordEvent,
+                                   @Nonnull NpcDebugEventCategory eventCategory) {
         boolean changed = false;
         if (trackChange && npcUuid != null) {
-            changed = historyStore.track(npcUuid, key, label, value, now, recordEvent).changed;
+            changed = historyStore.track(npcUuid, key, label, value, now, recordEvent, eventCategory).changed;
         }
         sb.append(changed ? HIGHLIGHT_CHANGED_PREFIX : NORMAL_PREFIX)
                 .append(label)
@@ -996,13 +1105,26 @@ public final class NpcDebugSnapshotService {
                 false
         );
         if (!phaseResult.changed) {
+            if (phaseResult.previous == null && TIMER_PHASE_ACTIVE.equals(phase)) {
+                historyStore.recordEvent(
+                        npcUuid,
+                        now,
+                        "Timer started: " + label + " = " + value,
+                        NpcDebugEventCategory.TIMERS
+                );
+            }
             return;
         }
         if (TIMER_PHASE_ACTIVE.equals(phase)) {
-            historyStore.recordEvent(npcUuid, now, "Timer started: " + label + " = " + value);
+            historyStore.recordEvent(
+                    npcUuid,
+                    now,
+                    "Timer started: " + label + " = " + value,
+                    NpcDebugEventCategory.TIMERS
+            );
             return;
         }
-        historyStore.recordEvent(npcUuid, now, "Timer ended: " + label);
+        historyStore.recordEvent(npcUuid, now, "Timer ended: " + label, NpcDebugEventCategory.TIMERS);
     }
 
     private void trackAlarmTransition(@Nullable UUID npcUuid,
@@ -1021,10 +1143,61 @@ public final class NpcDebugSnapshotService {
                 false
         );
         if (!statusResult.changed) {
+            if (statusResult.previous == null) {
+                historyStore.recordEvent(
+                        npcUuid,
+                        now,
+                        "Alarm " + alarmKey + ": unknown -> " + status,
+                        NpcDebugEventCategory.ALARMS
+                );
+            }
             return;
         }
         String previous = statusResult.previous != null ? statusResult.previous : "unknown";
-        historyStore.recordEvent(npcUuid, now, "Alarm " + alarmKey + ": " + previous + " -> " + status);
+        historyStore.recordEvent(
+                npcUuid,
+                now,
+                "Alarm " + alarmKey + ": " + previous + " -> " + status,
+                NpcDebugEventCategory.ALARMS
+        );
+    }
+
+    @Nonnull
+    private NpcDebugEventCategory resolveFieldEventCategory(@Nonnull String key) {
+        String normalized = key.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("targeting.")) {
+            return NpcDebugEventCategory.TARGETING;
+        }
+        if (normalized.startsWith("timers.")) {
+            return NpcDebugEventCategory.TIMERS;
+        }
+        if (normalized.startsWith("alarms.")) {
+            return NpcDebugEventCategory.ALARMS;
+        }
+        if (normalized.startsWith("flock.")) {
+            return NpcDebugEventCategory.FLOCK;
+        }
+        if (normalized.startsWith("tamework.happiness.")
+                || normalized.startsWith("tamework.needs.")
+                || normalized.startsWith("tamework.breeding.happiness")
+                || normalized.contains(".hunger")
+                || normalized.contains(".thirst")
+                || normalized.contains(".happiness")) {
+            return NpcDebugEventCategory.NEEDS;
+        }
+        return NpcDebugEventCategory.CORE;
+    }
+
+    @Nullable
+    private UUID resolveViewerUuid(@Nullable Ref<EntityStore> observerRef, @Nonnull Store<EntityStore> store) {
+        if (observerRef == null || !observerRef.isValid()) {
+            return null;
+        }
+        Player player = store.getComponent(observerRef, Player.getComponentType());
+        if (player == null || player.getPlayerRef() == null) {
+            return null;
+        }
+        return player.getPlayerRef().getUuid();
     }
 
     @Nonnull
@@ -1068,7 +1241,117 @@ public final class NpcDebugSnapshotService {
         if (role == null || role.getStateSupport() == null) {
             return "<unknown>";
         }
-        return safeText(role.getStateSupport().getStateName(), "<unknown>");
+        StateSupport stateSupport = role.getStateSupport();
+        String stateName = safeText(
+                stateSupport.getStateHelper().getStateName(stateSupport.getStateIndex()),
+                safeText(stateSupport.getStateName(), "<unknown>")
+        );
+        String subStateName = resolveDisplaySubStateName(npc, role, stateSupport);
+        if (subStateName.isBlank()
+                || "<unknown>".equalsIgnoreCase(subStateName)
+                || isIntegerText(subStateName)) {
+            return stateName;
+        }
+        if (subStateName.equalsIgnoreCase(stateName) || stateName.endsWith("." + subStateName)) {
+            return stateName;
+        }
+        if (subStateName.contains(".")) {
+            return subStateName;
+        }
+        int lastDot = stateName.lastIndexOf('.');
+        if (lastDot > 0) {
+            return stateName.substring(0, lastDot + 1) + subStateName;
+        }
+        return stateName + "." + subStateName;
+    }
+
+    @Nonnull
+    private String resolveDisplaySubStateName(@Nonnull NPCEntity npc,
+                                              @Nonnull Role role,
+                                              @Nonnull StateSupport stateSupport) {
+        String roleSubStateName = resolveSubStateName(stateSupport);
+        String localSubStateName = componentLocalStateResolver.resolvePrimaryLocalSubStateName(role, stateSupport);
+        if (localSubStateName == null || localSubStateName.isBlank()) {
+            return roleSubStateName;
+        }
+
+        String trimmedLocalSubState = localSubStateName.trim();
+        if (isIntegerText(trimmedLocalSubState)
+                || "<unknown>".equalsIgnoreCase(trimmedLocalSubState)) {
+            return roleSubStateName;
+        }
+        return trimmedLocalSubState;
+    }
+
+    @Nonnull
+    private String resolveSubStateName(@Nullable StateSupport stateSupport) {
+        if (stateSupport == null) {
+            return "<unknown>";
+        }
+        String resolvedFromHelper = tryResolveSubStateNameFromHelper(stateSupport);
+        if (resolvedFromHelper != null) {
+            return resolvedFromHelper;
+        }
+        String reflected = tryInvokeString(stateSupport, "getSubStateName");
+        if (reflected != null && !reflected.isBlank()) {
+            return reflected;
+        }
+        reflected = readField(stateSupport, "subStateName", String.class);
+        if (reflected != null && !reflected.isBlank()) {
+            return reflected;
+        }
+        String stateName = stateSupport.getStateName();
+        if (stateName != null) {
+            int dot = stateName.lastIndexOf('.');
+            if (dot >= 0 && dot + 1 < stateName.length()) {
+                String suffix = stateName.substring(dot + 1).trim();
+                if (!suffix.isBlank()) {
+                    return suffix;
+                }
+            }
+        }
+        return "<unknown>";
+    }
+
+    @Nullable
+    private String tryResolveSubStateNameFromHelper(@Nonnull StateSupport stateSupport) {
+        try {
+            String subStateName = stateSupport.getStateHelper().getSubStateName(
+                    stateSupport.getStateIndex(),
+                    stateSupport.getSubStateIndex()
+            );
+            if (subStateName != null && !subStateName.isBlank() && !isIntegerText(subStateName)) {
+                return subStateName;
+            }
+            if (stateSupport.getSubStateIndex() == 0) {
+                String defaultSubState = stateSupport.getStateHelper().getDefaultSubState();
+                if (defaultSubState != null && !defaultSubState.isBlank()) {
+                    return defaultSubState;
+                }
+            }
+            if (subStateName != null && !subStateName.isBlank()) {
+                return subStateName;
+            }
+        } catch (RuntimeException ignored) {
+            // Best-effort only.
+        }
+        return null;
+    }
+
+    private boolean isIntegerText(@Nullable String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        int start = value.charAt(0) == '-' ? 1 : 0;
+        if (start >= value.length()) {
+            return false;
+        }
+        for (int i = start; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Nonnull

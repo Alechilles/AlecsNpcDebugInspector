@@ -1280,7 +1280,23 @@ public final class NpcDebugSnapshotService {
                 || "<unknown>".equalsIgnoreCase(trimmedLocalSubState)) {
             return roleSubStateName;
         }
-        return trimmedLocalSubState;
+        return formatLocalSubStateName(trimmedLocalSubState);
+    }
+
+    @Nonnull
+    private String formatLocalSubStateName(@Nonnull String localSubStateName) {
+        String token = localSubStateName.trim();
+        int lastDot = token.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot + 1 < token.length()) {
+            token = token.substring(lastDot + 1).trim();
+        }
+        if (token.isEmpty()) {
+            token = localSubStateName.trim();
+        }
+        if (token.regionMatches(true, 0, "[L]", 0, 3)) {
+            return token;
+        }
+        return "[L]" + token;
     }
 
     @Nonnull

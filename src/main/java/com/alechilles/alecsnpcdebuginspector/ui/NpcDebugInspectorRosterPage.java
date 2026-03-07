@@ -60,6 +60,7 @@ public final class NpcDebugInspectorRosterPage
 
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
+    private static final long NAVIGATION_DELAY_MS = 80L;
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
     private final Consumer<UUID> inspectCallback;
@@ -88,6 +89,7 @@ public final class NpcDebugInspectorRosterPage
 
     private volatile boolean refreshLoopStarted;
     private volatile boolean dismissed;
+    private volatile boolean navigationPending;
     private final AtomicLong refreshTickGeneration;
 
     public NpcDebugInspectorRosterPage(@Nonnull PlayerRef playerRef,
@@ -118,6 +120,7 @@ public final class NpcDebugInspectorRosterPage
         this.syncQueryFieldValue = true;
         this.copyBufferValue = "";
         this.copyBufferVisible = false;
+        this.navigationPending = false;
         this.refreshTickGeneration = new AtomicLong();
     }
 
@@ -192,8 +195,12 @@ public final class NpcDebugInspectorRosterPage
         if (normalizedAction.startsWith(INSPECT_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, INSPECT_PREFIX);
             if (npcUuid != null) {
+                if (navigationPending) {
+                    return;
+                }
                 stopRefreshLoop();
-                inspectCallback.accept(npcUuid);
+                navigationPending = true;
+                navigateAfterUiDrain(() -> inspectCallback.accept(npcUuid));
             }
             return;
         }
@@ -201,8 +208,12 @@ public final class NpcDebugInspectorRosterPage
         if (normalizedAction.startsWith(DEBUG_FLAGS_PREFIX)) {
             UUID npcUuid = parseUuidAction(normalizedAction, DEBUG_FLAGS_PREFIX);
             if (npcUuid != null) {
+                if (navigationPending) {
+                    return;
+                }
                 stopRefreshLoop();
-                debugFlagsCallback.accept(npcUuid);
+                navigationPending = true;
+                navigateAfterUiDrain(() -> debugFlagsCallback.accept(npcUuid));
             }
             return;
         }
@@ -251,7 +262,37 @@ public final class NpcDebugInspectorRosterPage
 
     private void stopRefreshLoop() {
         dismissed = true;
+        refreshLoopStarted = false;
         refreshTickGeneration.incrementAndGet();
+    }
+
+    private void navigateAfterUiDrain(@Nonnull Runnable action) {
+        CompletableFuture.runAsync(
+                () -> dispatchNavigationAction(action),
+                CompletableFuture.delayedExecutor(NAVIGATION_DELAY_MS, TimeUnit.MILLISECONDS)
+        );
+    }
+
+    private void dispatchNavigationAction(@Nonnull Runnable action) {
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return;
+        }
+        Store<EntityStore> store = ref.getStore();
+        if (store == null || store.getExternalData() == null) {
+            return;
+        }
+        World world = store.getExternalData().getWorld();
+        if (world == null) {
+            return;
+        }
+        world.execute(() -> {
+            Ref<EntityStore> activeRef = playerRef.getReference();
+            if (activeRef == null || !activeRef.isValid()) {
+                return;
+            }
+            action.run();
+        });
     }
 
     private void buildCards(@Nonnull UICommandBuilder commandBuilder, @Nonnull UIEventBuilder eventBuilder) {
@@ -430,6 +471,10 @@ public final class NpcDebugInspectorRosterPage
 
         if (eventBuilder != null) {
             bindGlobalEvents(eventBuilder);
+        }
+        if (dismissed || !isCurrentPageActive()) {
+            dismissed = true;
+            return;
         }
         sendUpdate(commandBuilder, eventBuilder, false);
     }

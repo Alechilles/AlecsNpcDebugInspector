@@ -1,5 +1,7 @@
 package com.alechilles.alecsnpcdebuginspector.ui;
 
+import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugEventCategory;
+import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugEventLogFilterSettings;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import com.hypixel.hytale.codec.Codec;
 import com.hypixel.hytale.codec.ExtraInfo;
@@ -20,6 +22,7 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -54,6 +57,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private static final String ACTION_TOGGLE_SECTION_PREFIX = "ToggleSection:";
     private static final String ACTION_MOVE_SECTION_UP_PREFIX = "MoveSectionUp:";
     private static final String ACTION_MOVE_SECTION_DOWN_PREFIX = "MoveSectionDown:";
+    private static final String ACTION_TOGGLE_EVENT_FILTER_PREFIX = "ToggleEventFilter:";
     private static final String ACTION_REFRESH_RATE_CHANGED = "RefreshRateChanged";
     private static final String EVENT_REFRESH_INTERVAL_MS = "RefreshIntervalMs";
     private static final String EVENT_REFRESH_INTERVAL_MS_AT = "@RefreshIntervalMs";
@@ -77,6 +81,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     private final LinkedHashSet<String> collapsedSectionIds;
     private final LinkedHashSet<String> pinnedFieldKeys;
     private final ArrayList<String> renderedFieldKeys;
+    private final EnumSet<NpcDebugEventCategory> enabledEventCategories;
     private String resolvedNpcName;
     private boolean pinModeEnabled;
     private boolean sectionStateInitialized;
@@ -101,6 +106,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.collapsedSectionIds = new LinkedHashSet<>();
         this.pinnedFieldKeys = new LinkedHashSet<>();
         this.renderedFieldKeys = new ArrayList<>();
+        this.enabledEventCategories = EnumSet.noneOf(NpcDebugEventCategory.class);
         this.resolvedNpcName = "NPC";
         this.pinModeEnabled = false;
         this.sectionStateInitialized = false;
@@ -109,6 +115,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         this.refreshLoopStarted = false;
         this.refreshSuppressedUntilMs = 0L;
         this.refreshTickGeneration = new AtomicLong();
+        syncEventCategoryStateFromSettings();
     }
 
     /**
@@ -135,6 +142,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                       @Nonnull Store<EntityStore> store) {
         commandBuilder.append(UI_PATH);
         refreshSnapshotData();
+        syncEventCategoryStateFromSettings();
         syncPinnedStateFromManager();
         prunePinnedKeys();
         applySnapshot(commandBuilder);
@@ -197,6 +205,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             togglePinMode();
             sendRefreshUpdate();
             rearmRefreshLoopSoon();
+            return;
+        }
+        if (resolvedAction.startsWith(ACTION_TOGGLE_EVENT_FILTER_PREFIX)) {
+            String categoryId = parseActionSuffix(resolvedAction, ACTION_TOGGLE_EVENT_FILTER_PREFIX);
+            if (categoryId != null) {
+                toggleEventCategory(categoryId);
+                sendRefreshUpdate();
+                rearmRefreshLoopSoon();
+            }
             return;
         }
         if (resolvedAction.startsWith(ACTION_MOVE_SECTION_UP_PREFIX)) {
@@ -471,6 +488,23 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 refreshEventData,
                 false
         );
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterCore", NpcDebugEventCategory.CORE);
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTargeting", NpcDebugEventCategory.TARGETING);
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTimers", NpcDebugEventCategory.TIMERS);
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterAlarms", NpcDebugEventCategory.ALARMS);
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterNeeds", NpcDebugEventCategory.NEEDS);
+        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterFlock", NpcDebugEventCategory.FLOCK);
+    }
+
+    private void bindEventFilterToggle(@Nonnull UIEventBuilder eventBuilder,
+                                       @Nonnull String selector,
+                                       @Nonnull NpcDebugEventCategory category) {
+        eventBuilder.addEventBinding(
+                CustomUIEventBindingType.ValueChanged,
+                selector,
+                EventData.of(EVENT_ACTION, ACTION_TOGGLE_EVENT_FILTER_PREFIX + category.id()),
+                false
+        );
     }
 
     private void applySnapshot(@Nonnull UICommandBuilder commandBuilder) {
@@ -484,6 +518,12 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set("#NpcDebugInspectorFooterGap.Visible", backCallback != null);
         commandBuilder.set("#NpcDebugInspectorRefreshLabel.Text", NpcDebugUiRefreshSettings.formatIntervalLabel(refreshIntervalMs));
         commandBuilder.set("#NpcDebugInspectorRefreshSlider.Value", NpcDebugUiRefreshSettings.toUiValue(refreshIntervalMs));
+        commandBuilder.set("#NpcDebugInspectorFilterCore.Value", enabledEventCategories.contains(NpcDebugEventCategory.CORE));
+        commandBuilder.set("#NpcDebugInspectorFilterTargeting.Value", enabledEventCategories.contains(NpcDebugEventCategory.TARGETING));
+        commandBuilder.set("#NpcDebugInspectorFilterTimers.Value", enabledEventCategories.contains(NpcDebugEventCategory.TIMERS));
+        commandBuilder.set("#NpcDebugInspectorFilterAlarms.Value", enabledEventCategories.contains(NpcDebugEventCategory.ALARMS));
+        commandBuilder.set("#NpcDebugInspectorFilterNeeds.Value", enabledEventCategories.contains(NpcDebugEventCategory.NEEDS));
+        commandBuilder.set("#NpcDebugInspectorFilterFlock.Value", enabledEventCategories.contains(NpcDebugEventCategory.FLOCK));
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
@@ -857,6 +897,20 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         }
     }
 
+    private void toggleEventCategory(@Nonnull String categoryId) {
+        NpcDebugEventCategory category = NpcDebugEventCategory.fromId(categoryId);
+        if (category == null) {
+            return;
+        }
+        NpcDebugEventLogFilterSettings.toggle(playerRef.getUuid(), category);
+        syncEventCategoryStateFromSettings();
+    }
+
+    private void syncEventCategoryStateFromSettings() {
+        enabledEventCategories.clear();
+        enabledEventCategories.addAll(NpcDebugEventLogFilterSettings.getEnabledCategories(playerRef.getUuid()));
+    }
+
     private void startRefreshLoop() {
         if (refreshLoopStarted) {
             return;
@@ -920,6 +974,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
 
     private void sendRefreshUpdate() {
         refreshSnapshotData();
+        syncEventCategoryStateFromSettings();
         syncPinnedStateFromManager();
         prunePinnedKeys();
 

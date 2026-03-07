@@ -45,6 +45,7 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 - Expand/collapse sections.
 - Section reorder support.
 - Refresh rate slider (`150ms` to `2000ms`, step `50ms`).
+- Recent Events category filters (Core, Targeting, Timers, Alarms, Needs, Flock).
 - Pin mode for selecting fields to mirror in overlay.
 
 ### 2) Linked Roster

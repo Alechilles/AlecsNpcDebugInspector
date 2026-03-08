@@ -47,6 +47,7 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
     public static final String UI_PATH = "NpcDebugInspectorPage.ui";
     private static final String SECTION_HEADER_UI_PATH = "NpcDebugInspectorSectionHeaderRow.ui";
     private static final String FIELD_ROW_UI_PATH = "NpcDebugInspectorFieldRow.ui";
+    private static final String EVENT_FILTER_ROW_UI_PATH = "NpcDebugInspectorEventFilterRow.ui";
 
     private static final String EVENT_ACTION = "Action";
     private static final String EVENT_TYPE = "Type";
@@ -488,12 +489,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 refreshEventData,
                 false
         );
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterCore", NpcDebugEventCategory.CORE);
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTargeting", NpcDebugEventCategory.TARGETING);
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTimers", NpcDebugEventCategory.TIMERS);
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterAlarms", NpcDebugEventCategory.ALARMS);
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterNeeds", NpcDebugEventCategory.NEEDS);
-        bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterFlock", NpcDebugEventCategory.FLOCK);
+        if (hasRecentEventsSection()) {
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterCore", NpcDebugEventCategory.CORE);
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTargeting", NpcDebugEventCategory.TARGETING);
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterTimers", NpcDebugEventCategory.TIMERS);
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterAlarms", NpcDebugEventCategory.ALARMS);
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterNeeds", NpcDebugEventCategory.NEEDS);
+            bindEventFilterToggle(eventBuilder, "#NpcDebugInspectorFilterFlock", NpcDebugEventCategory.FLOCK);
+        }
     }
 
     private void bindEventFilterToggle(@Nonnull UIEventBuilder eventBuilder,
@@ -518,12 +521,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         commandBuilder.set("#NpcDebugInspectorFooterGap.Visible", backCallback != null);
         commandBuilder.set("#NpcDebugInspectorRefreshLabel.Text", NpcDebugUiRefreshSettings.formatIntervalLabel(refreshIntervalMs));
         commandBuilder.set("#NpcDebugInspectorRefreshSlider.Value", NpcDebugUiRefreshSettings.toUiValue(refreshIntervalMs));
-        commandBuilder.set("#NpcDebugInspectorFilterCore.Value", enabledEventCategories.contains(NpcDebugEventCategory.CORE));
-        commandBuilder.set("#NpcDebugInspectorFilterTargeting.Value", enabledEventCategories.contains(NpcDebugEventCategory.TARGETING));
-        commandBuilder.set("#NpcDebugInspectorFilterTimers.Value", enabledEventCategories.contains(NpcDebugEventCategory.TIMERS));
-        commandBuilder.set("#NpcDebugInspectorFilterAlarms.Value", enabledEventCategories.contains(NpcDebugEventCategory.ALARMS));
-        commandBuilder.set("#NpcDebugInspectorFilterNeeds.Value", enabledEventCategories.contains(NpcDebugEventCategory.NEEDS));
-        commandBuilder.set("#NpcDebugInspectorFilterFlock.Value", enabledEventCategories.contains(NpcDebugEventCategory.FLOCK));
+        if (hasRecentEventsSection()) {
+            commandBuilder.set("#NpcDebugInspectorFilterCore.Value", enabledEventCategories.contains(NpcDebugEventCategory.CORE));
+            commandBuilder.set("#NpcDebugInspectorFilterTargeting.Value", enabledEventCategories.contains(NpcDebugEventCategory.TARGETING));
+            commandBuilder.set("#NpcDebugInspectorFilterTimers.Value", enabledEventCategories.contains(NpcDebugEventCategory.TIMERS));
+            commandBuilder.set("#NpcDebugInspectorFilterAlarms.Value", enabledEventCategories.contains(NpcDebugEventCategory.ALARMS));
+            commandBuilder.set("#NpcDebugInspectorFilterNeeds.Value", enabledEventCategories.contains(NpcDebugEventCategory.NEEDS));
+            commandBuilder.set("#NpcDebugInspectorFilterFlock.Value", enabledEventCategories.contains(NpcDebugEventCategory.FLOCK));
+        }
         commandBuilder.set(
                 "#NpcDebugInspectorPinHint.Text",
                 pinModeEnabled
@@ -633,11 +638,15 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
                 );
             }
 
+            boolean recentEventsSection = isRecentEventsSection(section);
+            if (recentEventsSection && rebuildStructure) {
+                commandBuilder.append(sectionSelector + " #SectionFields", EVENT_FILTER_ROW_UI_PATH);
+            }
             if (collapsed) {
                 continue;
             }
 
-            int fieldRowIndex = 0;
+            int fieldRowIndex = recentEventsSection ? 1 : 0;
             for (InspectorField field : section.fields) {
                 String fieldSelector = sectionSelector + " #SectionFields[" + fieldRowIndex + "]";
                 fieldRowIndex++;
@@ -804,6 +813,14 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
             }
         }
         return null;
+    }
+
+    private boolean hasRecentEventsSection() {
+        return findSectionIdByTitle(new ArrayList<>(sectionsById.keySet()), NpcDebugInspectorLineParser.RECENT_EVENTS_SECTION) != null;
+    }
+
+    private boolean isRecentEventsSection(@Nonnull InspectorSection section) {
+        return NpcDebugInspectorLineParser.RECENT_EVENTS_SECTION.equalsIgnoreCase(section.title);
     }
 
     private boolean isSectionHeaderLine(@Nullable String value) {

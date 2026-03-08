@@ -146,8 +146,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         syncEventCategoryStateFromSettings();
         syncPinnedStateFromManager();
         prunePinnedKeys();
-        applySnapshot(commandBuilder);
         rebuildRows(commandBuilder, eventBuilder, true);
+        applySnapshot(commandBuilder);
         bindGlobalEvents(eventBuilder);
         lastRenderedStructureSignature = buildStructureSignature();
         syncPinnedSectionOrderToOverlay();
@@ -999,8 +999,8 @@ public final class NpcDebugInspectorPage extends InteractiveCustomUIPage<NpcDebu
         boolean rebuildStructure = !currentSignature.equals(lastRenderedStructureSignature);
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = rebuildStructure ? new UIEventBuilder() : null;
-        applySnapshot(commandBuilder);
         rebuildRows(commandBuilder, eventBuilder, rebuildStructure);
+        applySnapshot(commandBuilder);
         if (rebuildStructure && eventBuilder != null) {
             bindGlobalEvents(eventBuilder);
             lastRenderedStructureSignature = currentSignature;

@@ -15,10 +15,12 @@ import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCu
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
+import com.hypixel.hytale.server.core.modules.time.WorldTimeResource;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -61,6 +63,8 @@ public final class NpcDebugInspectorRosterPage
     private static final long STATUS_MESSAGE_DURATION_MS = 3000L;
     private static final long IMMEDIATE_REARM_DELAY_MS = 75L;
     private static final long NAVIGATION_DELAY_MS = 80L;
+    private static final int GAME_TIME_PAUSE_MIN_STABLE_SAMPLES = 2;
+    private static final long GAME_TIME_PAUSE_MIN_STABLE_MS = 1000L;
 
     private final Supplier<List<NpcDebugLinkedEntry>> entrySupplier;
     private final Consumer<UUID> inspectCallback;
@@ -92,6 +96,12 @@ public final class NpcDebugInspectorRosterPage
     private volatile boolean navigationPending;
     private final AtomicLong refreshTickGeneration;
 
+    @Nullable
+    private Instant lastObservedGameTime;
+    private long lastObservedGameTimeChangeMs;
+    private int unchangedGameTimeSamples;
+    private boolean gameTimePaused;
+
     public NpcDebugInspectorRosterPage(@Nonnull PlayerRef playerRef,
                                        @Nonnull Supplier<List<NpcDebugLinkedEntry>> entrySupplier,
                                        @Nonnull Consumer<UUID> inspectCallback,
@@ -122,6 +132,10 @@ public final class NpcDebugInspectorRosterPage
         this.copyBufferVisible = false;
         this.navigationPending = false;
         this.refreshTickGeneration = new AtomicLong();
+        this.lastObservedGameTime = null;
+        this.lastObservedGameTimeChangeMs = 0L;
+        this.unchangedGameTimeSamples = 0;
+        this.gameTimePaused = false;
     }
 
     @Override
@@ -131,8 +145,10 @@ public final class NpcDebugInspectorRosterPage
                       @Nonnull Store<EntityStore> store) {
         loadPersistedHighlights();
         refreshEntries();
+        refreshGameTimePauseState();
         commandBuilder.append(UI_PATH);
         applyCopyBufferState(commandBuilder);
+        applyGameTimePauseWarningState(commandBuilder);
         commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
         syncQueryFieldValue = false;
         commandBuilder.set("#NpcDebugRosterSubtitle.Text", resolveSubtitle());
@@ -442,7 +458,9 @@ public final class NpcDebugInspectorRosterPage
         UICommandBuilder commandBuilder = new UICommandBuilder();
         UIEventBuilder eventBuilder = null;
 
+        refreshGameTimePauseState();
         applyCopyBufferState(commandBuilder);
+        applyGameTimePauseWarningState(commandBuilder);
         if (syncQueryFieldValue) {
             commandBuilder.set("#NpcDebugRosterFilterQueryField.Value", filterQuery);
             syncQueryFieldValue = false;
@@ -519,6 +537,60 @@ public final class NpcDebugInspectorRosterPage
     private void applyCopyBufferState(@Nonnull UICommandBuilder commandBuilder) {
         commandBuilder.set("#NpcDebugRosterCopyRow.Visible", copyBufferVisible);
         commandBuilder.set("#NpcDebugRosterCopyField.Value", copyBufferValue);
+    }
+
+    private void applyGameTimePauseWarningState(@Nonnull UICommandBuilder commandBuilder) {
+        commandBuilder.set("#NpcDebugRosterGameTimePausedWarning.Visible", gameTimePaused);
+    }
+
+    private void refreshGameTimePauseState() {
+        Instant gameTime = resolveCurrentGameTime();
+        if (gameTime == null) {
+            lastObservedGameTime = null;
+            lastObservedGameTimeChangeMs = 0L;
+            unchangedGameTimeSamples = 0;
+            gameTimePaused = false;
+            return;
+        }
+
+        long nowMs = System.currentTimeMillis();
+        if (lastObservedGameTime == null) {
+            lastObservedGameTime = gameTime;
+            lastObservedGameTimeChangeMs = nowMs;
+            unchangedGameTimeSamples = 0;
+            gameTimePaused = false;
+            return;
+        }
+
+        if (!gameTime.equals(lastObservedGameTime)) {
+            lastObservedGameTime = gameTime;
+            lastObservedGameTimeChangeMs = nowMs;
+            unchangedGameTimeSamples = 0;
+            gameTimePaused = false;
+            return;
+        }
+
+        unchangedGameTimeSamples++;
+        long stableDurationMs = nowMs - lastObservedGameTimeChangeMs;
+        gameTimePaused = unchangedGameTimeSamples >= GAME_TIME_PAUSE_MIN_STABLE_SAMPLES
+                && stableDurationMs >= GAME_TIME_PAUSE_MIN_STABLE_MS;
+    }
+
+    @Nullable
+    private Instant resolveCurrentGameTime() {
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return null;
+        }
+        Store<EntityStore> store = ref.getStore();
+        if (store == null) {
+            return null;
+        }
+        WorldTimeResource worldTime = store.getResource(WorldTimeResource.getResourceType());
+        if (worldTime == null) {
+            return null;
+        }
+        return worldTime.getGameTime();
     }
 
     private void refreshEntries() {

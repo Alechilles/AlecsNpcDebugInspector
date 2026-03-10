@@ -16,15 +16,34 @@ $C.@PageOverlay {
       LayoutMode: Top;
       Padding: (Left: 10, Right: 6, Top: 8, Bottom: 10);
 
-      Label #NpcDebugRosterSubtitle {
+      Group #NpcDebugRosterStatusRow {
         Anchor: (Height: 22);
-        Text: "Linked NPCs: 0";
-        Style: (
-          FontSize: 14,
-          TextColor: #c4d2e1,
-          HorizontalAlignment: Start,
-          VerticalAlignment: Center
-        );
+        LayoutMode: Left;
+
+        Label #NpcDebugRosterSubtitle {
+          Anchor: (Height: 22);
+          FlexWeight: 1;
+          Text: "Linked NPCs: 0";
+          Style: (
+            FontSize: 14,
+            TextColor: #c4d2e1,
+            HorizontalAlignment: Start,
+            VerticalAlignment: Center
+          );
+        }
+
+        Label #NpcDebugRosterGameTimePausedWarning {
+          Anchor: (Width: 240, Height: 22);
+          Text: "WARNING: GAME TIME IS PAUSED";
+          Style: (
+            FontSize: 12,
+            RenderBold: true,
+            TextColor: #ffcd73,
+            HorizontalAlignment: End,
+            VerticalAlignment: Center
+          );
+          Visible: false;
+        }
       }
 
       Group #NpcDebugRosterFilterControls {

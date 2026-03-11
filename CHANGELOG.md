@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+## 1.2.0 - Roster Pause Signal + Release Pipeline Updates - 2026-03-11
+### Added
+- Added a roster warning when world game time is paused, to clarify when timer/cooldown-driven debug values are not advancing.
+- Added CurseForge update-check metadata in `manifest.json` (`UpdateChecker.CurseForge = 1476193`) so supported clients can detect newer versions.
+
+### Changed
+- Bumped project version to `1.2.0` in `pom.xml`.
+- Updated README shields/badges.
+- Aligned release/build automation with the Hytale downloader packaging flow (`publish.yml` and release scripts).
+
 ## 1.1.1 - 2026-03-07
 ### Added
 - Added Recent Events category filters (`Core`, `Targeting`, `Timers`, `Alarms`, `Needs`, `Flock`) to control event log noise.
@@ -25,3 +37,4 @@ All notable changes to this project are documented in this file.
 - Added the in-game NPC Debug Inspector tool with link/unlink roster management.
 - Added inspector, pinned overlay, and debug flags UI surfaces.
 - Added release automation pipeline (`publish.yml`, release scripts, and publish config).
+

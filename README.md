@@ -38,6 +38,15 @@ Opens inspector for the NPC currently in your view.
 Opens inspector for a specific NPC UUID.  
 If that NPC is currently unloaded, the page still opens but data availability is limited until loaded.
 
+## Metrics (HStats)
+- NPC Inspector supports anonymous server-level usage metrics via [HStats](https://hstats.dev/).
+- Metrics reporting is enabled by default using the plugin's registered HStats UUID.
+- Optional: override the HStats plugin UUID with either:
+  - Java property: `-Dalecsnpcdebuginspector.hstats.uuid=<hstats-plugin-uuid>`
+  - Environment variable: `ALECS_NPC_INSPECTOR_HSTATS_UUID=<hstats-plugin-uuid>`
+- Reported data includes aggregate server/player counts plus runtime environment metadata (OS, Java version, CPU core count).
+- Server owners can opt out at any time by editing `hstats-server-uuid.txt` in the server working directory and setting `enabled=false`.
+
 ## Inspector Tool Behavior
 Item asset: `Server/Item/Items/Debug/Npc_Debug_Inspector_Tool.json`
 

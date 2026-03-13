@@ -3,6 +3,9 @@
 All notable changes to this project are documented in this file.
 
 ## Unreleased
+### Added
+- Added HStats telemetry bootstrap for Alec's NPC Inspector, including server-owner opt-out support through `hstats-server-uuid.txt`.
+- Added optional runtime override for the HStats plugin UUID via `-Dalecsnpcdebuginspector.hstats.uuid` or `ALECS_NPC_INSPECTOR_HSTATS_UUID`.
 
 ## 1.2.0 - Roster Pause Signal + Release Pipeline Updates - 2026-03-11
 ### Added

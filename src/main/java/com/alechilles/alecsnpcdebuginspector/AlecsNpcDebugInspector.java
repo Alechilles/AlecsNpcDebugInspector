@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector;
 import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugCommand;
 import com.alechilles.alecsnpcdebuginspector.interactions.NpcDebugInspectorItemInteraction;
 import com.alechilles.alecsnpcdebuginspector.items.NpcDebugItemFeatureHandler;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcDebugInspectorHStatsIntegration;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
@@ -16,6 +17,7 @@ import javax.annotation.Nonnull;
 public final class AlecsNpcDebugInspector extends JavaPlugin {
     private static AlecsNpcDebugInspector instance;
     private NpcDebugItemFeatureHandler itemFeatureHandler;
+    private NpcDebugInspectorHStatsIntegration hStatsIntegration;
 
     public AlecsNpcDebugInspector(@Nonnull JavaPluginInit init) {
         super(init);
@@ -30,6 +32,7 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
                 NpcDebugInspectorItemInteraction.CODEC
         );
         itemFeatureHandler = new NpcDebugItemFeatureHandler();
+        hStatsIntegration = new NpcDebugInspectorHStatsIntegration(this);
         if (getCommandRegistry() != null) {
             getCommandRegistry().registerCommand(new NpcDebugCommand());
         }
@@ -38,6 +41,9 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
     @Override
     protected void start() {
         getLogger().at(Level.INFO).log("Alec's NPC Debug Inspector enabled.");
+        if (hStatsIntegration != null) {
+            hStatsIntegration.initialize();
+        }
     }
 
     @Override

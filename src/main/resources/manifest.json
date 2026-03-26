@@ -13,7 +13,7 @@
   ],
   "Website": "",
   "Main": "com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector",
-  "ServerVersion": "2026.02.19-1A311A592",
+  "ServerVersion": "2026.03.26-89796e57b",
   "Dependencies": {},
   "OptionalDependencies": {
     "Alechilles:Alec's Tamework!": "2.x"
@@ -26,3 +26,4 @@
     "CurseForge": "1476193"
   }
 }
+

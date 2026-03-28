@@ -85,7 +85,7 @@ public final class NpcDebugHighlightVisualizer {
                     SHAPE_OPACITY,
                     SHAPE_SEGMENT_COUNT,
                     SHAPE_LIFETIME_SECONDS,
-                    false
+                    DebugUtils.FLAG_NONE
             );
 
             renderConnectionLine(
@@ -120,7 +120,19 @@ public final class NpcDebugHighlightVisualizer {
         double dirZ = observerZ - npcZ;
         double horizontalDistance = Math.sqrt(dirX * dirX + dirZ * dirZ);
         if (horizontalDistance < MIN_HORIZONTAL_DISTANCE) {
-            DebugUtils.addLine(world, npcX, npcY, npcZ, observerX, observerY, observerZ, HIGHLIGHT_COLOR, LINE_THICKNESS, SHAPE_LIFETIME_SECONDS, false);
+            DebugUtils.addLine(
+                    world,
+                    npcX,
+                    npcY,
+                    npcZ,
+                    observerX,
+                    observerY,
+                    observerZ,
+                    HIGHLIGHT_COLOR,
+                    LINE_THICKNESS,
+                    SHAPE_LIFETIME_SECONDS,
+                    DebugUtils.FLAG_NONE
+            );
             return;
         }
 
@@ -141,7 +153,7 @@ public final class NpcDebugHighlightVisualizer {
                 HIGHLIGHT_COLOR,
                 LINE_THICKNESS,
                 SHAPE_LIFETIME_SECONDS,
-                false
+                DebugUtils.FLAG_NONE
         );
     }
 }

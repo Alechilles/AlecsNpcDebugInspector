@@ -24,17 +24,14 @@
     }
   },
   "Categories": [
-    "Tool.BuilderTool"
+    "Tool"
   ],
-  "BuilderTool": {
-    "UI": [],
-    "Tools": [
-      {
-        "Id": "NpcDebugInspector",
-        "IsBrush": false
-      }
+  "Tags": {
+    "Type": [
+      "Tool"
     ]
   },
+  "Tool": {},
   "Model": "Items/Tools/Brush/Brush.blockymodel",
   "Texture": "Items/Tools/Brush/Brush_Texture.png",
   "Icon": "Icons/Items/EditorTools/AlecsNpcDebugger.png",

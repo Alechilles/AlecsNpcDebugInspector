@@ -30,7 +30,11 @@ public final class NpcDebugItemFeatureHandler {
     private static final String ACTION_OPEN_ROSTER = "OpenRoster";
 
     private final NpcDebugLinkService linkService = new NpcDebugLinkService();
-    private final NpcDebugSnapshotService snapshotService = new NpcDebugSnapshotService();
+    private final NpcDebugSnapshotService snapshotService;
+
+    public NpcDebugItemFeatureHandler(@Nonnull NpcDebugSnapshotService snapshotService) {
+        this.snapshotService = snapshotService;
+    }
 
     /**
      * Handles a use action from the inspector item interaction.
@@ -136,11 +140,6 @@ public final class NpcDebugItemFeatureHandler {
         }
         ItemStack updated = linkService.removeLink(slot.stack, npcUuid);
         slot.container.setItemStackForSlot(slot.slot, updated);
-        Inventory inventory = player.getInventory();
-        if (inventory != null) {
-            inventory.markChanged();
-        }
-        player.sendInventory();
         player.sendMessage(Message.raw("Unlinked NPC " + npcUuid + "."));
     }
 
@@ -163,11 +162,6 @@ public final class NpcDebugItemFeatureHandler {
         }
         ItemStack updated = linkService.setHighlight(slot.stack, npcUuid, highlighted);
         slot.container.setItemStackForSlot(slot.slot, updated);
-        Inventory inventory = player.getInventory();
-        if (inventory != null) {
-            inventory.markChanged();
-        }
-        player.sendInventory();
         ensureHighlightTracking(player, toolId);
     }
 
@@ -260,8 +254,6 @@ public final class NpcDebugItemFeatureHandler {
             return;
         }
         inventory.getHotbar().setItemStackForSlot((short) active, updated);
-        inventory.markChanged();
-        player.sendInventory();
     }
 
     private record ItemSlot(ItemContainer container, short slot, ItemStack stack) {

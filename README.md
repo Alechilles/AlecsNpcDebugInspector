@@ -1,7 +1,7 @@
 [![Cats](https://img.shields.io/curseforge/dt/1432112?label=Cats&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-cats)
 [![Tamework](https://img.shields.io/curseforge/dt/1447962?label=Tamework&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-tamework)
 [![Nametags](https://img.shields.io/curseforge/dt/1464844?label=Nametags&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-nametags)
-[![Animal Husbandry](https://img.shields.io/curseforge/dt/1480275?label=Animal%20Husbandry&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://legacy.curseforge.com/hytale/mods/alecs-animal-husbandry)
+[![Animal Husbandry](https://img.shields.io/curseforge/dt/1480275?label=Animal%20Husbandry&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-animal-husbandry)
 
 [![Discord](https://img.shields.io/discord/1468261809739005996?style=for-the-badge&logo=discord&logoColor=white&label=Join%20Discord&color=rgb(88,101,242))](https://discord.gg/E8n8RgTTdq)
 
@@ -11,6 +11,8 @@
 Standalone in-game NPC debugging tool for Hytale.
 
 This plugin is independent from Alec's Tamework. It can be used alongside other mods and is designed to inspect live NPC behavior with UI tools instead of command spam.
+
+When Alec's Tamework is installed, the inspector now also consumes Tamework's public API to expose persisted tame/profile state alongside live ECS state.
 
 ## What It Does
 - Adds an in-game **NPC Debug Inspector Tool** item that can:
@@ -23,6 +25,13 @@ This plugin is independent from Alec's Tamework. It can be used alongside other 
   - `/npcdebug <uuid>`
 - Includes a **Pinned Overlay** so selected inspector fields stay visible while you keep playing.
 - Tracks **recent state/event transitions** in the inspector data.
+- When Tamework is present, adds API-backed debug sections for:
+  - persisted profile and snapshot state
+  - command-link/home-position state
+  - ownership / claim / damage policy evaluation
+  - resolved Tamework config views
+  - Tamework persistence diagnostics
+  - recent Tamework capture / death / lost / profile-change events
 
 ## Quick Start
 1. Install the mod jar into your mods folders.
@@ -50,6 +59,7 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 ## UI Surfaces
 ### 1) Inspector Page
 - Sectioned NPC details (overview, AI/state, sensors, pathing, timers, components, flock, etc.).
+- With Tamework installed, also shows API-backed persistence/policy/config/diagnostic sections in addition to the live Tamework component section.
 - Expand/collapse sections.
 - Section reorder support.
 - Refresh rate slider (`150ms` to `2000ms`, step `50ms`).

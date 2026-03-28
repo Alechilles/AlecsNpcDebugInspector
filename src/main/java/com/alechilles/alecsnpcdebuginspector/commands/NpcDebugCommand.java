@@ -19,10 +19,11 @@ import javax.annotation.Nullable;
  * Opens the NPC Debug Inspector page for a target NPC.
  */
 public final class NpcDebugCommand extends AbstractPlayerCommand {
-    private final NpcDebugSnapshotService snapshotService = new NpcDebugSnapshotService();
+    private final NpcDebugSnapshotService snapshotService;
 
-    public NpcDebugCommand() {
+    public NpcDebugCommand(@Nonnull NpcDebugSnapshotService snapshotService) {
         super("npcdebug", "Open NPC Debug Inspector for the NPC in view or by UUID.");
+        this.snapshotService = snapshotService;
         setAllowsExtraArguments(true);
     }
 

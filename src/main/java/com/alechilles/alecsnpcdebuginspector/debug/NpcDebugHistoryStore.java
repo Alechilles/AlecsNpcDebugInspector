@@ -44,13 +44,15 @@ final class NpcDebugHistoryStore {
                       boolean recordEvent,
                       @Nonnull NpcDebugEventCategory eventCategory) {
         HistoryEntry entry = history.computeIfAbsent(npcUuid, ignored -> new HistoryEntry());
-        String previous = entry.fields.put(key, value);
-        boolean changed = previous != null && !previous.equals(value);
-        if (changed && recordEvent) {
-            String event = EVENT_TIME_FORMAT.format(now) + " " + label + ": " + previous + " -> " + value;
-            pushEvent(entry, event, eventCategory);
+        synchronized (entry) {
+            String previous = entry.fields.put(key, value);
+            boolean changed = previous != null && !previous.equals(value);
+            if (changed && recordEvent) {
+                String event = EVENT_TIME_FORMAT.format(now) + " " + label + ": " + previous + " -> " + value;
+                pushEvent(entry, event, eventCategory);
+            }
+            return new TrackResult(changed, previous);
         }
-        return new TrackResult(changed, previous);
     }
 
     void recordEvent(@Nonnull UUID npcUuid, @Nonnull Instant now, @Nonnull String description) {
@@ -62,7 +64,9 @@ final class NpcDebugHistoryStore {
                      @Nonnull String description,
                      @Nonnull NpcDebugEventCategory category) {
         HistoryEntry entry = history.computeIfAbsent(npcUuid, ignored -> new HistoryEntry());
-        pushEvent(entry, EVENT_TIME_FORMAT.format(now) + " " + description, category);
+        synchronized (entry) {
+            pushEvent(entry, EVENT_TIME_FORMAT.format(now) + " " + description, category);
+        }
     }
 
     @Nonnull
@@ -83,20 +87,22 @@ final class NpcDebugHistoryStore {
             return List.of();
         }
         HistoryEntry entry = history.get(npcUuid);
-        if (entry == null || entry.events.isEmpty()) {
+        if (entry == null || enabledCategories.isEmpty()) {
             return List.of();
         }
-        if (enabledCategories.isEmpty()) {
-            return List.of();
-        }
-        List<String> events = new ArrayList<>(entry.events.size());
-        for (EventEntry event : entry.events) {
-            if (event == null || !enabledCategories.contains(event.category)) {
-                continue;
+        synchronized (entry) {
+            if (entry.events.isEmpty()) {
+                return List.of();
             }
-            events.add(event.text);
+            List<String> events = new ArrayList<>(entry.events.size());
+            for (EventEntry event : entry.events) {
+                if (event == null || !enabledCategories.contains(event.category)) {
+                    continue;
+                }
+                events.add(event.text);
+            }
+            return events;
         }
-        return events;
     }
 
     int totalEventCount(@Nullable UUID npcUuid) {
@@ -104,10 +110,12 @@ final class NpcDebugHistoryStore {
             return 0;
         }
         HistoryEntry entry = history.get(npcUuid);
-        if (entry == null || entry.events.isEmpty()) {
+        if (entry == null) {
             return 0;
         }
-        return entry.events.size();
+        synchronized (entry) {
+            return entry.events.size();
+        }
     }
 
     private static final class HistoryEntry {

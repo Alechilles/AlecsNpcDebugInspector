@@ -80,6 +80,8 @@ public final class NpcDebugSnapshotService {
 
     private final NpcDebugHistoryStore historyStore = new NpcDebugHistoryStore();
     private final NpcDebugTameworkIntegration tameworkIntegration = new NpcDebugTameworkIntegration();
+    private final NpcDebugTameworkApiIntegration tameworkApiIntegration =
+            new NpcDebugTameworkApiIntegration(historyStore);
     private final NpcDebugComponentLocalStateResolver componentLocalStateResolver =
             new NpcDebugComponentLocalStateResolver();
 
@@ -128,6 +130,13 @@ public final class NpcDebugSnapshotService {
         if (tameworkIntegration.isDetected()) {
             appendSection(details, "Tamework", buildTameworkSection(resolvedUuid, targetRef, store, npc, gameTime));
         }
+        if (tameworkApiIntegration.isDetected()) {
+            appendSection(details, "Tamework API / Profile", buildTameworkApiProfileSection(resolvedUuid, gameTime));
+            appendSection(details, "Tamework Command Links", buildTameworkCommandLinksSection(resolvedUuid, gameTime));
+            appendSection(details, "Tamework Policy", buildTameworkPolicySection(resolvedUuid, viewerUuid, gameTime));
+            appendSection(details, "Tamework Resolved Config", buildTameworkResolvedConfigSection(resolvedUuid, npc, gameTime));
+            appendSection(details, "Tamework Diagnostics", buildTameworkDiagnosticsSection(gameTime));
+        }
         appendSection(details, "AI", buildAiSection(resolvedUuid, npc, gameTime));
         appendSection(details, "Targeting / Sensors", buildTargetingSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Pathing", buildPathingSection(resolvedUuid, targetRef, store, npc, gameTime));
@@ -143,6 +152,10 @@ public final class NpcDebugSnapshotService {
         appendSection(details, "Recent Events", buildEventsSection(resolvedUuid, enabledEventCategories));
 
         return new NpcDebugSnapshot(title, subtitle, details.toString().trim());
+    }
+
+    public void close() {
+        tameworkApiIntegration.close();
     }
 
     @Nonnull
@@ -220,6 +233,64 @@ public final class NpcDebugSnapshotService {
         List<NpcDebugTameworkField> fields = tameworkIntegration.capture(npcRef, npc, store);
         if (fields.isEmpty()) {
             appendTrackedLine(sb, npcUuid, now, "tamework.status", "Status", "Tamework unavailable", true, false);
+            return sb.toString().trim();
+        }
+        for (NpcDebugTameworkField field : fields) {
+            appendTrackedLine(
+                    sb,
+                    npcUuid,
+                    now,
+                    field.key(),
+                    field.label(),
+                    field.value(),
+                    field.trackChange(),
+                    field.recordEvent()
+            );
+        }
+        return sb.toString().trim();
+    }
+
+    @Nonnull
+    private String buildTameworkApiProfileSection(@Nullable UUID npcUuid, @Nonnull Instant now) {
+        return buildTameworkFieldSection(npcUuid, now, tameworkApiIntegration.captureProfileFields(npcUuid));
+    }
+
+    @Nonnull
+    private String buildTameworkCommandLinksSection(@Nullable UUID npcUuid, @Nonnull Instant now) {
+        return buildTameworkFieldSection(npcUuid, now, tameworkApiIntegration.captureCommandLinkFields(npcUuid));
+    }
+
+    @Nonnull
+    private String buildTameworkPolicySection(@Nullable UUID npcUuid,
+                                              @Nullable UUID viewerUuid,
+                                              @Nonnull Instant now) {
+        return buildTameworkFieldSection(npcUuid, now, tameworkApiIntegration.capturePolicyFields(npcUuid, viewerUuid));
+    }
+
+    @Nonnull
+    private String buildTameworkResolvedConfigSection(@Nullable UUID npcUuid,
+                                                      @Nullable NPCEntity npc,
+                                                      @Nonnull Instant now) {
+        String liveRoleId = npc != null ? resolveRoleId(npc) : null;
+        return buildTameworkFieldSection(
+                npcUuid,
+                now,
+                tameworkApiIntegration.captureResolvedConfigFields(npcUuid, liveRoleId)
+        );
+    }
+
+    @Nonnull
+    private String buildTameworkDiagnosticsSection(@Nonnull Instant now) {
+        return buildTameworkFieldSection(null, now, tameworkApiIntegration.captureDiagnosticsFields());
+    }
+
+    @Nonnull
+    private String buildTameworkFieldSection(@Nullable UUID npcUuid,
+                                             @Nonnull Instant now,
+                                             @Nonnull List<NpcDebugTameworkField> fields) {
+        StringBuilder sb = new StringBuilder();
+        if (fields.isEmpty()) {
+            appendTrackedLine(sb, npcUuid, now, "tamework.api.status", "Status", "Tamework API unavailable", true, false);
             return sb.toString().trim();
         }
         for (NpcDebugTameworkField field : fields) {

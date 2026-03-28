@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector;
 
+import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
 import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugCommand;
 import com.alechilles.alecsnpcdebuginspector.interactions.NpcDebugInspectorItemInteraction;
 import com.alechilles.alecsnpcdebuginspector.items.NpcDebugItemFeatureHandler;
@@ -16,6 +17,7 @@ import javax.annotation.Nonnull;
  */
 public final class AlecsNpcDebugInspector extends JavaPlugin {
     private static AlecsNpcDebugInspector instance;
+    private NpcDebugSnapshotService snapshotService;
     private NpcDebugItemFeatureHandler itemFeatureHandler;
     private NpcDebugInspectorHStatsIntegration hStatsIntegration;
 
@@ -26,15 +28,16 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     @Override
     protected void setup() {
+        snapshotService = new NpcDebugSnapshotService();
         Interaction.CODEC.register(
                 "NpcDebugInspectorItem",
                 NpcDebugInspectorItemInteraction.class,
                 NpcDebugInspectorItemInteraction.CODEC
         );
-        itemFeatureHandler = new NpcDebugItemFeatureHandler();
+        itemFeatureHandler = new NpcDebugItemFeatureHandler(snapshotService);
         hStatsIntegration = new NpcDebugInspectorHStatsIntegration(this);
         if (getCommandRegistry() != null) {
-            getCommandRegistry().registerCommand(new NpcDebugCommand());
+            getCommandRegistry().registerCommand(new NpcDebugCommand(snapshotService));
         }
     }
 
@@ -49,6 +52,9 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
     @Override
     protected void shutdown() {
         NpcDebugHighlightManager.stopAll();
+        if (snapshotService != null) {
+            snapshotService.close();
+        }
         getLogger().at(Level.INFO).log("Alec's NPC Debug Inspector disabled.");
     }
 
@@ -58,5 +64,9 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     public NpcDebugItemFeatureHandler getItemFeatureHandler() {
         return itemFeatureHandler;
+    }
+
+    public NpcDebugSnapshotService getSnapshotService() {
+        return snapshotService;
     }
 }

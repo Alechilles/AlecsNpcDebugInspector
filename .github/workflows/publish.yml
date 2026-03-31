@@ -96,137 +96,12 @@ jobs:
         run: |
           .\scripts\release\validate-release.ps1 -Version "${{ steps.version.outputs.version }}"
 
-      - name: Prepare Hytale server jar
+      - name: Resolve packaging source
         id: hytale
         shell: pwsh
-        env:
-          HYTALE_DOWNLOADER_CREDENTIALS_B64: ${{ secrets.HYTALE_DOWNLOADER_CREDENTIALS_B64 }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:HYTALE_DOWNLOADER_CREDENTIALS_B64)) {
-            Write-Warning "HYTALE_DOWNLOADER_CREDENTIALS_B64 is not set. Falling back to prebuilt GitHub release asset."
-            "install_path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            exit 0
-          }
-
-          $patchline = "${{ github.event.inputs.hytale_patchline }}"
-          if ([string]::IsNullOrWhiteSpace($patchline)) {
-            $patchline = "release"
-          }
-
-          $workspace = Join-Path $PWD ".ci"
-          New-Item -ItemType Directory -Path $workspace -Force | Out-Null
-
-          $downloaderZipPath = Join-Path $workspace "hytale-downloader.zip"
-          $downloaderDir = Join-Path $workspace "hytale-downloader"
-          if (Test-Path -Path $downloaderDir) {
-            Remove-Item -Path $downloaderDir -Recurse -Force
-          }
-
-          $curlArgs = @(
-            "-fL",
-            "--retry", "3",
-            "--retry-delay", "2",
-            "-o", $downloaderZipPath,
-            "https://downloader.hytale.com/hytale-downloader.zip"
-          )
-          & curl.exe @curlArgs
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download hytale-downloader.zip (curl exit code $LASTEXITCODE)."
-          }
-
-          Expand-Archive -LiteralPath $downloaderZipPath -DestinationPath $downloaderDir -Force
-          $downloaderExe = Join-Path $downloaderDir "hytale-downloader-windows-amd64.exe"
-          if (-not (Test-Path -Path $downloaderExe)) {
-            throw "Downloader executable was not found at '$downloaderExe'."
-          }
-
-          $credentialsPath = Join-Path $workspace ".hytale-downloader-credentials.json"
-          try {
-            try {
-              $credentialsBytes = [Convert]::FromBase64String($env:HYTALE_DOWNLOADER_CREDENTIALS_B64)
-            } catch {
-              throw "HYTALE_DOWNLOADER_CREDENTIALS_B64 was not valid base64."
-            }
-            [System.IO.File]::WriteAllBytes($credentialsPath, $credentialsBytes)
-
-            $manifestPath = Join-Path $PWD "src\main\resources\manifest.json"
-            $manifest = Get-Content -Path $manifestPath -Raw | ConvertFrom-Json
-            $targetServerVersion = [string]$manifest.ServerVersion
-            if ([string]::IsNullOrWhiteSpace($targetServerVersion)) {
-              throw "ServerVersion was empty in $manifestPath."
-            }
-            $targetServerVersion = $targetServerVersion.Trim()
-
-            $versionOutput = & $downloaderExe `
-              -print-version `
-              -patchline $patchline `
-              -credentials-path $credentialsPath `
-              -skip-update-check 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              $versionOutputText = ($versionOutput | Out-String)
-              throw "Failed to query downloader version for patchline '$patchline'. Output: $versionOutputText"
-            }
-
-            $versionOutputText = ($versionOutput | Out-String)
-            $versionMatch = [regex]::Match($versionOutputText, "\d{4}\.\d{2}\.\d{2}-[A-Za-z0-9]+")
-            if (-not $versionMatch.Success) {
-              throw "Unable to parse downloader version from output: $versionOutputText"
-            }
-
-            $availableServerVersion = $versionMatch.Value
-            Write-Host "Manifest ServerVersion: $targetServerVersion"
-            Write-Host "Downloader version for patchline '$patchline': $availableServerVersion"
-
-            if ($availableServerVersion.ToLowerInvariant() -ne $targetServerVersion.ToLowerInvariant()) {
-              throw "Manifest ServerVersion '$targetServerVersion' does not match downloader version '$availableServerVersion' for patchline '$patchline'."
-            }
-
-            $gameZipPath = Join-Path $workspace "hytale-game.zip"
-            & $downloaderExe `
-              -patchline $patchline `
-              -download-path $gameZipPath `
-              -credentials-path $credentialsPath `
-              -skip-update-check
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to download Hytale game zip with downloader (exit code $LASTEXITCODE)."
-            }
-            if (-not (Test-Path -Path $gameZipPath)) {
-              throw "Downloader did not produce expected zip at '$gameZipPath'."
-            }
-
-            $gameExtractPath = Join-Path $workspace "hytale-game"
-            if (Test-Path -Path $gameExtractPath) {
-              Remove-Item -Path $gameExtractPath -Recurse -Force
-            }
-            Expand-Archive -LiteralPath $gameZipPath -DestinationPath $gameExtractPath -Force
-
-            $serverJarCandidate = Get-ChildItem -Path $gameExtractPath -Recurse -Filter "HytaleServer.jar" |
-              Select-Object -First 1
-            if ($null -eq $serverJarCandidate) {
-              throw "HytaleServer.jar was not found in downloaded game zip."
-            }
-
-            $installPath = Join-Path $workspace "hytale-install"
-            $serverDir = Join-Path $installPath "Server"
-            New-Item -ItemType Directory -Path $serverDir -Force | Out-Null
-            $serverJarPath = Join-Path $serverDir "HytaleServer.jar"
-            Copy-Item -Path $serverJarCandidate.FullName -Destination $serverJarPath -Force
-
-            $jarInfo = Get-Item -Path $serverJarPath
-            if ($jarInfo.Length -le 0) {
-              throw "Prepared HytaleServer.jar is empty: '$serverJarPath'."
-            }
-
-            Remove-Item -Path $credentialsPath -Force -ErrorAction SilentlyContinue
-            "install_path=$installPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "Prepared Hytale install path at '$installPath'."
-          } catch {
-            Write-Warning "Hytale downloader prep failed: $($_.Exception.Message)"
-            Write-Warning "Falling back to prebuilt GitHub release asset."
-            Remove-Item -Path $credentialsPath -Force -ErrorAction SilentlyContinue
-            "install_path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            exit 0
-          }
+          "install_path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Using prebuilt artifact flow (no downloader/server-jar credential path)."
 
       - name: Build package
         id: build
@@ -235,13 +110,32 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-          .\scripts\release\build-package.ps1 `
-            -Version "${{ steps.version.outputs.version }}" `
-            -HytaleInstallPath "${{ steps.hytale.outputs.install_path }}" `
-            -OutputDir "artifacts" `
-            -ArtifactPathOutputFile "artifacts\artifact-path.txt"
 
-          $artifactPath = (Get-Content -Path "artifacts\artifact-path.txt" -Raw).Trim()
+          $version = "${{ steps.version.outputs.version }}"
+          $config = Get-Content -Path ".release/publish-config.json" -Raw | ConvertFrom-Json
+          $expectedName = $config.artifactNameTemplate.Replace("{version}", $version)
+          $prebuiltPath = Join-Path $PWD "artifacts\$expectedName"
+          $artifactPath = ""
+
+          if (Test-Path -Path $prebuiltPath) {
+            $prebuiltItem = Get-Item -Path $prebuiltPath
+            if ($prebuiltItem.Length -le 0) {
+              throw "Prebuilt artifact exists but is empty: '$prebuiltPath'."
+            }
+
+            $artifactPath = $prebuiltItem.FullName
+            Write-Host "Using prebuilt artifact: $artifactPath"
+          } else {
+            Write-Warning "Prebuilt artifact '$expectedName' not found. Falling back to scripted packaging."
+            .\scripts\release\build-package.ps1 `
+              -Version $version `
+              -HytaleInstallPath "${{ steps.hytale.outputs.install_path }}" `
+              -OutputDir "artifacts" `
+              -ArtifactPathOutputFile "artifacts\artifact-path.txt"
+
+            $artifactPath = (Get-Content -Path "artifacts\artifact-path.txt" -Raw).Trim()
+          }
+
           if ([string]::IsNullOrWhiteSpace($artifactPath)) {
             throw "Artifact path output was empty."
           }

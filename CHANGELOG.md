@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 1.4.0 - Tamework API Sections + Update 4 Compatibility - 2026-03-31
+### Added
+- Added API-backed Tamework inspector sections that surface Tamework state through integration hooks when Alec's Tamework is present.
+
+### Changed
+- Bumped `ServerVersion` compatibility in `manifest.json` to `2026.03.26-89796e57b`.
+
+### Fixed
+- Updated highlight visualization wiring to align with Update 4 `DebugUtils` debug-flag behavior.
+- Removed builder-tool classification from the NPC Inspector item so it no longer appears under builder-only tooling rules.
+
 ## 1.3.0 - HStats Telemetry + Runtime UUID Override - 2026-03-14
 ### Added
 - Added HStats telemetry bootstrap for Alec's NPC Inspector, including server-owner opt-out support through `hstats-server-uuid.txt`.

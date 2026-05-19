@@ -10,6 +10,7 @@
   "curseforge": {
     "projectId": "1476193",
     "releaseType": "release",
+    "changelogType": "html",
     "gameVersionTypeIds": [65437]
   },
   "modtale": {

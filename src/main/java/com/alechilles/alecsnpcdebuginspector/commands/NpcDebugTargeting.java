@@ -5,14 +5,13 @@ import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.query.Query;
-import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.modules.entity.component.HeadRotation;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import java.util.UUID;
 import javax.annotation.Nullable;
+import org.joml.Vector3d;
 
 /**
  * Resolves the NPC currently closest to player crosshair.
@@ -34,16 +33,12 @@ public final class NpcDebugTargeting {
             return null;
         }
 
-        Vector3d playerPos = new Vector3d(transform.getPosition());
-        Vector3f rotation = new Vector3f(transform.getRotation());
         HeadRotation headRotation = store.getComponent(playerRef, HeadRotation.getComponentType());
-        Vector3f headRot = headRotation != null ? headRotation.getRotation() : rotation;
-
-        Vector3f forward = new Vector3f(Vector3f.FORWARD);
-        forward.rotateY(headRot.getYaw());
-        forward.rotateX(headRot.getPitch());
+        Vector3d playerPos = new Vector3d(transform.getPosition());
+        Vector3d forward = headRotation != null
+                ? new Vector3d(headRotation.getDirection())
+                : transform.getRotation().transform(new Vector3d(0.0, 0.0, 1.0));
         forward.normalize();
-        Vector3d forwardDir = new Vector3d(forward.x, forward.y, forward.z);
 
         BestCandidate best = new BestCandidate();
         store.forEachChunk(Query.any(), (ArchetypeChunk<EntityStore> chunk, CommandBuffer<EntityStore> commandBuffer) -> {
@@ -54,13 +49,13 @@ public final class NpcDebugTargeting {
                 if (npc == null || npcTransform == null) {
                     continue;
                 }
-                Vector3d toNpc = new Vector3d(npcTransform.getPosition()).subtract(playerPos);
+                Vector3d toNpc = new Vector3d(npcTransform.getPosition()).sub(playerPos);
                 double distance = toNpc.length();
                 if (distance <= 0.1 || distance > MAX_DISTANCE) {
                     continue;
                 }
                 Vector3d dir = new Vector3d(toNpc).normalize();
-                double dot = forwardDir.dot(dir);
+                double dot = forward.dot(dir);
                 if (dot < MIN_DOT) {
                     continue;
                 }

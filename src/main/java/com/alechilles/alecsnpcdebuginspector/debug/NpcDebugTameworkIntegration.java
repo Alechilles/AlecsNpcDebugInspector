@@ -4,7 +4,6 @@ import com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
-import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import java.lang.reflect.Array;
@@ -18,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import org.joml.Vector3d;
 
 /**
  * Optional runtime bridge that exposes Tamework-specific NPC debug fields when Tamework is installed.

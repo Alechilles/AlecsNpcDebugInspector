@@ -10,8 +10,9 @@ import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.protocol.packets.interface_.CustomPageLifetime;
 import com.hypixel.hytale.protocol.packets.interface_.CustomUIEventBindingType;
-import com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent;
 import com.hypixel.hytale.server.core.entity.entities.player.pages.InteractiveCustomUIPage;
+import com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent;
+import com.hypixel.hytale.server.core.modules.entity.component.PersistentDisplayName;
 import com.hypixel.hytale.server.core.ui.builder.EventData;
 import com.hypixel.hytale.server.core.ui.builder.UICommandBuilder;
 import com.hypixel.hytale.server.core.ui.builder.UIEventBuilder;
@@ -325,6 +326,13 @@ public final class NpcDebugInspectorDebugFlagsPage
     private String resolveNpcDisplayLabel(@Nonnull Ref<EntityStore> npcRef,
                                           @Nonnull Store<EntityStore> store,
                                           @Nonnull NPCEntity npc) {
+        PersistentDisplayName persistentDisplayName = store.getComponent(npcRef, PersistentDisplayName.getComponentType());
+        if (persistentDisplayName != null && persistentDisplayName.getDisplayName() != null) {
+            String ansi = persistentDisplayName.getDisplayName().getAnsiMessage();
+            if (ansi != null && !ansi.isBlank()) {
+                return ansi.trim();
+            }
+        }
         DisplayNameComponent displayNameComponent = store.getComponent(npcRef, DisplayNameComponent.getComponentType());
         if (displayNameComponent != null && displayNameComponent.getDisplayName() != null) {
             String ansi = displayNameComponent.getDisplayName().getAnsiMessage();

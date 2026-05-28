@@ -7,8 +7,9 @@ import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
-import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent;
+import com.hypixel.hytale.server.core.modules.entity.component.PersistentDisplayName;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatValue;
 import com.hypixel.hytale.server.core.modules.entitystats.asset.EntityStatType;
@@ -216,6 +217,13 @@ final class NpcDebugLinkService {
     private String resolveDisplayName(@Nonnull Ref<EntityStore> npcRef,
                                       @Nonnull Store<EntityStore> store,
                                       @Nonnull NPCEntity npc) {
+        PersistentDisplayName persistentDisplayName = store.getComponent(npcRef, PersistentDisplayName.getComponentType());
+        if (persistentDisplayName != null && persistentDisplayName.getDisplayName() != null) {
+            String ansi = persistentDisplayName.getDisplayName().getAnsiMessage();
+            if (ansi != null && !ansi.isBlank()) {
+                return ansi;
+            }
+        }
         DisplayNameComponent displayName = store.getComponent(npcRef, DisplayNameComponent.getComponentType());
         if (displayName != null && displayName.getDisplayName() != null) {
             String ansi = displayName.getDisplayName().getAnsiMessage();
@@ -324,7 +332,7 @@ final class NpcDebugLinkService {
         if (npcTransform == null) {
             return null;
         }
-        double distance = playerTransform.getPosition().distanceTo(npcTransform.getPosition());
+        double distance = playerTransform.getPosition().distance(npcTransform.getPosition());
         return String.format(Locale.ROOT, "%.1f", distance);
     }
 

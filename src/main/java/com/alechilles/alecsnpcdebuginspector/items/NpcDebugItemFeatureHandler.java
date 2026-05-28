@@ -10,7 +10,7 @@ import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.entity.entities.Player;
-import com.hypixel.hytale.server.core.inventory.Inventory;
+import com.hypixel.hytale.server.core.inventory.InventoryComponent.Hotbar;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
 import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -68,22 +68,22 @@ public final class NpcDebugItemFeatureHandler {
         }
 
         if (targetRef == null || !targetRef.isValid()) {
-            player.sendMessage(Message.raw("No NPC targeted."));
+            sendMessage(player, "No NPC targeted.");
             return false;
         }
         NPCEntity npc = store.getComponent(targetRef, NPCEntity.getComponentType());
         if (npc == null) {
-            player.sendMessage(Message.raw("Target is not an NPC."));
+            sendMessage(player, "Target is not an NPC.");
             return false;
         }
         UUID npcUuid = npc.getUuid();
         if (npcUuid == null) {
-            player.sendMessage(Message.raw("Target NPC UUID unavailable."));
+            sendMessage(player, "Target NPC UUID unavailable.");
             return false;
         }
         NpcDebugLinkService.LinkToggleResult toggle = linkService.toggleLink(working, npcUuid);
         if (toggle.hitMax) {
-            player.sendMessage(Message.raw("Link limit reached (" + toggle.linkedCount + ")."));
+            sendMessage(player, "Link limit reached (" + toggle.linkedCount + ").");
             return false;
         }
         if (!toggle.toggled) {
@@ -91,7 +91,7 @@ public final class NpcDebugItemFeatureHandler {
         }
         updateHeldItem(player, toggle.stack);
         String status = toggle.linked ? "Linked" : "Unlinked";
-        player.sendMessage(Message.raw(status + " NPC " + npcUuid + " (" + toggle.linkedCount + " total)."));
+        sendMessage(player, status + " NPC " + npcUuid + " (" + toggle.linkedCount + " total).");
         return true;
     }
 
@@ -116,7 +116,7 @@ public final class NpcDebugItemFeatureHandler {
                 npcUuid -> unlinkNpcFromTool(player, toolId, npcUuid),
                 () -> readHighlightsForTool(player, toolId),
                 (npcUuid, highlighted) -> setHighlightForTool(player, toolId, npcUuid, highlighted),
-                message -> player.sendMessage(Message.raw(message))
+                message -> sendMessage(player, message)
         );
         player.getPageManager().openCustomPage(playerRef, store, page);
         return true;
@@ -135,12 +135,12 @@ public final class NpcDebugItemFeatureHandler {
     private void unlinkNpcFromTool(@Nonnull Player player, @Nonnull String toolId, @Nonnull UUID npcUuid) {
         ItemSlot slot = findToolSlotById(player, toolId);
         if (slot == null) {
-            player.sendMessage(Message.raw("Could not locate inspector tool."));
+            sendMessage(player, "Could not locate inspector tool.");
             return;
         }
         ItemStack updated = linkService.removeLink(slot.stack, npcUuid);
         slot.container.setItemStackForSlot(slot.slot, updated);
-        player.sendMessage(Message.raw("Unlinked NPC " + npcUuid + "."));
+        sendMessage(player, "Unlinked NPC " + npcUuid + ".");
     }
 
     @Nonnull
@@ -219,11 +219,10 @@ public final class NpcDebugItemFeatureHandler {
 
     @Nullable
     private ItemSlot findToolSlotById(@Nonnull Player player, @Nonnull String toolId) {
-        Inventory inventory = player.getInventory();
-        if (inventory == null || inventory.getHotbar() == null) {
+        ItemContainer hotbar = getHotbar(player);
+        if (hotbar == null) {
             return null;
         }
-        ItemContainer hotbar = inventory.getHotbar();
         short capacity = hotbar.getCapacity();
         for (short slot = 0; slot < capacity; slot++) {
             ItemStack stack = hotbar.getItemStack(slot);
@@ -245,15 +244,47 @@ public final class NpcDebugItemFeatureHandler {
     }
 
     private void updateHeldItem(@Nonnull Player player, @Nonnull ItemStack updated) {
-        Inventory inventory = player.getInventory();
-        if (inventory == null || inventory.getHotbar() == null) {
+        ItemContainer hotbar = getHotbar(player);
+        if (hotbar == null) {
             return;
         }
-        byte active = inventory.getActiveHotbarSlot();
-        if (active == Inventory.INACTIVE_SLOT_INDEX) {
+        byte active = getActiveHotbarSlot(player);
+        if (active < 0 || active >= hotbar.getCapacity()) {
             return;
         }
-        inventory.getHotbar().setItemStackForSlot((short) active, updated);
+        hotbar.setItemStackForSlot((short) active, updated);
+    }
+
+    private void sendMessage(@Nonnull Player player, @Nonnull String message) {
+        PlayerRef playerRef = player.getPlayerRef();
+        if (playerRef != null && playerRef.isValid()) {
+            playerRef.sendMessage(Message.raw(message));
+        }
+    }
+
+    @Nullable
+    private ItemContainer getHotbar(@Nullable Player player) {
+        Hotbar hotbar = getHotbarComponent(player);
+        return hotbar != null ? hotbar.getInventory() : null;
+    }
+
+    private byte getActiveHotbarSlot(@Nullable Player player) {
+        Hotbar hotbar = getHotbarComponent(player);
+        return hotbar != null ? hotbar.getActiveSlot() : -1;
+    }
+
+    @Nullable
+    private Hotbar getHotbarComponent(@Nullable Player player) {
+        if (player == null) {
+            return null;
+        }
+        PlayerRef playerRef = player.getPlayerRef();
+        Ref<EntityStore> ref = playerRef != null ? playerRef.getReference() : null;
+        if (ref == null || !ref.isValid()) {
+            return null;
+        }
+        Store<EntityStore> store = ref.getStore();
+        return store != null ? store.getComponent(ref, Hotbar.getComponentType()) : null;
     }
 
     private record ItemSlot(ItemContainer container, short slot, ItemStack stack) {

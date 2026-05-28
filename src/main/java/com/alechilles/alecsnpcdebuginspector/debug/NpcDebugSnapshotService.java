@@ -3,7 +3,6 @@ package com.alechilles.alecsnpcdebuginspector.debug;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
-import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.EntityUtils;
 import com.hypixel.hytale.server.core.entity.entities.Player;
@@ -60,6 +59,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import org.joml.Vector3d;
 
 /**
  * Builds read-only debug snapshots for a specific NPC.
@@ -1528,7 +1528,7 @@ public final class NpcDebugSnapshotService {
         if (ref == null || !ref.isValid()) {
             return null;
         }
-        Object displayNameComponent = store.getComponent(ref, com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent.getComponentType());
+        Object displayNameComponent = resolveDisplayNameComponent(ref, store);
         if (displayNameComponent == null) {
             return null;
         }
@@ -1547,6 +1547,21 @@ public final class NpcDebugSnapshotService {
             // Best-effort only.
         }
         return null;
+    }
+
+    @Nullable
+    private Object resolveDisplayNameComponent(@Nonnull Ref<EntityStore> ref, @Nonnull Store<EntityStore> store) {
+        Object persistentDisplayName = store.getComponent(
+                ref,
+                com.hypixel.hytale.server.core.modules.entity.component.PersistentDisplayName.getComponentType()
+        );
+        if (persistentDisplayName != null) {
+            return persistentDisplayName;
+        }
+        return store.getComponent(
+                ref,
+                com.hypixel.hytale.server.core.modules.entity.component.DisplayNameComponent.getComponentType()
+        );
     }
 
     @Nonnull
@@ -1735,7 +1750,7 @@ public final class NpcDebugSnapshotService {
         if (from == null || to == null) {
             return "n/a";
         }
-        return formatNumber(from.getPosition().distanceTo(to.getPosition()));
+        return formatNumber(from.getPosition().distance(to.getPosition()));
     }
 
     @Nonnull

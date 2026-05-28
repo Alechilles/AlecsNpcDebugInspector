@@ -110,7 +110,7 @@ public final class NpcDebugPinnedOverlayManager {
             this.playerRef = playerRef;
             this.npcUuid = npcUuid;
             this.snapshotSupplier = snapshotSupplier;
-            this.hud = new NpcDebugPinnedOverlayHud(playerRef);
+            this.hud = new NpcDebugPinnedOverlayHud(playerRef, this::handleHudRemoved);
             this.pinnedFieldKeys = new LinkedHashSet<>();
             this.pinnedSectionOrder = new ArrayList<>();
             this.active = true;
@@ -216,6 +216,11 @@ public final class NpcDebugPinnedOverlayManager {
         private void stopAndDrop() {
             active = false;
             hud.clearOverlay();
+            SESSIONS.remove(playerRef.getUuid(), this);
+        }
+
+        private void handleHudRemoved() {
+            active = false;
             SESSIONS.remove(playerRef.getUuid(), this);
         }
 

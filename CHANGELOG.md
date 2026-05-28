@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 1.4.1 - Update 5 Compatibility - 2026-05-28
+### Changed
+- Updated Hytale compatibility metadata for the Update 5 `0.5.x` patchline.
+- Updated the pinned overlay HUD and item-use messaging paths for Update 5 API changes.
+
+### Fixed
+- Fixed the Update 5 crash caused by removed Hytale vector classes in NPC highlight visualization and targeting.
+- Updated inspector distance math, display-name lookup, and active hotbar handling for Update 5 runtime APIs.
+
 ## 1.4.0 - Tamework API Sections + Update 4 Compatibility - 2026-03-31
 ### Added
 - Added API-backed Tamework inspector sections that surface Tamework state through integration hooks when Alec's Tamework is present.
@@ -53,4 +62,3 @@ All notable changes to this project are documented in this file.
 - Added the in-game NPC Debug Inspector tool with link/unlink roster management.
 - Added inspector, pinned overlay, and debug flags UI surfaces.
 - Added release automation pipeline (`publish.yml`, release scripts, and publish config).
-

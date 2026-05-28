@@ -96,8 +96,8 @@ class Update5CompatibilityGuardTest {
         String text = Files.readString(manifest, StandardCharsets.UTF_8);
 
         assertTrue(
-                text.contains("\"ServerVersion\": \"^0.5.0\""),
-                "Update 5 uses semantic server version ranges; manifest.json should target ^0.5.0"
+                text.contains("\"ServerVersion\": \"0.5.x\""),
+                "Update 5 uses semantic server version ranges; manifest.json should target 0.5.x"
         );
     }
 

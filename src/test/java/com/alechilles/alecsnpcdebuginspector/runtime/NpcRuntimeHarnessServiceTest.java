@@ -112,6 +112,7 @@ class NpcRuntimeHarnessServiceTest {
         assertEquals("harness-timeout", result.get("classification"));
         assertEquals(5, ((Number) result.get("ticksRequested")).intValue());
         assertTrue(result.get("error").toString().contains("world thread timed out"));
+        assertTrue(result.get("cleanup").toString().contains("not started"));
         assertTrue(Files.exists(config.paths().archive().resolve("timeout.request.json")));
     }
 
@@ -157,6 +158,7 @@ class NpcRuntimeHarnessServiceTest {
         Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("cancel_me.result.json")));
         assertEquals("canceled", result.get("status"));
         assertEquals("user-canceled", result.get("classification"));
+        assertTrue(result.get("cleanup").toString().contains("not started"));
         assertTrue(Files.exists(config.paths().archive().resolve("cancel_me.request.json")));
         assertFalse(Files.exists(config.paths().requests().resolve("cancel_me.request.json")));
     }

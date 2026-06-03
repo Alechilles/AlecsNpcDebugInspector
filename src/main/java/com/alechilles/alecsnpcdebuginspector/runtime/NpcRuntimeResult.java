@@ -82,19 +82,28 @@ public record NpcRuntimeResult(
 
     @Nonnull
     public static NpcRuntimeResult canceled(@Nonnull String requestId, int ticksRequested, @Nonnull String reason) {
+        return canceled(requestId, ticksRequested, 0, reason, Cleanup.notStarted());
+    }
+
+    @Nonnull
+    public static NpcRuntimeResult canceled(@Nonnull String requestId,
+                                            int ticksRequested,
+                                            int ticksRun,
+                                            @Nonnull String reason,
+                                            @Nonnull Cleanup cleanup) {
         Instant now = Instant.now();
         return new NpcRuntimeResult(
                 "canceled",
                 "user-canceled",
                 requestId,
                 ticksRequested,
-                0,
+                ticksRun,
                 null,
                 new ErrorInfo("cancel", reason, null),
                 now,
                 now,
                 List.of(),
-                Cleanup.notStarted(),
+                cleanup,
                 Artifacts.empty(),
                 Summary.empty()
         );

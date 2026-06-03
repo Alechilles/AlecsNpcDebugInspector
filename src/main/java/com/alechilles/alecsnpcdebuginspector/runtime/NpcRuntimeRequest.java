@@ -179,13 +179,14 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record Fixtures(@Nonnull List<TargetFixture> targets) {
+    public record Fixtures(@Nonnull NpcFixture npc, @Nonnull List<TargetFixture> targets) {
         @Nonnull
         static Fixtures from(@Nonnull Map<String, Object> data) {
+            NpcFixture npc = NpcFixture.from(asMap(data.get("npc")));
             List<TargetFixture> targets = objectList(data.get("targets")).stream()
                     .map(TargetFixture::from)
                     .toList();
-            return new Fixtures(targets);
+            return new Fixtures(npc, targets);
         }
 
         int entityCount() {
@@ -195,7 +196,32 @@ public record NpcRuntimeRequest(
         @Nonnull
         Map<String, Object> toMap() {
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("npc", npc.toMap());
             map.put("targets", targets.stream().map(TargetFixture::toMap).toList());
+            return map;
+        }
+    }
+
+    public record NpcFixture(@Nonnull List<Object> position, @Nullable String state) {
+        @Nonnull
+        private static final List<Object> DEFAULT_POSITION = List.of(0, 64, 0);
+
+        @Nonnull
+        static NpcFixture from(@Nonnull Map<String, Object> data) {
+            List<Object> position = asList(data.get("position"));
+            return new NpcFixture(
+                    position.isEmpty() ? DEFAULT_POSITION : position,
+                    stringOrNull(data.get("state"))
+            );
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("position", position);
+            if (state != null) {
+                map.put("state", state);
+            }
             return map;
         }
     }

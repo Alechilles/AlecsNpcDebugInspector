@@ -8,6 +8,7 @@ import com.alechilles.alecsnpcdebuginspector.metrics.NpcDebugInspectorHStatsInte
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeCommand;
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessConfig;
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessService;
+import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeLiveScenarioRunner;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
@@ -41,8 +42,10 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
         );
         itemFeatureHandler = new NpcDebugItemFeatureHandler(snapshotService);
         hStatsIntegration = new NpcDebugInspectorHStatsIntegration(this);
+        NpcRuntimeHarnessConfig runtimeConfig = NpcRuntimeHarnessConfig.developmentDefault(defaultUserDataPath());
         runtimeHarnessService = new NpcRuntimeHarnessService(
-                NpcRuntimeHarnessConfig.developmentDefault(defaultUserDataPath())
+                runtimeConfig,
+                new NpcRuntimeLiveScenarioRunner(runtimeConfig, snapshotService)
         );
         if (getCommandRegistry() != null) {
             getCommandRegistry().registerCommand(new NpcDebugCommand(snapshotService));

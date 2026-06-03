@@ -21,6 +21,7 @@ class NpcRuntimeRequestTest {
                   "seed": 7,
                   "world": {"instanceId": "npc_runtime_test_flatworld", "arena": "default"},
                   "fixtures": {
+                    "npc": {"position": [1, 64, -2], "state": "Idle"},
                     "targets": [
                       {"slot": "Enemy", "kind": "dummy", "position": [4, 64, 0], "tags": ["hostile"], "visible": true}
                     ]
@@ -38,6 +39,8 @@ class NpcRuntimeRequestTest {
         assertEquals(200, request.ticks());
         assertEquals(7L, request.seed());
         assertEquals("default", request.world().arena());
+        assertEquals(3, request.fixtures().npc().position().size());
+        assertEquals("Idle", request.fixtures().npc().state());
         assertEquals(1, request.fixtures().targets().size());
         assertEquals("Enemy", request.fixtures().targets().getFirst().slot());
         assertEquals(2, request.record().everyTicks());
@@ -70,5 +73,6 @@ class NpcRuntimeRequestTest {
 
         assertTrue(json.contains("\"requestId\":\"simple\""));
         assertTrue(json.contains("\"ticks\":5"));
+        assertTrue(json.contains("\"npc\":{\"position\":[0,64,0]}"));
     }
 }

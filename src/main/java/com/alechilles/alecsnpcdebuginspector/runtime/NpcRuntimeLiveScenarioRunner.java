@@ -6,12 +6,18 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * First live-runtime runner: prepares the test world, spawns one NPC, records one snapshot, and cleans up.
  */
 public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessService.ScenarioRunner {
+    private static final long WORLD_THREAD_TIMEOUT_SECONDS = 30L;
+
     private final NpcRuntimeHarnessConfig config;
     private final NpcRuntimeFlatworldManager flatworldManager;
     private final NpcRuntimeFixtureSpawner fixtureSpawner;
@@ -36,16 +42,22 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     @Override
     public NpcRuntimeResult run(@Nonnull NpcRuntimeRequest request) throws Exception {
         Path tracePath = config.paths().traces().resolve(request.requestId() + ".trace.jsonl");
+        World world = flatworldManager.ensureWorld(request.world().instanceId());
+        return runOnWorldThread(world, () -> runOnPreparedWorld(request, tracePath, world));
+    }
+
+    @Nonnull
+    private NpcRuntimeResult runOnPreparedWorld(@Nonnull NpcRuntimeRequest request,
+                                                @Nonnull Path tracePath,
+                                                @Nonnull World world) throws Exception {
         NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc = null;
-        Store<EntityStore> store = null;
+        Store<EntityStore> store = world.getEntityStore().getStore();
 
         try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(tracePath)) {
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), 0, "run-start")
                     .with("assetId", request.assetId())
                     .with("roleId", request.roleId()));
 
-            World world = flatworldManager.ensureWorld(request.world().instanceId());
-            store = world.getEntityStore().getStore();
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), 0, "world-ready")
                     .with("world", world.getName())
                     .with("ticking", world.isTicking())
@@ -88,8 +100,37 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         }
     }
 
-    private boolean cleanup(@javax.annotation.Nullable Store<EntityStore> store,
-                            @javax.annotation.Nullable NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc) {
+    @Nonnull
+    private NpcRuntimeResult runOnWorldThread(@Nonnull World world, @Nonnull ScenarioCall call) throws Exception {
+        Store<EntityStore> store = world.getEntityStore().getStore();
+        if (store.isInThread()) {
+            return call.run();
+        }
+
+        CompletableFuture<NpcRuntimeResult> result = new CompletableFuture<>();
+        world.execute(() -> {
+            try {
+                result.complete(call.run());
+            } catch (Throwable throwable) {
+                result.completeExceptionally(throwable);
+            }
+        });
+        try {
+            return result.get(WORLD_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof Exception checked) {
+                throw checked;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new RuntimeException(cause);
+        }
+    }
+
+    private boolean cleanup(@Nullable Store<EntityStore> store,
+                            @Nullable NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc) {
         if (store == null || spawnedNpc == null) {
             return true;
         }
@@ -99,5 +140,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         } catch (RuntimeException exception) {
             return false;
         }
+    }
+
+    @FunctionalInterface
+    private interface ScenarioCall {
+        @Nonnull
+        NpcRuntimeResult run() throws Exception;
     }
 }

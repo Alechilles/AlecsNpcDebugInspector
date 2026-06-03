@@ -10,6 +10,7 @@ public record NpcRuntimeHarnessConfig(
         boolean enabledByDefault,
         int maxTicks,
         int maxEntities,
+        long maxTraceBytes,
         @Nonnull String instanceId,
         long pollIntervalMillis,
         @Nonnull NpcRuntimePaths paths
@@ -20,6 +21,7 @@ public record NpcRuntimeHarnessConfig(
                 false,
                 1200,
                 64,
+                1_048_576L,
                 "npc_runtime_test_flatworld",
                 1000,
                 NpcRuntimePaths.underUserData(userDataRoot)
@@ -44,5 +46,21 @@ public record NpcRuntimeHarnessConfig(
             throw new IllegalArgumentException("entity count exceeds maxEntities " + maxEntities);
         }
         return entityCount;
+    }
+
+    public long validateTraceBytes(long traceBytes) {
+        if (traceBytes <= 0) {
+            throw new IllegalArgumentException("maxTraceBytes must be greater than zero");
+        }
+        if (traceBytes > maxTraceBytes) {
+            throw new IllegalArgumentException("maxTraceBytes exceeds configured limit " + maxTraceBytes);
+        }
+        return traceBytes;
+    }
+
+    public void validateWorldId(@Nonnull String worldId) {
+        if (!instanceId.equals(worldId)) {
+            throw new IllegalArgumentException("world.instanceId must be " + instanceId + " for the runtime harness");
+        }
     }
 }

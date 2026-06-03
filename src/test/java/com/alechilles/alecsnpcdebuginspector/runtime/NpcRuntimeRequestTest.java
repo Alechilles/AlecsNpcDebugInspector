@@ -1,6 +1,7 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,18 +16,22 @@ class NpcRuntimeRequestTest {
                 {
                   "version": 1,
                   "requestId": "protect_baby_close_target",
+                  "scenario": {"id": "protect-baby-close", "description": "close hostile target"},
                   "assetId": "Alec_Template_Boar_Family_Adult",
                   "roleId": "Alec_Template_Boar_Family_Adult",
                   "ticks": 200,
                   "seed": 7,
                   "world": {"instanceId": "npc_runtime_test_flatworld", "arena": "default"},
+                  "environment": {"timeOfDay": 12000, "weather": "clear", "light": 15},
                   "fixtures": {
                     "npc": {"position": [1, 64, -2], "state": "Idle"},
                     "targets": [
                       {"slot": "Enemy", "kind": "dummy", "position": [4, 64, 0], "tags": ["hostile"], "visible": true}
                     ]
                   },
-                  "record": {"everyTicks": 2, "includeSnapshots": true, "includeEvents": true}
+                  "record": {"everyTicks": 2, "includeSnapshots": true, "includeEvents": true},
+                  "assertions": [],
+                  "limits": {"maxEntities": 4, "maxTraceBytes": 65536}
                 }
                 """;
 
@@ -36,14 +41,18 @@ class NpcRuntimeRequestTest {
         assertEquals("protect_baby_close_target", request.requestId());
         assertEquals("Alec_Template_Boar_Family_Adult", request.assetId());
         assertEquals("Alec_Template_Boar_Family_Adult", request.roleId());
+        assertEquals("protect-baby-close", request.scenario().id());
         assertEquals(200, request.ticks());
         assertEquals(7L, request.seed());
         assertEquals("default", request.world().arena());
+        assertEquals(12000, request.environment().timeOfDay());
+        assertEquals("clear", request.environment().weather());
         assertEquals(3, request.fixtures().npc().position().size());
         assertEquals("Idle", request.fixtures().npc().state());
         assertEquals(1, request.fixtures().targets().size());
         assertEquals("Enemy", request.fixtures().targets().getFirst().slot());
         assertEquals(2, request.record().everyTicks());
+        assertEquals(65536, request.limits().maxTraceBytes());
     }
 
     @Test
@@ -62,6 +71,64 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void rejectsNonDevWorldAndExcessiveEntityOrTraceLimits() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"wrong_world\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"world\":{\"instanceId\":\"default\"}}",
+                config
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"too_many_entities\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"limits\":{\"maxEntities\":999}}",
+                config
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"too_much_trace\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"limits\":{\"maxTraceBytes\":999999999}}",
+                config
+        ));
+    }
+
+    @Test
+    void rejectsUnsupportedFutureFacingSectionsWithMachineReadableDetails() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"unsupported\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"assertions\":[{\"kind\":\"sensor\",\"sensorId\":\"EnemyNearby\"}]}",
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("unsupported", exception.requestId());
+        assertEquals("assertions[0]", exception.unsupported().getFirst().path());
+        assertEquals("assertions are not supported by the current runtime contract", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsUnknownFieldsInsideKnownSections() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"unknown_field\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"environment\":{\"difficulty\":\"hard\"}}",
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("environment.difficulty", exception.unsupported().getFirst().path());
+        assertEquals("field is not supported by the current runtime contract", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
     void serializesDeterministicJsonForCliRoundTrip() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(
@@ -74,5 +141,24 @@ class NpcRuntimeRequestTest {
         assertTrue(json.contains("\"requestId\":\"simple\""));
         assertTrue(json.contains("\"ticks\":5"));
         assertTrue(json.contains("\"npc\":{\"position\":[0,64,0]}"));
+        assertTrue(json.contains("\"scenario\":{\"id\":\"simple\"}"));
+        assertTrue(json.contains("\"environment\":{}"));
+        assertTrue(json.contains("\"assertions\":[]"));
+        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":1048576}"));
+    }
+
+    @Test
+    void preservesSimpleRequestCompatibility() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"old_shape\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5}",
+                config
+        );
+
+        Map<String, Object> map = request.toMap();
+        assertEquals("old_shape", request.scenario().id());
+        assertEquals(Map.of(), map.get("environment"));
+        assertEquals(0, request.assertions().size());
     }
 }

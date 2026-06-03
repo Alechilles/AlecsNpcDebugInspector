@@ -42,7 +42,7 @@ public final class NpcRuntimeCommand extends AbstractPlayerCommand {
             }
             case "paths" -> send(commandContext, harnessService.pathsText());
             case "run" -> runNext(commandContext);
-            case "cancel" -> send(commandContext, "NPC Runtime Harness cancel is not active in the file-queue milestone.");
+            case "cancel" -> cancel(commandContext);
             default -> send(commandContext, "Usage: /npcruntime status|enable|disable|paths|run|cancel");
         }
     }
@@ -58,6 +58,19 @@ public final class NpcRuntimeCommand extends AbstractPlayerCommand {
             send(commandContext, "NPC Runtime Harness processed request " + outcome.requestId() + ".");
         } catch (IOException exception) {
             send(commandContext, "NPC Runtime Harness failed: " + exception.getMessage());
+        }
+    }
+
+    private void cancel(@Nonnull CommandContext commandContext) {
+        try {
+            NpcRuntimeHarnessService.CancelOutcome outcome = harnessService.cancel();
+            if (!outcome.canceled()) {
+                send(commandContext, "NPC Runtime Harness cancel skipped: " + outcome.message() + ".");
+                return;
+            }
+            send(commandContext, "NPC Runtime Harness canceled request " + outcome.requestId() + ".");
+        } catch (IOException exception) {
+            send(commandContext, "NPC Runtime Harness cancel failed: " + exception.getMessage());
         }
     }
 

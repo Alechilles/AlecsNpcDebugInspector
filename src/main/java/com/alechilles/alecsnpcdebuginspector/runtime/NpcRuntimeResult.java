@@ -14,13 +14,17 @@ import javax.annotation.Nullable;
  */
 public record NpcRuntimeResult(
         @Nonnull String status,
+        @Nonnull String classification,
         @Nonnull String requestId,
+        int ticksRequested,
         int ticksRun,
         @Nullable String tracePath,
-        @Nullable String error,
+        @Nullable ErrorInfo error,
         @Nonnull Instant startedAt,
         @Nonnull Instant endedAt,
-        boolean cleanupSucceeded,
+        @Nonnull List<NpcRuntimeRequest.UnsupportedField> unsupported,
+        @Nonnull Cleanup cleanup,
+        @Nonnull Artifacts artifacts,
         @Nonnull Summary summary
 ) {
     @Nonnull
@@ -31,40 +35,151 @@ public record NpcRuntimeResult(
         Instant now = Instant.now();
         return new NpcRuntimeResult(
                 "passed",
+                "passed",
                 request.requestId(),
+                request.ticks(),
                 ticksRun,
                 tracePath.toString(),
                 null,
                 now,
                 now,
-                true,
+                List.of(),
+                Cleanup.succeeded("completed"),
+                Artifacts.withTrace(tracePath),
                 summary
         );
     }
 
     @Nonnull
     public static NpcRuntimeResult failed(@Nonnull String requestId, @Nonnull String error) {
+        return failed(requestId, "runtime-error", 0, "run", error, List.of());
+    }
+
+    @Nonnull
+    public static NpcRuntimeResult failed(@Nonnull String requestId,
+                                          @Nonnull String classification,
+                                          int ticksRequested,
+                                          @Nonnull String phase,
+                                          @Nonnull String error,
+                                          @Nonnull List<NpcRuntimeRequest.UnsupportedField> unsupported) {
         Instant now = Instant.now();
-        return new NpcRuntimeResult("failed", requestId, 0, null, error, now, now, true, Summary.empty());
+        return new NpcRuntimeResult(
+                "failed",
+                classification,
+                requestId,
+                ticksRequested,
+                0,
+                null,
+                new ErrorInfo(phase, error, null),
+                now,
+                now,
+                List.copyOf(unsupported),
+                Cleanup.notStarted(),
+                Artifacts.empty(),
+                Summary.empty()
+        );
+    }
+
+    @Nonnull
+    public static NpcRuntimeResult canceled(@Nonnull String requestId, int ticksRequested, @Nonnull String reason) {
+        Instant now = Instant.now();
+        return new NpcRuntimeResult(
+                "canceled",
+                "user-canceled",
+                requestId,
+                ticksRequested,
+                0,
+                null,
+                new ErrorInfo("cancel", reason, null),
+                now,
+                now,
+                List.of(),
+                Cleanup.notStarted(),
+                Artifacts.empty(),
+                Summary.empty()
+        );
     }
 
     @Nonnull
     public String toJson() {
+        return NpcRuntimeJson.stringify(toMap());
+    }
+
+    @Nonnull
+    public Map<String, Object> toMap() {
         LinkedHashMap<String, Object> map = new LinkedHashMap<>();
         map.put("status", status);
+        map.put("classification", classification);
         map.put("requestId", requestId);
+        map.put("ticksRequested", ticksRequested);
         map.put("ticksRun", ticksRun);
-        if (tracePath != null) {
-            map.put("tracePath", tracePath);
-        }
-        if (error != null) {
-            map.put("error", error);
-        }
+        map.put("tracePath", tracePath);
+        map.put("error", error != null ? error.toMap() : null);
         map.put("startedAt", startedAt.toString());
         map.put("endedAt", endedAt.toString());
-        map.put("cleanupSucceeded", cleanupSucceeded);
+        map.put("unsupported", unsupported.stream().map(NpcRuntimeRequest.UnsupportedField::toMap).toList());
+        map.put("cleanup", cleanup.toMap());
+        map.put("artifacts", artifacts.toMap());
         map.put("summary", summary.toMap());
-        return NpcRuntimeJson.stringify(map);
+        return map;
+    }
+
+    public record ErrorInfo(@Nonnull String phase, @Nonnull String message, @Nullable String type) {
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("phase", phase);
+            map.put("message", message);
+            if (type != null) {
+                map.put("type", type);
+            }
+            return map;
+        }
+    }
+
+    public record Cleanup(boolean attempted, boolean succeeded, @Nonnull String message) {
+        @Nonnull
+        static Cleanup succeeded(@Nonnull String message) {
+            return new Cleanup(true, true, message);
+        }
+
+        @Nonnull
+        static Cleanup notStarted() {
+            return new Cleanup(false, true, "not started");
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("attempted", attempted);
+            map.put("succeeded", succeeded);
+            map.put("message", message);
+            return map;
+        }
+    }
+
+    public record Artifacts(@Nullable String resultPath, @Nullable String tracePath) {
+        @Nonnull
+        static Artifacts empty() {
+            return new Artifacts(null, null);
+        }
+
+        @Nonnull
+        static Artifacts withTrace(@Nonnull Path tracePath) {
+            return new Artifacts(null, tracePath.toString());
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            if (resultPath != null) {
+                map.put("resultPath", resultPath);
+            }
+            if (tracePath != null) {
+                map.put("tracePath", tracePath);
+            }
+            return map;
+        }
     }
 
     public static final class Summary {

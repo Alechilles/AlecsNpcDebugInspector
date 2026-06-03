@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nonnull;
@@ -18,6 +19,8 @@ public final class NpcRuntimeHarnessService {
     private final ScenarioRunner runner;
     private final AtomicBoolean enabled;
     private volatile String activeRequestId;
+    private volatile String lastResultId;
+    private volatile String lastResultStatus;
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config) {
         this(config, NpcRuntimeHarnessService::defaultDryRun);
@@ -54,14 +57,21 @@ public final class NpcRuntimeHarnessService {
     @Nonnull
     public String statusText() {
         String active = activeRequestId != null ? activeRequestId : "<none>";
+        String last = lastResultId != null ? lastResultId + ":" + lastResultStatus : "<none>";
         long queued;
         try {
             queued = queuedCount();
         } catch (IOException exception) {
-            return "NPC Runtime Harness: enabled=" + enabled() + " active=" + active
-                    + " queue=<error: " + exception.getMessage() + ">";
+                return "NPC Runtime Harness: enabled=" + enabled() + " active=" + active
+                    + " queue=<error: " + exception.getMessage() + ">"
+                    + " last=" + last
+                    + " root=" + config.paths().root();
         }
-        return "NPC Runtime Harness: enabled=" + enabled() + " active=" + active + " queued=" + queued;
+        return "NPC Runtime Harness: enabled=" + enabled()
+                + " active=" + active
+                + " queued=" + queued
+                + " last=" + last
+                + " root=" + config.paths().root();
     }
 
     @Nonnull
@@ -92,14 +102,51 @@ public final class NpcRuntimeHarnessService {
             String text = Files.readString(active.path(), StandardCharsets.UTF_8);
             NpcRuntimeRequest request = NpcRuntimeRequest.parse(text, config);
             activeRequestId = request.requestId();
-            NpcRuntimeResult result = runner.run(request);
+            NpcRuntimeResult result;
+            try {
+                result = runner.run(request);
+            } catch (Exception exception) {
+                result = NpcRuntimeResult.failed(
+                        request.requestId(),
+                        "runtime-error",
+                        request.ticks(),
+                        "run",
+                        exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName(),
+                        List.of()
+                );
+            }
             writeResult(result.requestId(), result);
-            ensureTraceExists(request, result);
+            rememberResult(result);
+            if ("passed".equals(result.status())) {
+                ensureTraceExists(request, result);
+            }
             queue.archive(active);
             return new ProcessOutcome(true, result.requestId());
+        } catch (NpcRuntimeRequest.ValidationException exception) {
+            String resultRequestId = exception.requestId().equals("<unknown>") ? active.requestId() : exception.requestId();
+            NpcRuntimeResult failed = NpcRuntimeResult.failed(
+                    resultRequestId,
+                    exception.classification(),
+                    0,
+                    "parse",
+                    exception.getMessage(),
+                    exception.unsupported()
+            );
+            writeResult(resultRequestId, failed);
+            rememberResult(failed);
+            queue.archive(active);
+            return new ProcessOutcome(true, resultRequestId);
         } catch (Exception exception) {
-            NpcRuntimeResult failed = NpcRuntimeResult.failed(active.requestId(), exception.getMessage());
+            NpcRuntimeResult failed = NpcRuntimeResult.failed(
+                    active.requestId(),
+                    "invalid-request",
+                    0,
+                    "parse",
+                    exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName(),
+                    List.of()
+            );
             writeResult(active.requestId(), failed);
+            rememberResult(failed);
             queue.archive(active);
             return new ProcessOutcome(true, active.requestId());
         } finally {
@@ -107,10 +154,50 @@ public final class NpcRuntimeHarnessService {
         }
     }
 
+    @Nonnull
+    public CancelOutcome cancel() throws IOException {
+        Optional<NpcRuntimeRequestQueue.ActiveRequest> claimed = queue.claimNext();
+        if (claimed.isEmpty()) {
+            String active = activeRequestId;
+            return new CancelOutcome(
+                    false,
+                    active,
+                    active != null
+                            ? "active request cancellation is not available for the current synchronous runner"
+                            : "no queued request to cancel"
+            );
+        }
+
+        NpcRuntimeRequestQueue.ActiveRequest active = claimed.get();
+        NpcRuntimeResult canceled = NpcRuntimeResult.canceled(
+                active.requestId(),
+                requestedTicksOrZero(active.path()),
+                "canceled through /npcruntime cancel"
+        );
+        writeResult(active.requestId(), canceled);
+        rememberResult(canceled);
+        queue.archive(active);
+        return new CancelOutcome(true, active.requestId(), "canceled queued request");
+    }
+
     private void writeResult(@Nonnull String requestId, @Nonnull NpcRuntimeResult result) throws IOException {
         Path resultPath = config.paths().results().resolve(requestId + ".result.json");
         Files.createDirectories(resultPath.getParent());
         Files.writeString(resultPath, result.toJson(), StandardCharsets.UTF_8);
+    }
+
+    private int requestedTicksOrZero(@Nonnull Path requestPath) {
+        try {
+            String text = Files.readString(requestPath, StandardCharsets.UTF_8);
+            return NpcRuntimeRequest.parse(text, config).ticks();
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private void rememberResult(@Nonnull NpcRuntimeResult result) {
+        lastResultId = result.requestId();
+        lastResultStatus = result.status();
     }
 
     private void ensureTraceExists(@Nonnull NpcRuntimeRequest request, @Nonnull NpcRuntimeResult result) throws IOException {
@@ -140,5 +227,8 @@ public final class NpcRuntimeHarnessService {
     }
 
     public record ProcessOutcome(boolean processed, @Nullable String requestId) {
+    }
+
+    public record CancelOutcome(boolean canceled, @Nullable String requestId, @Nonnull String message) {
     }
 }

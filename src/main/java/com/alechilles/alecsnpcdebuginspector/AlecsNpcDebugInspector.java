@@ -5,10 +5,14 @@ import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugCommand;
 import com.alechilles.alecsnpcdebuginspector.interactions.NpcDebugInspectorItemInteraction;
 import com.alechilles.alecsnpcdebuginspector.items.NpcDebugItemFeatureHandler;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcDebugInspectorHStatsIntegration;
+import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeCommand;
+import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessConfig;
+import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessService;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugHighlightManager;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
+import java.nio.file.Path;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
@@ -20,6 +24,7 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
     private NpcDebugSnapshotService snapshotService;
     private NpcDebugItemFeatureHandler itemFeatureHandler;
     private NpcDebugInspectorHStatsIntegration hStatsIntegration;
+    private NpcRuntimeHarnessService runtimeHarnessService;
 
     public AlecsNpcDebugInspector(@Nonnull JavaPluginInit init) {
         super(init);
@@ -36,8 +41,12 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
         );
         itemFeatureHandler = new NpcDebugItemFeatureHandler(snapshotService);
         hStatsIntegration = new NpcDebugInspectorHStatsIntegration(this);
+        runtimeHarnessService = new NpcRuntimeHarnessService(
+                NpcRuntimeHarnessConfig.developmentDefault(defaultUserDataPath())
+        );
         if (getCommandRegistry() != null) {
             getCommandRegistry().registerCommand(new NpcDebugCommand(snapshotService));
+            getCommandRegistry().registerCommand(new NpcRuntimeCommand(runtimeHarnessService));
         }
     }
 
@@ -46,6 +55,13 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
         getLogger().at(Level.INFO).log("Alec's NPC Debug Inspector enabled.");
         if (hStatsIntegration != null) {
             hStatsIntegration.initialize();
+        }
+        if (runtimeHarnessService != null) {
+            try {
+                runtimeHarnessService.initializeDirectories();
+            } catch (Exception exception) {
+                getLogger().at(Level.WARNING).log("Could not initialize NPC runtime harness directories.", exception);
+            }
         }
     }
 
@@ -68,5 +84,14 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     public NpcDebugSnapshotService getSnapshotService() {
         return snapshotService;
+    }
+
+    public NpcRuntimeHarnessService getRuntimeHarnessService() {
+        return runtimeHarnessService;
+    }
+
+    private static Path defaultUserDataPath() {
+        String home = System.getProperty("user.home", ".");
+        return Path.of(home, "AppData", "Roaming", "Hytale", "UserData");
     }
 }

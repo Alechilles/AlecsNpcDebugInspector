@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -105,6 +106,15 @@ public final class NpcRuntimeHarnessService {
             NpcRuntimeResult result;
             try {
                 result = runner.run(request);
+            } catch (TimeoutException exception) {
+                result = NpcRuntimeResult.failed(
+                        request.requestId(),
+                        "harness-timeout",
+                        request.ticks(),
+                        "run",
+                        exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName(),
+                        List.of()
+                );
             } catch (Exception exception) {
                 result = NpcRuntimeResult.failed(
                         request.requestId(),

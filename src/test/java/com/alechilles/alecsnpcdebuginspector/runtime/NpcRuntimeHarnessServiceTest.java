@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -89,6 +90,29 @@ class NpcRuntimeHarnessServiceTest {
         assertEquals("unsupported-request", result.get("classification"));
         assertTrue(result.get("unsupported").toString().contains("assertions[0]"));
         assertTrue(Files.exists(config.paths().archive().resolve("unsupported.request.json")));
+    }
+
+    @Test
+    void runnerTimeoutWritesHarnessTimeoutResult() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {
+            throw new TimeoutException("world thread timed out");
+        });
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().requests().resolve("timeout.request.json"),
+                "{\"version\":1,\"requestId\":\"timeout\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5}"
+        );
+
+        NpcRuntimeHarnessService.ProcessOutcome outcome = service.processNextQueuedRequest();
+
+        assertTrue(outcome.processed());
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("timeout.result.json")));
+        assertEquals("failed", result.get("status"));
+        assertEquals("harness-timeout", result.get("classification"));
+        assertEquals(5, ((Number) result.get("ticksRequested")).intValue());
+        assertTrue(result.get("error").toString().contains("world thread timed out"));
+        assertTrue(Files.exists(config.paths().archive().resolve("timeout.request.json")));
     }
 
     @Test

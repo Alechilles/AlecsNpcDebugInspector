@@ -26,22 +26,25 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     private final NpcRuntimeFixtureSpawner fixtureSpawner;
     private final NpcDebugSnapshotService snapshotService;
     private final NpcRuntimeTickScheduler tickScheduler;
+    private final NpcRuntimeObserver observer;
 
     public NpcRuntimeLiveScenarioRunner(@Nonnull NpcRuntimeHarnessConfig config,
                                         @Nonnull NpcDebugSnapshotService snapshotService) {
-        this(config, new NpcRuntimeFlatworldManager(), new NpcRuntimeFixtureSpawner(), snapshotService, new NpcRuntimeTickScheduler());
+        this(config, new NpcRuntimeFlatworldManager(), new NpcRuntimeFixtureSpawner(), snapshotService, new NpcRuntimeTickScheduler(), new NpcRuntimeObserver());
     }
 
     NpcRuntimeLiveScenarioRunner(@Nonnull NpcRuntimeHarnessConfig config,
                                  @Nonnull NpcRuntimeFlatworldManager flatworldManager,
                                  @Nonnull NpcRuntimeFixtureSpawner fixtureSpawner,
                                  @Nonnull NpcDebugSnapshotService snapshotService,
-                                 @Nonnull NpcRuntimeTickScheduler tickScheduler) {
+                                 @Nonnull NpcRuntimeTickScheduler tickScheduler,
+                                 @Nonnull NpcRuntimeObserver observer) {
         this.config = config;
         this.flatworldManager = flatworldManager;
         this.fixtureSpawner = fixtureSpawner;
         this.snapshotService = snapshotService;
         this.tickScheduler = tickScheduler;
+        this.observer = observer;
     }
 
     @Nonnull
@@ -186,6 +189,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("title", snapshot.title())
                     .with("subtitle", snapshot.subtitle())
                     .with("details", snapshot.details()));
+            NpcRuntimeObservedNpc observed = observer.observe(npcUnderTest.uuid(), snapshot);
+            for (NpcRuntimeTraceRecord record : observer.traceRecords(request.requestId(), tick, observed, spawnedFixtures.previousObserved)) {
+                writer.write(record);
+            }
+            spawnedFixtures.previousObserved = observed;
         }
 
         if (cadence.includeEvents()) {
@@ -290,6 +298,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
+        @Nullable
+        private NpcRuntimeObservedNpc previousObserved;
 
         @Nullable
         private NpcRuntimeFixtureSpawner.SpawnedNpc npcUnderTest() {

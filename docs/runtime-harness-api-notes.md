@@ -189,6 +189,21 @@ NPC-backed fixture kinds (`npcUnderTest`, `targetDummy`, `npc`, `mob`, `familyMe
 
 The schema accepts item, block, and player-anchor fixture declarations, but the harness rejects them before world mutation with classification `unsupported-fixture` until safe item, block, and player-anchor engine APIs are implemented. Direct `entityId` spawning is also rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
 
+### Structured Observation Records
+
+Main endgame Phase 5 keeps the existing human-readable `npc-snapshot` trace record, then emits normalized JSON records derived from the same live snapshot:
+
+- `npc-state`: identity, AI, and lifecycle fields.
+- `targeting`: target slots, sensor scope counts, and resolved target labels currently visible in the inspector snapshot.
+- `timers`: timer and cooldown fields.
+- `pathing`: path-following, navigation, controller, and movement fields.
+- `combat`: attack, damage, target, and combat override fields.
+- `inventory`, `alarms`, `flags`, `components`, and `flock`: normalized section maps for those inspector sections.
+- `tamework`: all available Tamework sections grouped by normalized section name.
+- `npc-transition`: emitted after the first observed snapshot when any normalized field changes.
+
+The structured records are intended for Python-side comparison and triage. Consumers should prefer these records over scraping `npc-snapshot.details`; the text snapshot remains for interactive inspector users and artifact bundles.
+
 ### World Ticking, Chunks, and Entities
 
 `com.hypixel.hytale.server.core.universe.world.World`

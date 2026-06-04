@@ -97,6 +97,35 @@ class NpcRuntimeFixtureAllowlistTest {
     }
 
     @Test
+    void acceptsPlayerAnchorAsHeadlessDeclarativeFixture() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "player_anchor_declaration",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 120,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                              {"fixtureId": "playerAnchor", "kind": "playerAnchor", "position": [2, 64, 0], "tags": ["owner", "nearby"]}
+                            ]
+                          }
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(2, request.fixtures().list().size());
+        assertEquals(1, request.fixtures().entityCount());
+        assertEquals(NpcRuntimeFixtureKind.PLAYER_ANCHOR, request.fixtures().list().get(1).kind());
+        assertTrue(request.toJson().contains("\"kind\":\"playerAnchor\""));
+    }
+
+    @Test
     void rejectsMissingDeclarativeMessageOrBeaconReferences() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

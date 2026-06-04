@@ -394,6 +394,54 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void rejectsRequiresPlayerInHeadlessRuntimeMode() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "logged_in_player_required",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "requiresPlayer": true
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("requiresPlayer", exception.unsupported().getFirst().path());
+        assertEquals("logged-in player runtime mode is not implemented for headless batch runs", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void parsesRequiresPlayerFalseAsHeadlessCompatible() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "headless_anchor_compatible",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 120,
+                  "requiresPlayer": false
+                }
+                """,
+                config
+        );
+
+        assertFalse(request.requiresPlayer());
+        assertFalse(request.toJson().contains("requiresPlayer"));
+    }
+
+    @Test
     void serializesDeterministicJsonForCliRoundTrip() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(

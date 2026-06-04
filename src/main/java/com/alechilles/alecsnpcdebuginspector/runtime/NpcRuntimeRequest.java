@@ -20,6 +20,7 @@ public record NpcRuntimeRequest(
         @Nonnull String roleId,
         int ticks,
         @Nullable Long seed,
+        boolean requiresPlayer,
         @Nonnull TimingSpec timing,
         @Nonnull WorldSpec world,
         @Nonnull EnvironmentSpec environment,
@@ -44,7 +45,7 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "timing", "environment", "multiNpc", "fixtures", "engineHooks", "record", "assertions", "limits"),
+                        "requiresPlayer", "timing", "environment", "multiNpc", "fixtures", "engineHooks", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -61,6 +62,14 @@ public record NpcRuntimeRequest(
         String roleId = requiredString(data, "roleId", requestId);
         int ticks = clampTicks(config, intValue(data.get("ticks"), 1, requestId), requestId);
         Long seed = longOrNull(data.get("seed"), requestId);
+        boolean requiresPlayer = boolValue(data.get("requiresPlayer"), false, requestId);
+        if (requiresPlayer) {
+            throw unsupported(
+                    requestId,
+                    "requiresPlayer is not supported in headless runtime mode",
+                    List.of(new UnsupportedField("requiresPlayer", "logged-in player runtime mode is not implemented for headless batch runs"))
+            );
+        }
         TimingSpec timing = TimingSpec.from(asMap(data.get("timing"), requestId), ticks, requestId);
         ScenarioSpec scenario = ScenarioSpec.from(asMap(data.get("scenario"), requestId), requestId);
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
@@ -83,6 +92,7 @@ public record NpcRuntimeRequest(
                 roleId,
                 ticks,
                 seed,
+                requiresPlayer,
                 timing,
                 world,
                 environment,
@@ -111,6 +121,9 @@ public record NpcRuntimeRequest(
         map.put("ticks", ticks);
         if (seed != null) {
             map.put("seed", seed);
+        }
+        if (requiresPlayer) {
+            map.put("requiresPlayer", true);
         }
         map.put("timing", timing.toMap());
         map.put("world", world.toMap());

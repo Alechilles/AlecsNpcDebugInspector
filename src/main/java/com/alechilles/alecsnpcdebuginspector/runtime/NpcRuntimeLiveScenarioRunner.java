@@ -394,11 +394,28 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         map.put("fixtureId", fixture.fixtureId());
         map.put("kind", fixture.kind().jsonName());
         map.put("spawned", false);
-        map.put("message", "declared evidence fixture; no world entity spawned");
-        map.put("unsupportedFields", fixture.kind() == NpcRuntimeFixtureKind.MESSAGE
-                ? List.of("engineMessageBusMutation")
-                : List.of("engineBeaconMutation"));
+        map.put("message", declarativeFixtureMessage(fixture.kind()));
+        map.put("unsupportedFields", declarativeFixtureUnsupportedFields(fixture.kind()));
         return map;
+    }
+
+    @Nonnull
+    private String declarativeFixtureMessage(@Nonnull NpcRuntimeFixtureKind kind) {
+        return switch (kind) {
+            case MESSAGE, BEACON -> "declared evidence fixture; no world entity spawned";
+            case PLAYER_ANCHOR -> "declared player anchor; no real player entity spawned in headless mode";
+            default -> "declared fixture; no world entity spawned";
+        };
+    }
+
+    @Nonnull
+    private List<String> declarativeFixtureUnsupportedFields(@Nonnull NpcRuntimeFixtureKind kind) {
+        return switch (kind) {
+            case MESSAGE -> List.of("engineMessageBusMutation");
+            case BEACON -> List.of("engineBeaconMutation");
+            case PLAYER_ANCHOR -> List.of("headlessPlayerEntity", "loggedInPlayerBinding");
+            default -> List.of("engineWorldMutation");
+        };
     }
 
     @Nonnull

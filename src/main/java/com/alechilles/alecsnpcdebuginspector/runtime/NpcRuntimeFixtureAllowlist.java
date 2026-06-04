@@ -32,7 +32,7 @@ public final class NpcRuntimeFixtureAllowlist {
             if (!allowsId(spec)) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "fixture id is not allowlisted for kind " + spec.kind().jsonName()));
             }
-            if (!spec.kind().entityLike() && !isDeclarativeSignal(spec.kind())) {
+            if (!spec.kind().entityLike() && !isDeclarativeFixture(spec.kind())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".kind", "fixture kind parses but safe world mutation is not implemented yet"));
             }
             if (spec.entityId() != null) {
@@ -84,8 +84,10 @@ public final class NpcRuntimeFixtureAllowlist {
         };
     }
 
-    private boolean isDeclarativeSignal(@Nonnull NpcRuntimeFixtureKind kind) {
-        return kind == NpcRuntimeFixtureKind.MESSAGE || kind == NpcRuntimeFixtureKind.BEACON;
+    private boolean isDeclarativeFixture(@Nonnull NpcRuntimeFixtureKind kind) {
+        return kind == NpcRuntimeFixtureKind.MESSAGE
+                || kind == NpcRuntimeFixtureKind.BEACON
+                || kind == NpcRuntimeFixtureKind.PLAYER_ANCHOR;
     }
 
     private void validateReference(String referencedFixtureId,

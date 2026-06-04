@@ -65,6 +65,9 @@ class NpcRuntimeObservationCadenceTest {
         assertTrue(cadence.shouldRecordEvent("action-start", 3));
         assertTrue(cadence.shouldRecordEvent("action-change", 3));
         assertTrue(cadence.shouldRecordEvent("action-end", 3));
+        assertTrue(cadence.shouldRecordEvent("flock-evidence", 0));
+        assertTrue(cadence.shouldRecordEvent("message-evidence", 0));
+        assertTrue(cadence.shouldRecordEvent("beacon-evidence", 0));
         assertTrue(cadence.shouldRecordEvent("assertions", 5));
         assertFalse(cadence.shouldRecordEvent("tick-start", 1));
         assertFalse(cadence.shouldRecordEvent("npc-sensor-delta", 3));

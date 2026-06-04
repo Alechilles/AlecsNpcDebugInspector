@@ -308,6 +308,33 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 .with("unsupportedFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation"));
         writeEventIfEnabled(writer, cadence, record);
         evidenceRecords.add(record.fields());
+        NpcRuntimeTraceRecord evidence = flockEvidenceRecord(request, tick, fixture, relationship, targetFixtureId);
+        writeEventIfEnabled(writer, cadence, evidence);
+        evidenceRecords.add(evidence.fields());
+    }
+
+    @Nonnull
+    private NpcRuntimeTraceRecord flockEvidenceRecord(@Nonnull NpcRuntimeRequest request,
+                                                      int tick,
+                                                      @Nonnull NpcRuntimeFixtureSpec fixture,
+                                                      @Nonnull String relationship,
+                                                      @Nonnull String targetFixtureId) {
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(request.requestId(), tick, "flock-evidence")
+                .with("fixtureId", fixture.fixtureId())
+                .with("roleId", fixture.roleId())
+                .with("flockId", fixture.flockId())
+                .with("flockRole", fixture.flockRole())
+                .with("familyId", fixture.familyId())
+                .with("familyRole", fixture.familyRole())
+                .with("unsupportedFields", unsupportedRelationshipFields(relationship));
+        if ("flockLeader".equals(relationship)) {
+            record.with("leaderFixtureId", targetFixtureId)
+                    .with("memberCount", linkedMemberCount(request.fixtures().list(), targetFixtureId));
+        } else if ("parent".equals(relationship)) {
+            record.with("parentFixtureId", targetFixtureId)
+                    .with("childCount", linkedChildCount(request.fixtures().list(), targetFixtureId));
+        }
+        return record;
     }
 
     @Nonnull
@@ -412,6 +439,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 || "tamework-evidence".equals(kind)
                 || "tamework-fixture-mutation".equals(kind)
                 || "fixture-link".equals(kind)
+                || "flock-evidence".equals(kind)
+                || "message-evidence".equals(kind)
+                || "beacon-evidence".equals(kind)
                 || "target-selection-evidence".equals(kind)
                 || "pathing-evidence".equals(kind)
                 || "combat-eligibility-evidence".equals(kind)
@@ -423,6 +453,31 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 .filter(fixture -> fixture.leaderFixtureId() != null
                         || fixture.parentFixtureId() != null)
                 .count();
+    }
+
+    private static int linkedMemberCount(@Nonnull List<NpcRuntimeFixtureSpec> fixtures, @Nonnull String leaderFixtureId) {
+        long followers = fixtures.stream()
+                .filter(fixture -> leaderFixtureId.equals(fixture.leaderFixtureId()))
+                .count();
+        return Math.toIntExact(followers + 1);
+    }
+
+    private static int linkedChildCount(@Nonnull List<NpcRuntimeFixtureSpec> fixtures, @Nonnull String parentFixtureId) {
+        long children = fixtures.stream()
+                .filter(fixture -> parentFixtureId.equals(fixture.parentFixtureId()))
+                .count();
+        return Math.toIntExact(children);
+    }
+
+    @Nonnull
+    private static List<String> unsupportedRelationshipFields(@Nonnull String relationship) {
+        if ("flockLeader".equals(relationship)) {
+            return List.of("engineFlockMembershipMutation");
+        }
+        if ("parent".equals(relationship)) {
+            return List.of("engineFamilyBindingMutation");
+        }
+        return List.of("engineRelationshipMutation");
     }
 
     private static boolean shouldStopAfterAssertionsResolve(@Nonnull NpcRuntimeRequest request,

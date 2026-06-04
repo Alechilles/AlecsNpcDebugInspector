@@ -200,23 +200,26 @@ public record NpcRuntimeAssertion(
         List<Map<String, Object>> parentLinks = candidates.stream()
                 .filter(evidence -> matchesText("parent", evidence.get("relationship")))
                 .toList();
+        List<Map<String, Object>> flockEvidence = candidates.stream()
+                .filter(evidence -> matchesText("flock-evidence", evidence.get("kind")))
+                .toList();
 
-        if (expectedLeaderFixtureId != null && !leaderMatches(flockLinks)) {
+        if (expectedLeaderFixtureId != null && !leaderMatches(flockLinks, flockEvidence)) {
             failures.add("expected leaderFixtureId=" + expectedLeaderFixtureId);
         }
-        if (expectedParentFixtureId != null && !parentMatches(parentLinks)) {
+        if (expectedParentFixtureId != null && !parentMatches(parentLinks, flockEvidence)) {
             failures.add("expected parentFixtureId=" + expectedParentFixtureId);
         }
         Integer observedMemberCount = null;
         if (expectedMemberCount != null) {
-            observedMemberCount = observedMemberCount(flockLinks);
+            observedMemberCount = observedMemberCount(flockLinks, flockEvidence);
             if (observedMemberCount == null || observedMemberCount != expectedMemberCount) {
                 failures.add("expected memberCount=" + expectedMemberCount + " but observed " + observedMemberCount);
             }
         }
         Integer observedChildCount = null;
         if (expectedChildCount != null) {
-            observedChildCount = observedChildCount(parentLinks);
+            observedChildCount = observedChildCount(parentLinks, flockEvidence);
             if (observedChildCount == null || observedChildCount != expectedChildCount) {
                 failures.add("expected childCount=" + expectedChildCount + " but observed " + observedChildCount);
             }
@@ -259,8 +262,17 @@ public record NpcRuntimeAssertion(
         return new FlockEvaluation(failures.isEmpty(), failures, evidence, firstTick, lastTick, candidates.size());
     }
 
-    private boolean leaderMatches(@Nonnull List<Map<String, Object>> flockLinks) {
+    private boolean leaderMatches(@Nonnull List<Map<String, Object>> flockLinks,
+                                  @Nonnull List<Map<String, Object>> flockEvidence) {
         if (fixtureId != null && matchesText(expectedLeaderFixtureId, fixtureId)) {
+            return true;
+        }
+        if (flockEvidence.stream().anyMatch(evidence -> {
+            if (fixtureId != null && !matchesText(fixtureId, evidenceFixtureId(evidence))) {
+                return false;
+            }
+            return matchesText(expectedLeaderFixtureId, evidence.get("leaderFixtureId"));
+        })) {
             return true;
         }
         return flockLinks.stream().anyMatch(link -> {
@@ -271,8 +283,14 @@ public record NpcRuntimeAssertion(
         });
     }
 
-    private boolean parentMatches(@Nonnull List<Map<String, Object>> parentLinks) {
-        return parentLinks.stream().anyMatch(link -> {
+    private boolean parentMatches(@Nonnull List<Map<String, Object>> parentLinks,
+                                  @Nonnull List<Map<String, Object>> flockEvidence) {
+        return flockEvidence.stream().anyMatch(evidence -> {
+            if (fixtureId != null && !matchesText(fixtureId, evidenceFixtureId(evidence))) {
+                return false;
+            }
+            return matchesText(expectedParentFixtureId, evidence.get("parentFixtureId"));
+        }) || parentLinks.stream().anyMatch(link -> {
             if (fixtureId != null && !matchesText(fixtureId, evidenceFixtureId(link))) {
                 return false;
             }
@@ -281,7 +299,17 @@ public record NpcRuntimeAssertion(
     }
 
     @Nullable
-    private Integer observedMemberCount(@Nonnull List<Map<String, Object>> flockLinks) {
+    private Integer observedMemberCount(@Nonnull List<Map<String, Object>> flockLinks,
+                                        @Nonnull List<Map<String, Object>> flockEvidence) {
+        Integer evidenceCount = flockEvidence.stream()
+                .filter(evidence -> fixtureId == null || matchesText(fixtureId, evidenceFixtureId(evidence)))
+                .map(evidence -> intOrNull(evidence.get("memberCount")))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (evidenceCount != null) {
+            return evidenceCount;
+        }
         if (fixtureId == null) {
             return null;
         }
@@ -295,7 +323,17 @@ public record NpcRuntimeAssertion(
     }
 
     @Nullable
-    private Integer observedChildCount(@Nonnull List<Map<String, Object>> parentLinks) {
+    private Integer observedChildCount(@Nonnull List<Map<String, Object>> parentLinks,
+                                       @Nonnull List<Map<String, Object>> flockEvidence) {
+        Integer evidenceCount = flockEvidence.stream()
+                .filter(evidence -> fixtureId == null || matchesText(fixtureId, evidence.get("parentFixtureId")))
+                .map(evidence -> intOrNull(evidence.get("childCount")))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (evidenceCount != null) {
+            return evidenceCount;
+        }
         if (fixtureId == null) {
             return null;
         }

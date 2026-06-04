@@ -94,6 +94,7 @@ class NpcRuntimeAssertionTest {
     void passesWhenExpectedActionEvidenceMatches() {
         NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
                 "kind", "action",
+                "fixtureId", "npcUnderTest",
                 "actionType", "InstructionStep",
                 "actionId", "currentTreeStep",
                 "expectedLifecycle", "selected",
@@ -102,6 +103,7 @@ class NpcRuntimeAssertionTest {
 
         NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
                 "kind", "action-evidence",
+                "fixtureId", "npcUnderTest",
                 "actionType", "InstructionStep",
                 "actionId", "currentTreeStep",
                 "lifecycle", "selected",
@@ -110,6 +112,29 @@ class NpcRuntimeAssertionTest {
         )));
 
         assertEquals("passed", result.status());
+    }
+
+    @Test
+    void ignoresEvidenceFromDifferentFixtureId() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "action",
+                "fixtureId", "npcUnderTest",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "expectedLifecycle", "selected"
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "action-evidence",
+                "fixtureId", "flock.follower_one",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "lifecycle", "selected",
+                "unsupportedFields", List.of()
+        )));
+
+        assertEquals("unknown", result.status());
+        assertTrue(result.message().contains("no matching action evidence"));
     }
 
     @Test
@@ -238,6 +263,49 @@ class NpcRuntimeAssertionTest {
 
         assertEquals("failed", result.status());
         assertTrue(result.message().contains("forbidden evidence observed"));
+    }
+
+    @Test
+    void passesFlockAssertionFromFixtureLinks() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "flock-links",
+                "kind", "flock",
+                "fixtureId", "npcUnderTest",
+                "expectedLeaderFixtureId", "npcUnderTest",
+                "expectedMemberCount", 3,
+                "expectUnsupported", true,
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(0, "fixture-link", "fixture", "flock.follower_one", "relationship", "flockLeader", "targetFixtureId", "npcUnderTest", "unsupportedFields", List.of("engineFlockMembershipMutation")),
+                evidence(0, "fixture-link", "fixture", "flock.follower_two", "relationship", "flockLeader", "targetFixtureId", "npcUnderTest", "unsupportedFields", List.of("engineFlockMembershipMutation"))
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(0, result.firstMatchedTick());
+        assertEquals(2, result.matchedEvidenceCount());
+        assertEquals(3, result.evidence().get("observedMemberCount"));
+    }
+
+    @Test
+    void failsFamilyAssertionWhenParentLinkDiffers() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "family-link",
+                "kind", "flock",
+                "fixtureId", "family.child",
+                "expectedParentFixtureId", "npcUnderTest",
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(0, "fixture-link", "fixture", "family.child", "relationship", "parent", "targetFixtureId", "family.other_parent", "unsupportedFields", List.of("engineFamilyBindingMutation"))
+        ));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("expected parentFixtureId=npcUnderTest"));
     }
 
     private static NpcRuntimeRequest.AssertionSpec assertionSpec(Map<String, Object> fields) {

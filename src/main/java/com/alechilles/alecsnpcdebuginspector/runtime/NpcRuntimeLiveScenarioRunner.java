@@ -228,8 +228,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("parentFixtureId", fixture.parentFixtureId())
                         .with("npcUuid", spawned.uuid() != null ? spawned.uuid().toString() : null)
                         .with("result", spawned.toSpawnResult().toMap()));
-                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, tick, fixture, "flockLeader", fixture.leaderFixtureId());
-                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, tick, fixture, "parent", fixture.parentFixtureId());
+                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, spawnedFixtures.evidenceRecords, tick, fixture, "flockLeader", fixture.leaderFixtureId());
+                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, spawnedFixtures.evidenceRecords, tick, fixture, "parent", fixture.parentFixtureId());
                 for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
                     writeEventIfEnabled(writer, cadence, record);
                     if (tick >= request.timing().warmupTicks()) {
@@ -286,6 +286,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                            @Nonnull NpcRuntimeTraceWriter writer,
                                            @Nonnull NpcRuntimeObservationCadence cadence,
                                            @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                           @Nonnull List<Map<String, Object>> evidenceRecords,
                                            int tick,
                                            @Nonnull NpcRuntimeFixtureSpec fixture,
                                            @Nonnull String relationship,
@@ -294,8 +295,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             return;
         }
         NpcRuntimeFixtureRegistry.FixtureLink link = fixtureRegistry.recordFixtureLink(fixture.fixtureId(), relationship, targetFixtureId);
-        writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-link")
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-link")
                 .with("fixture", link.fixtureId())
+                .with("fixtureId", link.fixtureId())
                 .with("relationship", link.relationship())
                 .with("targetFixtureId", link.targetFixtureId())
                 .with("flockId", fixture.flockId())
@@ -303,7 +305,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 .with("familyId", fixture.familyId())
                 .with("familyRole", fixture.familyRole())
                 .with("engineApplied", false)
-                .with("unsupportedFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation")));
+                .with("unsupportedFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation"));
+        writeEventIfEnabled(writer, cadence, record);
+        evidenceRecords.add(record.fields());
     }
 
     @Nonnull
@@ -404,6 +408,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 || "combat-evaluator-evidence".equals(kind)
                 || "tamework-evidence".equals(kind)
                 || "tamework-fixture-mutation".equals(kind)
+                || "fixture-link".equals(kind)
                 || "target-selection-evidence".equals(kind)
                 || "pathing-evidence".equals(kind)
                 || "combat-eligibility-evidence".equals(kind)

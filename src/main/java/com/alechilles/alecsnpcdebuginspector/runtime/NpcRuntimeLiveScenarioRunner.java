@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
 import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.nio.file.Path;
@@ -56,6 +57,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         if (!readiness.ready()) {
             throw new IllegalStateException("harness-world-not-ready: " + readiness.displayReason());
         }
+        ensureArenaChunkLoaded(world, request);
         return runOnPreparedWorld(request, tracePath, world);
     }
 
@@ -215,6 +217,36 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         } catch (Exception exception) {
             return false;
         }
+    }
+
+    private void ensureArenaChunkLoaded(@Nonnull World world, @Nonnull NpcRuntimeRequest request) throws Exception {
+        long chunkIndex = ChunkUtil.indexChunkFromBlock(
+                coordinate(request.fixtures().npc().position(), 0, "fixtures.npc.position"),
+                coordinate(request.fixtures().npc().position(), 2, "fixtures.npc.position")
+        );
+        try {
+            world.getChunkAsync(chunkIndex).get(WORLD_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof Exception checked) {
+                throw new IllegalStateException("harness-arena-chunk-not-ready: failed to load chunk " + chunkIndex, checked);
+            }
+            throw new IllegalStateException("harness-arena-chunk-not-ready: failed to load chunk " + chunkIndex, cause);
+        }
+        if (world.getChunkIfLoaded(chunkIndex) == null && world.getChunkIfNonTicking(chunkIndex) == null && world.getChunkIfInMemory(chunkIndex) == null) {
+            throw new IllegalStateException("harness-arena-chunk-not-ready: chunk " + chunkIndex + " is not resident after load");
+        }
+    }
+
+    private double coordinate(@Nonnull java.util.List<Object> values, int index, @Nonnull String fieldName) {
+        if (values.size() != 3) {
+            throw new IllegalArgumentException(fieldName + " must contain exactly 3 numbers");
+        }
+        Object value = values.get(index);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        throw new IllegalArgumentException(fieldName + " must contain only numbers");
     }
 
     private static final class SpawnedNpcHolder {

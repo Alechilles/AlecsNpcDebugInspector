@@ -59,6 +59,16 @@ class NpcRuntimeTraceWriterTest {
     }
 
     @Test
+    void exposesTraceFieldsWithNullValuesForProfileFiltering() {
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of("request-a", 0, "fixture-spawn")
+                .with("fixture", "npcUnderTest")
+                .with("targetSlot", null);
+
+        assertEquals("fixture-spawn", record.fields().get("kind"));
+        assertTrue(record.fields().containsKey("targetSlot"));
+    }
+
+    @Test
     void serializesRuntimeContractEvidenceHelpers() {
         String tameworkMutation = NpcRuntimeTraceRecord.tameworkFixtureMutation(
                 "request-a",

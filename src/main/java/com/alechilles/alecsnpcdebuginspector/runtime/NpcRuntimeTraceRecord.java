@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,7 +148,7 @@ public final class NpcRuntimeTraceRecord {
 
     @Nonnull
     public Map<String, Object> fields() {
-        return Map.copyOf(fields);
+        return Collections.unmodifiableMap(fields);
     }
 
     @Nonnull

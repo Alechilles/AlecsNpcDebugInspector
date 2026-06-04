@@ -36,7 +36,7 @@ class NpcRuntimeFixtureAllowlistTest {
     }
 
     @Test
-    void rejectsUnsafeBlockMutationAsUnsupportedFixture() {
+    void rejectsUnsafeBlockMutationAsUnsupportedFixtureWithExactPath() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
         NpcRuntimeRequest.ValidationException exception = assertThrows(
@@ -62,7 +62,45 @@ class NpcRuntimeFixtureAllowlistTest {
         );
 
         assertEquals("unsupported-fixture", exception.classification());
-        assertTrue(exception.unsupported().toString().contains("safe world mutation is not implemented yet"));
+        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
+        assertEquals(
+                "block fixture placement is not implemented; safe block placement/reset API is unconfirmed",
+                exception.unsupported().getFirst().reason()
+        );
+    }
+
+    @Test
+    void rejectsUnsafeItemMutationAsUnsupportedFixtureWithExactPath() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                                {
+                                  "version": 1,
+                                  "requestId": "item_fixture",
+                                  "assetId": "Mob_Tamework_Example_Simple",
+                                  "roleId": "Mob_Tamework_Example_Simple",
+                                  "ticks": 3,
+                                  "fixtures": {
+                                    "list": [
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                                      {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "hytale:apple"}
+                                    ]
+                                  }
+                                }
+                                """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
+        assertEquals(
+                "item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed",
+                exception.unsupported().getFirst().reason()
+        );
     }
 
     @Test

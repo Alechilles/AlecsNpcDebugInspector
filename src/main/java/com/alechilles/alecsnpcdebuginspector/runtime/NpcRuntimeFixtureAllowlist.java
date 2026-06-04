@@ -33,7 +33,7 @@ public final class NpcRuntimeFixtureAllowlist {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "fixture id is not allowlisted for kind " + spec.kind().jsonName()));
             }
             if (!spec.kind().entityLike() && !isDeclarativeFixture(spec.kind())) {
-                unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".kind", "fixture kind parses but safe world mutation is not implemented yet"));
+                unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".kind", unsupportedMutationReason(spec.kind())));
             }
             if (spec.entityId() != null) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".entityId", "direct entity id spawning is not implemented; use roleId for NPC-backed fixtures"));
@@ -88,6 +88,15 @@ public final class NpcRuntimeFixtureAllowlist {
         return kind == NpcRuntimeFixtureKind.MESSAGE
                 || kind == NpcRuntimeFixtureKind.BEACON
                 || kind == NpcRuntimeFixtureKind.PLAYER_ANCHOR;
+    }
+
+    @Nonnull
+    private String unsupportedMutationReason(@Nonnull NpcRuntimeFixtureKind kind) {
+        return switch (kind) {
+            case BLOCK -> "block fixture placement is not implemented; safe block placement/reset API is unconfirmed";
+            case ITEM -> "item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed";
+            default -> "fixture kind parses but safe world mutation is not implemented yet";
+        };
     }
 
     private void validateReference(String referencedFixtureId,

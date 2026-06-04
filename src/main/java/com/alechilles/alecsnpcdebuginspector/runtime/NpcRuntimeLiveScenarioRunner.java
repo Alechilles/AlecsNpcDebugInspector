@@ -328,7 +328,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         Object kind = record.fields().get("kind");
         return "sensor-evidence".equals(kind)
                 || "action-evidence".equals(kind)
-                || "combat-evaluator-evidence".equals(kind);
+                || "combat-evaluator-evidence".equals(kind)
+                || "tamework-evidence".equals(kind);
     }
 
     private static final class SpawnedFixtureHolder {

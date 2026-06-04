@@ -15,6 +15,7 @@ import javax.annotation.Nullable;
 public final class NpcRuntimeObserver {
     private final NpcRuntimeSensorObserver sensorObserver = new NpcRuntimeSensorObserver();
     private final NpcRuntimeActionObserver actionObserver = new NpcRuntimeActionObserver();
+    private final NpcRuntimeTameworkObserver tameworkObserver = new NpcRuntimeTameworkObserver();
 
     @Nonnull
     public NpcRuntimeObservedNpc observe(@Nullable UUID npcUuid, @Nonnull NpcDebugSnapshot snapshot) {
@@ -42,6 +43,7 @@ public final class NpcRuntimeObserver {
         Map<String, Object> tamework = current.tameworkMap();
         if (!tamework.isEmpty()) {
             records.add(record(requestId, tick, "tamework", tamework));
+            records.addAll(tameworkObserver.traceRecords(requestId, tick, tamework));
         }
 
         NpcRuntimeObservationDiff diff = NpcRuntimeObservationDiff.between(previous, current);

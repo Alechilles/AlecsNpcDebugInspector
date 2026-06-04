@@ -20,9 +20,13 @@ public record NpcRuntimeAssertion(
         @Nullable String actionId,
         @Nullable String evaluatorType,
         @Nullable String evaluatorId,
+        @Nullable String tameworkSection,
+        @Nullable String tameworkField,
         @Nullable String expectedMatchResult,
         @Nullable String expectedLifecycle,
+        @Nullable String expectedValue,
         @Nullable String expectedTargetFixtureId,
+        @Nullable Boolean expectedPresent,
         @Nullable Boolean expectedSelected,
         @Nullable Boolean expectedEligible,
         @Nullable String expectedAbility,
@@ -58,9 +62,13 @@ public record NpcRuntimeAssertion(
                 string(fields, "actionId", "id"),
                 string(fields, "evaluatorType", "type"),
                 string(fields, "evaluatorId", "id"),
+                string(fields, "section", "tameworkSection"),
+                string(fields, "field", "tameworkField"),
                 string(fields, "expectedMatchResult", "expectedResult"),
                 string(fields, "expectedLifecycle", "lifecycle"),
+                string(fields, "expectedValue", "value"),
                 string(fields, "expectedTargetFixtureId", "targetFixtureId"),
+                boolOrNull(fields.containsKey("expectedPresent") ? fields.get("expectedPresent") : fields.get("present")),
                 boolOrNull(fields.containsKey("expectedSelected") ? fields.get("expectedSelected") : fields.get("selected")),
                 boolOrNull(fields.containsKey("expectedEligible") ? fields.get("expectedEligible") : fields.get("eligible")),
                 string(fields, "expectedAbility", "ability"),
@@ -84,6 +92,12 @@ public record NpcRuntimeAssertion(
         }
         if (expectedLifecycle != null && !matchesText(expectedLifecycle, evidence.get("lifecycle"))) {
             failures.add("expected lifecycle=" + expectedLifecycle + " but observed " + evidence.get("lifecycle"));
+        }
+        if (expectedValue != null && !matchesText(expectedValue, evidence.get("observedValue"))) {
+            failures.add("expected value=" + expectedValue + " but observed " + evidence.get("observedValue"));
+        }
+        if (expectedPresent != null && !matchesBoolean(expectedPresent, evidence.get("present"))) {
+            failures.add("expected present=" + expectedPresent + " but observed " + evidence.get("present"));
         }
         if (expectedSelected != null && !matchesBoolean(expectedSelected, evidence.get("selected"))) {
             failures.add("expected selected=" + expectedSelected + " but observed " + evidence.get("selected"));
@@ -155,6 +169,12 @@ public record NpcRuntimeAssertion(
             if (evaluatorId != null && !matchesText(evaluatorId, evidence.get("evaluatorId"))) {
                 continue;
             }
+            if (tameworkSection != null && !matchesText(tameworkSection, evidence.get("section"))) {
+                continue;
+            }
+            if (tameworkField != null && !matchesText(tameworkField, evidence.get("field"))) {
+                continue;
+            }
             return evidence;
         }
         return null;
@@ -164,7 +184,8 @@ public record NpcRuntimeAssertion(
         return "sensor".equalsIgnoreCase(kind)
                 || "action".equalsIgnoreCase(kind)
                 || "combat".equalsIgnoreCase(kind)
-                || "combat-evaluator".equalsIgnoreCase(kind);
+                || "combat-evaluator".equalsIgnoreCase(kind)
+                || "tamework".equalsIgnoreCase(kind);
     }
 
     @Nonnull
@@ -174,6 +195,9 @@ public record NpcRuntimeAssertion(
         }
         if ("action".equalsIgnoreCase(kind)) {
             return "action-evidence";
+        }
+        if ("tamework".equalsIgnoreCase(kind)) {
+            return "tamework-evidence";
         }
         return "combat-evaluator-evidence";
     }

@@ -131,4 +131,49 @@ class NpcRuntimeAssertionTest {
         assertEquals("failed", result.status());
         assertTrue(result.message().contains("eligibility is unsupported"));
     }
+
+    @Test
+    void passesWhenExpectedTameworkEvidenceMatches() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "tamework",
+                "section", "tamework",
+                "field", "pluginLoaded",
+                "expectedValue", "true",
+                "expectedPresent", true,
+                "expectUnsupported", true
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "tamework-evidence",
+                "section", "tamework",
+                "field", "pluginLoaded",
+                "present", true,
+                "observedValue", "true",
+                "unsupportedFields", List.of("fixtureMutation")
+        )));
+
+        assertEquals("passed", result.status());
+    }
+
+    @Test
+    void failsWhenExpectedTameworkValueDiffers() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "tamework",
+                "section", "tameworkDiagnostics",
+                "field", "healthStatus",
+                "expectedValue", "HEALTHY"
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "tamework-evidence",
+                "section", "tameworkDiagnostics",
+                "field", "healthStatus",
+                "present", true,
+                "observedValue", "DEGRADED",
+                "unsupportedFields", List.of()
+        )));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("expected value=HEALTHY"));
+    }
 }

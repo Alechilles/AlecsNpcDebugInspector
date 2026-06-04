@@ -299,7 +299,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     observed,
                     spawnedFixtures.previousObserved,
                     request.engineHooks(),
-                    npcUnderTest.fixtureId()
+                    npcUnderTest.fixtureId(),
+                    spawnedFixtures.actionLifecycleTracker
             )) {
                 writeEventIfEnabled(writer, cadence, record);
                 if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {
@@ -714,6 +715,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
         private final List<Map<String, Object>> evidenceRecords = new ArrayList<>();
+        private final NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

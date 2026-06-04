@@ -45,6 +45,17 @@ public final class NpcRuntimeObserver {
                                                     @Nullable NpcRuntimeObservedNpc previous,
                                                     @Nonnull NpcRuntimeRequest.EngineHooksSpec engineHooks,
                                                     @Nonnull String npcId) {
+        return traceRecords(requestId, tick, current, previous, engineHooks, npcId, new NpcRuntimeActionObserver.ActionLifecycleTracker());
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull NpcRuntimeObservedNpc current,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull NpcRuntimeRequest.EngineHooksSpec engineHooks,
+                                                    @Nonnull String npcId,
+                                                    @Nonnull NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker) {
         ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
         records.add(record(requestId, tick, "npc-state", current.stateMap()));
         addSection(records, requestId, tick, "targeting", current.section("Targeting / Sensors"));
@@ -57,7 +68,7 @@ public final class NpcRuntimeObserver {
         addSection(records, requestId, tick, "components", current.section("Components"));
         addSection(records, requestId, tick, "flock", current.section("Flock"));
         records.addAll(sensorObserver.traceRecords(requestId, tick, current));
-        records.addAll(actionObserver.traceRecords(requestId, tick, current, previous));
+        records.addAll(actionObserver.traceRecords(requestId, tick, current, previous, actionLifecycleTracker));
         Map<String, Object> tamework = current.tameworkMap();
         if (!tamework.isEmpty()) {
             records.add(record(requestId, tick, "tamework", tamework));

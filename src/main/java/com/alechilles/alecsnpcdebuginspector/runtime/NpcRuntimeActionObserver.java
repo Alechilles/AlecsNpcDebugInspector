@@ -46,9 +46,20 @@ public final class NpcRuntimeActionObserver {
                                                     int tick,
                                                     @Nonnull NpcRuntimeObservedNpc observed,
                                                     @Nullable NpcRuntimeObservedNpc previous) {
+        return traceRecords(requestId, tick, observed, previous, new ActionLifecycleTracker());
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull NpcRuntimeObservedNpc observed,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull ActionLifecycleTracker tracker) {
         ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
-        addAiActionEvidence(records, requestId, tick, observed.section("AI"));
-        addActionTransitions(records, requestId, tick, actionStates(previous), actionStates(observed));
+        Map<String, ActionState> previousStates = actionStates(previous);
+        Map<String, ActionState> currentStates = actionStates(observed);
+        addActionTransitions(records, requestId, tick, previousStates, currentStates, tracker);
+        addAiActionEvidence(records, requestId, tick, observed.section("AI"), tracker);
         addCombatEvaluatorEvidence(records, requestId, tick, observed.section("Combat"));
         return records;
     }
@@ -56,25 +67,31 @@ public final class NpcRuntimeActionObserver {
     private void addAiActionEvidence(@Nonnull List<NpcRuntimeTraceRecord> records,
                                      @Nonnull String requestId,
                                      int tick,
-                                     @Nonnull Map<String, String> ai) {
-        addInstructionRecord(records, requestId, tick, ai, "currentTreeStep", "selected");
-        addInstructionRecord(records, requestId, tick, ai, "bodyStep", "observed");
-        addInstructionRecord(records, requestId, tick, ai, "headStep", "observed");
-        addInstructionRecord(records, requestId, tick, ai, "queuedBodyStep", "queued");
-        addInstructionRecord(records, requestId, tick, ai, "queuedHeadStep", "queued");
-        addInstructionRecord(records, requestId, tick, ai, "rootInstruction", "candidate");
-        addInstructionRecord(records, requestId, tick, ai, "interactionInstruction", "candidate");
+                                     @Nonnull Map<String, String> ai,
+                                     @Nonnull ActionLifecycleTracker tracker) {
+        addInstructionRecord(records, requestId, tick, ai, "currentTreeStep", "selected", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "bodyStep", "observed", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "headStep", "observed", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "queuedBodyStep", "queued", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "queuedHeadStep", "queued", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "rootInstruction", "candidate", tracker);
+        addInstructionRecord(records, requestId, tick, ai, "interactionInstruction", "candidate", tracker);
         if (ai.containsKey("transitionActionsRunning")) {
             String value = ai.get("transitionActionsRunning");
-            records.add(NpcRuntimeTraceRecord.of(requestId, tick, "action-evidence")
+            NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(requestId, tick, "action-evidence")
                     .with("actionType", "TransitionActions")
                     .with("actionId", "transitionActionsRunning")
                     .with("sourceSection", "AI")
                     .with("sourceField", "transitionActionsRunning")
                     .with("lifecycle", Boolean.parseBoolean(value) ? "running" : "not-running")
                     .with("selected", Boolean.parseBoolean(value))
-                    .with("observedValue", value)
-                    .with("unsupportedFields", ACTION_UNSUPPORTED_FIELDS));
+                    .with("observedValue", value);
+            Integer startTick = tracker.startTick("TransitionActions/transitionActionsRunning");
+            if (startTick != null && Boolean.parseBoolean(value)) {
+                record.with("startTick", startTick);
+            }
+            record.with("unsupportedFields", actionUnsupportedFields(startTick != null && Boolean.parseBoolean(value)));
+            records.add(record);
         }
     }
 
@@ -82,25 +99,37 @@ public final class NpcRuntimeActionObserver {
                                       @Nonnull String requestId,
                                       int tick,
                                       @Nonnull Map<String, ActionState> previous,
-                                      @Nonnull Map<String, ActionState> current) {
+                                      @Nonnull Map<String, ActionState> current,
+                                      @Nonnull ActionLifecycleTracker tracker) {
         for (ActionState currentState : current.values()) {
             ActionState previousState = previous.get(currentState.key());
             if (previousState == null || !previousState.active()) {
+                tracker.start(currentState.key(), tick);
                 records.add(actionTransition(requestId, tick, "action-start", currentState)
                         .with("startTick", tick));
             } else if (!previousState.observedValue().equals(currentState.observedValue())
                     || !previousState.lifecycle().equals(currentState.lifecycle())) {
+                int previousStartTick = tracker.startTickOrDefault(previousState.key(), tick);
+                tracker.start(currentState.key(), tick);
                 records.add(actionTransition(requestId, tick, "action-change", currentState)
                         .with("previousValue", previousState.observedValue())
                         .with("previousLifecycle", previousState.lifecycle())
+                        .with("previousStartTick", previousStartTick)
+                        .with("previousDurationTicks", Math.max(0, tick - previousStartTick))
                         .with("currentValue", currentState.observedValue())
-                        .with("currentLifecycle", currentState.lifecycle()));
+                        .with("currentLifecycle", currentState.lifecycle())
+                        .with("startTick", tick));
+            } else {
+                tracker.ensureStarted(currentState.key(), tick);
             }
         }
         for (ActionState previousState : previous.values()) {
             if (!current.containsKey(previousState.key()) && previousState.active()) {
+                int startTick = tracker.end(previousState.key(), tick);
                 records.add(actionTransition(requestId, tick, "action-end", previousState)
+                        .with("startTick", startTick)
                         .with("endTick", tick)
+                        .with("durationTicks", Math.max(0, tick - startTick))
                         .with("previousValue", previousState.observedValue())
                         .with("previousLifecycle", previousState.lifecycle()));
             }
@@ -169,20 +198,27 @@ public final class NpcRuntimeActionObserver {
                                       int tick,
                                       @Nonnull Map<String, String> ai,
                                       @Nonnull String field,
-                                      @Nonnull String lifecycle) {
+                                      @Nonnull String lifecycle,
+                                      @Nonnull ActionLifecycleTracker tracker) {
         String value = ai.get(field);
         if (value == null || isNone(value)) {
             return;
         }
-        records.add(NpcRuntimeTraceRecord.of(requestId, tick, "action-evidence")
+        String key = "InstructionStep/" + field;
+        Integer startTick = tracker.startTick(key);
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(requestId, tick, "action-evidence")
                 .with("actionType", "InstructionStep")
                 .with("actionId", field)
                 .with("sourceSection", "AI")
                 .with("sourceField", field)
                 .with("lifecycle", lifecycle)
                 .with("selected", "selected".equals(lifecycle) || "observed".equals(lifecycle))
-                .with("observedValue", value)
-                .with("unsupportedFields", ACTION_UNSUPPORTED_FIELDS));
+                .with("observedValue", value);
+        if (startTick != null) {
+            record.with("startTick", startTick);
+        }
+        record.with("unsupportedFields", actionUnsupportedFields(startTick != null));
+        records.add(record);
     }
 
     private void addCombatEvaluatorEvidence(@Nonnull List<NpcRuntimeTraceRecord> records,
@@ -217,6 +253,43 @@ public final class NpcRuntimeActionObserver {
 
     private boolean isNone(@Nonnull String value) {
         return value.isBlank() || "<none>".equalsIgnoreCase(value) || "none".equalsIgnoreCase(value);
+    }
+
+    @Nonnull
+    private List<String> actionUnsupportedFields(boolean hasStartTick) {
+        if (!hasStartTick) {
+            return ACTION_UNSUPPORTED_FIELDS;
+        }
+        return ACTION_UNSUPPORTED_FIELDS.stream()
+                .filter(field -> !"startTick".equals(field))
+                .toList();
+    }
+
+    public static final class ActionLifecycleTracker {
+        private final Map<String, Integer> startTicks = new LinkedHashMap<>();
+
+        int start(@Nonnull String key, int tick) {
+            startTicks.put(key, tick);
+            return tick;
+        }
+
+        void ensureStarted(@Nonnull String key, int tick) {
+            startTicks.putIfAbsent(key, tick);
+        }
+
+        @Nullable
+        Integer startTick(@Nonnull String key) {
+            return startTicks.get(key);
+        }
+
+        int startTickOrDefault(@Nonnull String key, int defaultTick) {
+            return startTicks.getOrDefault(key, defaultTick);
+        }
+
+        int end(@Nonnull String key, int defaultTick) {
+            Integer startTick = startTicks.remove(key);
+            return startTick != null ? startTick : defaultTick;
+        }
     }
 
     private record ActionState(@Nonnull String actionType,

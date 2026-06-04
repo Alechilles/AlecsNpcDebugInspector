@@ -114,6 +114,86 @@ class NpcRuntimeActionObserverTest {
         assertEquals(3, end.fields().get("endTick"));
     }
 
+    @Test
+    void tracksActionStartAndDurationAcrossSampledObservations() {
+        NpcRuntimeActionObserver observer = new NpcRuntimeActionObserver();
+        NpcRuntimeActionObserver.ActionLifecycleTracker tracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
+        NpcRuntimeObservedNpc started = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Attack]
+                - Current Body Step: MoveToTarget
+                - Transition Actions Running: true
+                """);
+        NpcRuntimeObservedNpc sustained = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Attack]
+                - Current Body Step: MoveToTarget
+                - Transition Actions Running: true
+                """);
+        NpcRuntimeObservedNpc ended = observedWithAi("""
+                === AI ===
+                - Current Tree Step: <none>
+                - Current Body Step: <none>
+                - Transition Actions Running: false
+                """);
+
+        observer.traceRecords("request-a", 10, started, null, tracker);
+        List<NpcRuntimeTraceRecord> sustainedRecords = observer.traceRecords("request-a", 25, sustained, started, tracker);
+        List<NpcRuntimeTraceRecord> endedRecords = observer.traceRecords("request-a", 40, ended, sustained, tracker);
+
+        NpcRuntimeTraceRecord sustainedEvidence = sustainedRecords.stream()
+                .filter(record -> "action-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(10, sustainedEvidence.fields().get("startTick"));
+        assertTrue(sustainedRecords.stream().noneMatch(record -> "action-start".equals(record.fields().get("kind"))));
+
+        NpcRuntimeTraceRecord end = endedRecords.stream()
+                .filter(record -> "action-end".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(10, end.fields().get("startTick"));
+        assertEquals(40, end.fields().get("endTick"));
+        assertEquals(30, end.fields().get("durationTicks"));
+    }
+
+    @Test
+    void resetsLifecycleTimingWhenSelectedActionChanges() {
+        NpcRuntimeActionObserver observer = new NpcRuntimeActionObserver();
+        NpcRuntimeActionObserver.ActionLifecycleTracker tracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
+        NpcRuntimeObservedNpc previous = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Patrol]
+                - Current Body Step: WalkToPoint
+                """);
+        NpcRuntimeObservedNpc current = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Attack]
+                - Current Body Step: MoveToTarget
+                """);
+
+        observer.traceRecords("request-a", 5, previous, null, tracker);
+        List<NpcRuntimeTraceRecord> changedRecords = observer.traceRecords("request-a", 12, current, previous, tracker);
+
+        NpcRuntimeTraceRecord change = changedRecords.stream()
+                .filter(record -> "action-change".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(5, change.fields().get("previousStartTick"));
+        assertEquals(7, change.fields().get("previousDurationTicks"));
+        assertEquals(12, change.fields().get("startTick"));
+
+        NpcRuntimeTraceRecord currentEvidence = changedRecords.stream()
+                .filter(record -> "action-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(12, currentEvidence.fields().get("startTick"));
+    }
+
     private static NpcRuntimeObservedNpc observedWithAi(String details) {
         return NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
                 "NPC Debug Inspector",

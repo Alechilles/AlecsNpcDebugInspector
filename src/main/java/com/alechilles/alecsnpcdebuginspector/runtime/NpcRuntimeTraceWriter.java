@@ -46,6 +46,10 @@ public final class NpcRuntimeTraceWriter implements Closeable {
         bytesWritten += recordBytes;
     }
 
+    public long bytesWritten() {
+        return bytesWritten;
+    }
+
     @Override
     public void close() throws IOException {
         writer.close();

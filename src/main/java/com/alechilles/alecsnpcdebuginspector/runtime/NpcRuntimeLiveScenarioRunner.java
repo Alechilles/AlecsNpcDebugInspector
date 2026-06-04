@@ -9,6 +9,7 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -81,10 +82,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         SpawnedFixtureHolder spawnedFixtures = new SpawnedFixtureHolder();
 
         try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(tracePath, cadence.maxTraceBytes())) {
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), 0, "run-start")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), 0, "run-start")
                     .with("assetId", request.assetId())
                     .with("roleId", request.roleId())
-                    .with("ticksRequested", request.ticks()));
+                    .with("ticksRequested", request.ticks())
+                    .with("profile", cadence.profile()));
 
             NpcRuntimeTickScheduler.RunSummary summary = tickScheduler.run(
                     run,
@@ -95,25 +97,29 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, fixtureRegistry, spawnedFixtures.spawnedNpcs);
             spawnedFixtures.spawnedNpcs.clear();
             run.markCleanup(cleanupReport.succeeded(), cleanupReport.message());
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "cleanup")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "cleanup")
                     .with("attempted", run.cleanupAttempted())
                     .with("succeeded", run.cleanupSucceeded())
                     .with("message", run.cleanupMessage())
                     .with("report", cleanupReport.toMap()));
             if (!cleanupReport.succeeded()) {
-                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
+                writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "failed")
                         .with("classification", "cleanup-failed")
                         .with("error", cleanupReport.message())
-                        .with("ticksRun", summary.ticksRun()));
+                        .with("ticksRun", summary.ticksRun())
+                        .with("profile", cadence.profile())
+                        .with("traceBytesWritten", writer.bytesWritten()));
                 return NpcRuntimeResult.cleanupFailed(request, summary.ticksRun(), tracePath, NpcRuntimeResult.Summary.empty(), cleanupReport);
             }
 
             if (summary.canceled()) {
-                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
+                writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "canceled")
                         .with("reason", summary.cancelReason())
-                        .with("ticksRun", summary.ticksRun()));
+                        .with("ticksRun", summary.ticksRun())
+                        .with("profile", cadence.profile())
+                        .with("traceBytesWritten", writer.bytesWritten()));
                 return NpcRuntimeResult.canceled(
                         request.requestId(),
                         request.ticks(),
@@ -128,15 +134,17 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .toList();
             NpcRuntimeResult.Summary resultSummary = NpcRuntimeResult.Summary.empty().withAssertions(assertionResults);
             if (!assertionResults.isEmpty()) {
-                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "assertions")
+                writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "assertions")
                         .with("results", assertionResults.stream().map(NpcRuntimeAssertionResult::toMap).toList()));
             }
             if (resultSummary.hasAssertionFailures() || resultSummary.hasAssertionUnknowns()) {
                 String classification = resultSummary.hasAssertionFailures() ? "assertion-failed" : "assertion-unknown";
-                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
+                writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "failed")
                         .with("classification", classification)
-                        .with("ticksRun", summary.ticksRun()));
+                        .with("ticksRun", summary.ticksRun())
+                        .with("profile", cadence.profile())
+                        .with("traceBytesWritten", writer.bytesWritten()));
                 return NpcRuntimeResult.assertionFailed(
                         request,
                         summary.ticksRun(),
@@ -148,11 +156,13 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             }
 
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())
                     .with("mode", summary.completedEarly() ? "assertion-driven" : "tick-driven")
-                    .with("completionReason", summary.completionReason()));
+                    .with("completionReason", summary.completionReason())
+                    .with("profile", cadence.profile())
+                    .with("traceBytesWritten", writer.bytesWritten()));
             return NpcRuntimeResult.passed(
                     request,
                     summary.ticksRun(),
@@ -179,14 +189,14 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         Store<EntityStore> store = world.getEntityStore().getStore();
 
         if (tick == 0) {
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "world-ready")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "world-ready")
                     .with("world", world.getName())
                     .with("ticking", world.isTicking())
                     .with("paused", world.isPaused())
                     .with("playerCount", world.getPlayerCount())
                     .with("chunkResidency", arena.residencyMode())
                     .with("spawnChunkIndex", arena.spawnChunkIndex()));
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "arena-reset")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "arena-reset")
                     .with("arena", request.world().arena())
                     .with("mode", "no-block-reset-yet")
                     .with("details", arena.toMap()));
@@ -198,7 +208,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 }
                 fixtureRegistry.recordEntity(fixture.fixtureId(), fixture.kind().jsonName(), spawned.uuid());
                 run.addFixture(fixture.fixtureId());
-                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-spawn")
+                writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-spawn")
                         .with("fixture", fixture.fixtureId())
                         .with("fixtureKind", fixture.kind().jsonName())
                         .with("roleId", fixture.roleId())
@@ -206,7 +216,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("npcUuid", spawned.uuid() != null ? spawned.uuid().toString() : null)
                         .with("result", spawned.toSpawnResult().toMap()));
                 for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
-                    writer.write(record);
+                    writeEventIfEnabled(writer, cadence, record);
                     if (tick >= request.timing().warmupTicks()) {
                         spawnedFixtures.evidenceRecords.add(record.fields());
                     }
@@ -214,9 +224,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
         }
 
-        if (cadence.includeEvents()) {
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "tick-start"));
-        }
+        writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "tick-start"));
 
         NpcRuntimeFixtureSpawner.SpawnedNpc npcUnderTest = spawnedFixtures.npcUnderTest();
         if (cadence.shouldRecordSnapshot(tick) && npcUnderTest != null) {
@@ -235,7 +243,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     request.engineHooks(),
                     npcUnderTest.fixtureId()
             )) {
-                writer.write(record);
+                writeEventIfEnabled(writer, cadence, record);
                 if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {
                     spawnedFixtures.evidenceRecords.add(record.fields());
                 }
@@ -247,14 +255,12 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             List<NpcRuntimeAssertionResult> currentResults = assertions.stream()
                     .map(assertion -> assertion.evaluate(spawnedFixtures.evidenceRecords))
                     .toList();
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "assertions-resolved")
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "assertions-resolved")
                     .with("results", currentResults.stream().map(NpcRuntimeAssertionResult::toMap).toList()));
             return NpcRuntimeTickScheduler.TickOutcome.completed("assertions resolved");
         }
 
-        if (cadence.includeEvents()) {
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "tick-end"));
-        }
+        writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "tick-end"));
 
         return run.canceled()
                 ? NpcRuntimeTickScheduler.TickOutcome.canceled(run.cancelReason() != null ? run.cancelReason() : "canceled")
@@ -367,7 +373,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
     private static boolean shouldStopAfterAssertionsResolve(@Nonnull NpcRuntimeRequest request,
                                                             @Nonnull List<NpcRuntimeAssertion> assertions,
-                                                            @Nonnull List<java.util.Map<String, Object>> evidenceRecords,
+                                                            @Nonnull List<Map<String, Object>> evidenceRecords,
                                                             int tick) {
         if (!request.timing().stopWhenAssertionsResolved() || assertions.isEmpty() || tick < request.timing().warmupTicks()) {
             return false;
@@ -381,9 +387,20 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         return currentResults.stream().allMatch(result -> "passed".equals(result.status()));
     }
 
+    private static void writeEventIfEnabled(@Nonnull NpcRuntimeTraceWriter writer,
+                                            @Nonnull NpcRuntimeObservationCadence cadence,
+                                            @Nonnull NpcRuntimeTraceRecord record) throws java.io.IOException {
+        Object kind = record.fields().get("kind");
+        Object tick = record.fields().get("tick");
+        if (kind instanceof String kindText && tick instanceof Number tickNumber
+                && cadence.shouldRecordEvent(kindText, tickNumber.intValue())) {
+            writer.write(record);
+        }
+    }
+
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
-        private final List<java.util.Map<String, Object>> evidenceRecords = new ArrayList<>();
+        private final List<Map<String, Object>> evidenceRecords = new ArrayList<>();
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

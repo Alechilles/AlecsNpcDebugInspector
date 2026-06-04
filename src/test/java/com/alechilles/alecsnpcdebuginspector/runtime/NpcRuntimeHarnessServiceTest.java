@@ -306,4 +306,48 @@ class NpcRuntimeHarnessServiceTest {
         assertTrue(Files.exists(config.paths().archive().resolve("cancel_me.request.json")));
         assertFalse(Files.exists(config.paths().requests().resolve("cancel_me.request.json")));
     }
+
+    @Test
+    void initializeDirectoriesRecoversStaleActiveRequest() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        Files.createDirectories(config.paths().active());
+        Files.writeString(
+                config.paths().active().resolve("stale.request.json"),
+                "{\"version\":1,\"requestId\":\"stale\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":7}"
+        );
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config);
+
+        service.initializeDirectories();
+
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("stale.result.json")));
+        assertEquals("failed", result.get("status"));
+        assertEquals("harness-recovered-stale-active-request", result.get("classification"));
+        assertEquals(7, ((Number) result.get("ticksRequested")).intValue());
+        assertTrue(result.get("cleanup").toString().contains("archived stale active request during startup"));
+        assertTrue(Files.exists(config.paths().archive().resolve("stale.request.json")));
+        assertFalse(Files.exists(config.paths().active().resolve("stale.request.json")));
+
+        Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
+        assertTrue(status.get("lastRecovery").toString().contains("stale"));
+        assertEquals("stale", ((Map<?, ?>) status.get("lastResult")).get("requestId"));
+    }
+
+    @Test
+    void shutdownRecoversLeftoverActiveRequest() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config);
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().active().resolve("shutdown_stale.request.json"),
+                "{\"version\":1,\"requestId\":\"shutdown_stale\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":3}"
+        );
+
+        service.shutdown();
+
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("shutdown_stale.result.json")));
+        assertEquals("harness-recovered-stale-active-request", result.get("classification"));
+        assertTrue(result.get("cleanup").toString().contains("archived stale active request during shutdown"));
+        assertTrue(Files.exists(config.paths().archive().resolve("shutdown_stale.request.json")));
+        assertFalse(Files.exists(config.paths().active().resolve("shutdown_stale.request.json")));
+    }
 }

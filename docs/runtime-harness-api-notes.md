@@ -31,6 +31,29 @@ Each per-request artifact bundle is expected to include:
 
 The batch runner intentionally clears previous completed request/result/trace artifacts for the same request id before writing a new request. It does not clear `active\*.request.json`; active-request recovery is handled by the later stale-run recovery phase.
 
+### Stale Active Request Recovery
+
+The harness treats files under `active\*.request.json` as owned by an in-progress server run. On startup and shutdown it scans that directory. Any leftover active request is considered interrupted, receives a failed result with classification `harness-recovered-stale-active-request`, and is moved to `archive`.
+
+Recovery results use error phase `recovery` and include cleanup evidence:
+
+```json
+{
+  "classification": "harness-recovered-stale-active-request",
+  "error": {
+    "phase": "recovery",
+    "type": "startup"
+  },
+  "cleanup": {
+    "attempted": true,
+    "succeeded": true,
+    "message": "archived stale active request during startup"
+  }
+}
+```
+
+The heartbeat includes a `lastRecovery` object with the trigger, recovered count, active path, result path, archive path, and request id. External tools should surface this as retry context instead of leaving the queue wedged.
+
 ### Headless Harness Heartbeat
 
 Phase 1 of the headless runtime work adds a filesystem heartbeat at:

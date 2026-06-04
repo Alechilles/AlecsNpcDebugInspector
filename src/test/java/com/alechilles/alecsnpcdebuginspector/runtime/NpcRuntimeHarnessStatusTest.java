@@ -25,6 +25,7 @@ class NpcRuntimeHarnessStatusTest {
                 "active-request",
                 2,
                 new NpcRuntimeHarnessStatus.LastResult("last-request", "passed", "passed"),
+                null,
                 NpcRuntimeWorldReadiness.ready("npc_runtime_test_flatworld", 0),
                 Instant.parse("2026-06-03T23:38:29.358562Z")
         );
@@ -47,6 +48,7 @@ class NpcRuntimeHarnessStatusTest {
         Object lastResult = json.get("lastResult");
         assertNotNull(lastResult);
         assertTrue(lastResult.toString().contains("last-request"));
+        assertEquals(null, json.get("lastRecovery"));
         assertTrue(json.get("paths").toString().contains(config.paths().requests().toString()));
     }
 
@@ -59,6 +61,7 @@ class NpcRuntimeHarnessStatusTest {
                 false,
                 null,
                 0,
+                null,
                 null,
                 NpcRuntimeWorldReadiness.notReady(
                         config.defaultWorldId(),

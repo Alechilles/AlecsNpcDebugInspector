@@ -24,6 +24,7 @@ public record NpcRuntimeHarnessStatus(
         @Nullable String activeRequestId,
         long queuedCount,
         @Nullable LastResult lastResult,
+        @Nullable NpcRuntimeRecoveryReport lastRecovery,
         @Nonnull Paths paths,
         @Nonnull Instant updatedAt
 ) {
@@ -33,6 +34,7 @@ public record NpcRuntimeHarnessStatus(
                                                       @Nullable String activeRequestId,
                                                       long queuedCount,
                                                       @Nullable LastResult lastResult,
+                                                      @Nullable NpcRuntimeRecoveryReport lastRecovery,
                                                       @Nonnull NpcRuntimeWorldReadiness worldReadiness,
                                                       @Nonnull Instant updatedAt) {
         return new NpcRuntimeHarnessStatus(
@@ -49,6 +51,7 @@ public record NpcRuntimeHarnessStatus(
                 activeRequestId,
                 queuedCount,
                 lastResult,
+                lastRecovery,
                 Paths.from(config.paths()),
                 updatedAt
         );
@@ -75,6 +78,7 @@ public record NpcRuntimeHarnessStatus(
         map.put("activeRequestId", activeRequestId);
         map.put("queuedCount", queuedCount);
         map.put("lastResult", lastResult != null ? lastResult.toMap() : null);
+        map.put("lastRecovery", lastRecovery != null ? lastRecovery.toMap() : null);
         map.put("paths", paths.toMap());
         map.put("updatedAt", updatedAt.toString());
         return map;

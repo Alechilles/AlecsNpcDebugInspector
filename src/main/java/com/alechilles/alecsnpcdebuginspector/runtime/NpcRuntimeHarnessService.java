@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
@@ -35,6 +36,7 @@ public final class NpcRuntimeHarnessService {
     private volatile boolean lastStatusWriteSucceeded;
     private volatile String lastStatusWriteError;
     private volatile NpcRuntimeWorldReadiness lastWorldReadiness;
+    private volatile NpcRuntimeRecoveryReport lastRecoveryReport;
     private ScheduledExecutorService executor;
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config) {
@@ -78,6 +80,7 @@ public final class NpcRuntimeHarnessService {
 
     public void initializeDirectories() throws IOException {
         queue.ensureDirectories();
+        recoverStaleActiveRequests("startup");
         writeStatus();
     }
 
@@ -113,6 +116,7 @@ public final class NpcRuntimeHarnessService {
             }
             executor = null;
         }
+        recoverStaleActiveRequestsBestEffort("shutdown");
         started.set(false);
         writeStatusBestEffort();
     }
@@ -310,6 +314,46 @@ public final class NpcRuntimeHarnessService {
         Files.writeString(resultPath, result.toJson(), StandardCharsets.UTF_8);
     }
 
+    private void recoverStaleActiveRequests(@Nonnull String trigger) throws IOException {
+        List<NpcRuntimeRequestQueue.ActiveRequest> activeRequests = queue.activeRequests();
+        if (activeRequests.isEmpty()) {
+            return;
+        }
+
+        ArrayList<NpcRuntimeRecoveryReport.RecoveredRequest> recovered = new ArrayList<>();
+        for (NpcRuntimeRequestQueue.ActiveRequest active : activeRequests) {
+            String message = "Recovered stale active request during " + trigger;
+            NpcRuntimeResult result = NpcRuntimeResult.recoveredStaleActive(
+                    active.requestId(),
+                    requestedTicksOrZero(active.path()),
+                    trigger,
+                    message
+            );
+            Path resultPath = config.paths().results().resolve(active.requestId() + ".result.json");
+            Path archivePath = queue.archivePath(active);
+            writeResult(active.requestId(), result);
+            rememberResult(result);
+            queue.archive(active);
+            recovered.add(NpcRuntimeRecoveryReport.RecoveredRequest.of(
+                    active.requestId(),
+                    result.classification(),
+                    active.path(),
+                    resultPath,
+                    archivePath,
+                    message
+            ));
+        }
+        lastRecoveryReport = NpcRuntimeRecoveryReport.of(trigger, recovered);
+    }
+
+    private void recoverStaleActiveRequestsBestEffort(@Nonnull String trigger) {
+        try {
+            recoverStaleActiveRequests(trigger);
+        } catch (Exception exception) {
+            rememberStatusWriteFailure(exception);
+        }
+    }
+
     private int requestedTicksOrZero(@Nonnull Path requestPath) {
         try {
             String text = Files.readString(requestPath, StandardCharsets.UTF_8);
@@ -346,6 +390,7 @@ public final class NpcRuntimeHarnessService {
                 activeRequestId,
                 queued,
                 lastResult,
+                lastRecoveryReport,
                 currentWorldReadiness(),
                 Instant.now()
         );

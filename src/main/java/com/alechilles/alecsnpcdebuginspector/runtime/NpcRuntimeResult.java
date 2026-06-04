@@ -81,6 +81,29 @@ public record NpcRuntimeResult(
     }
 
     @Nonnull
+    public static NpcRuntimeResult recoveredStaleActive(@Nonnull String requestId,
+                                                        int ticksRequested,
+                                                        @Nonnull String trigger,
+                                                        @Nonnull String message) {
+        Instant now = Instant.now();
+        return new NpcRuntimeResult(
+                "failed",
+                "harness-recovered-stale-active-request",
+                requestId,
+                ticksRequested,
+                0,
+                null,
+                new ErrorInfo("recovery", message, trigger),
+                now,
+                now,
+                List.of(),
+                new Cleanup(true, true, "archived stale active request during " + trigger),
+                Artifacts.empty(),
+                Summary.empty()
+        );
+    }
+
+    @Nonnull
     public static NpcRuntimeResult canceled(@Nonnull String requestId, int ticksRequested, @Nonnull String reason) {
         return canceled(requestId, ticksRequested, 0, reason, Cleanup.notStarted());
     }

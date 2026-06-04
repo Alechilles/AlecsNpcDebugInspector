@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Optional;
+import java.util.List;
 import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 
@@ -56,6 +57,23 @@ public final class NpcRuntimeRequestQueue {
     public void archive(@Nonnull ActiveRequest activeRequest) throws IOException {
         Path target = paths.archive().resolve(activeRequest.path().getFileName());
         move(activeRequest.path(), target);
+    }
+
+    @Nonnull
+    public Path archivePath(@Nonnull ActiveRequest activeRequest) {
+        return paths.archive().resolve(activeRequest.path().getFileName());
+    }
+
+    @Nonnull
+    public List<ActiveRequest> activeRequests() throws IOException {
+        ensureDirectories();
+        try (Stream<Path> stream = Files.list(paths.active())) {
+            return stream
+                    .filter(NpcRuntimeRequestQueue::isRequestFile)
+                    .sorted()
+                    .map(path -> new ActiveRequest(requestIdFromFile(path), path))
+                    .toList();
+        }
     }
 
     private static boolean isRequestFile(@Nonnull Path path) {

@@ -196,10 +196,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("playerCount", world.getPlayerCount())
                     .with("chunkResidency", arena.residencyMode())
                     .with("spawnChunkIndex", arena.spawnChunkIndex()));
-            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "arena-reset")
-                    .with("arena", request.world().arena())
-                    .with("mode", "no-block-reset-yet")
-                    .with("details", arena.toMap()));
+            writeEventIfEnabled(writer, cadence, arenaResetRecord(request, tick, arena, "before-fixture-setup"));
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "multi-npc-setup")
                     .with("mode", request.multiNpc().mode())
                     .with("fixtureCount", request.fixtures().list().size())
@@ -244,6 +241,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     }
                 }
             }
+            writeEventIfEnabled(writer, cadence, arenaResetRecord(request, tick, arena, "after-fixture-setup"));
         }
 
         writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "tick-start"));
@@ -416,6 +414,19 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             case PLAYER_ANCHOR -> List.of("headlessPlayerEntity", "loggedInPlayerBinding");
             default -> List.of("engineWorldMutation");
         };
+    }
+
+    @Nonnull
+    static NpcRuntimeTraceRecord arenaResetRecord(@Nonnull NpcRuntimeRequest request,
+                                                  int tick,
+                                                  @Nonnull NpcRuntimeArena arena,
+                                                  @Nonnull String phase) {
+        return NpcRuntimeTraceRecord.of(request.requestId(), tick, "arena-reset")
+                .with("arena", request.world().arena())
+                .with("phase", phase)
+                .with("mode", "no-block-reset-yet")
+                .with("fixtureCount", request.fixtures().list().size())
+                .with("details", arena.toMap());
     }
 
     @Nonnull

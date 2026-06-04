@@ -120,7 +120,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
 
             List<NpcRuntimeAssertionResult> assertionResults = NpcRuntimeAssertion.fromSpecs(request.assertions()).stream()
-                    .map(assertion -> assertion.evaluate(spawnedFixtures.sensorEvidence))
+                    .map(assertion -> assertion.evaluate(spawnedFixtures.evidenceRecords))
                     .toList();
             NpcRuntimeResult.Summary resultSummary = NpcRuntimeResult.Summary.empty().withAssertions(assertionResults);
             if (!assertionResults.isEmpty()) {
@@ -217,8 +217,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             NpcRuntimeObservedNpc observed = observer.observe(npcUnderTest.uuid(), snapshot);
             for (NpcRuntimeTraceRecord record : observer.traceRecords(request.requestId(), tick, observed, spawnedFixtures.previousObserved)) {
                 writer.write(record);
-                if ("sensor-evidence".equals(record.fields().get("kind"))) {
-                    spawnedFixtures.sensorEvidence.add(record.fields());
+                if (isAssertionEvidence(record)) {
+                    spawnedFixtures.evidenceRecords.add(record.fields());
                 }
             }
             spawnedFixtures.previousObserved = observed;
@@ -324,9 +324,16 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         throw new IllegalArgumentException(fieldName + " must contain only numbers");
     }
 
+    private static boolean isAssertionEvidence(@Nonnull NpcRuntimeTraceRecord record) {
+        Object kind = record.fields().get("kind");
+        return "sensor-evidence".equals(kind)
+                || "action-evidence".equals(kind)
+                || "combat-evaluator-evidence".equals(kind);
+    }
+
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
-        private final List<java.util.Map<String, Object>> sensorEvidence = new ArrayList<>();
+        private final List<java.util.Map<String, Object>> evidenceRecords = new ArrayList<>();
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

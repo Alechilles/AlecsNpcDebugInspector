@@ -42,6 +42,7 @@ class NpcRuntimeAssertionTest {
         )))).getFirst();
 
         NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "sensor-evidence",
                 "sensorType", "TargetSlot",
                 "sensorId", "targetEnemy",
                 "matchResult", "not-matched",
@@ -77,6 +78,7 @@ class NpcRuntimeAssertionTest {
         )))).getFirst();
 
         NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "sensor-evidence",
                 "sensorType", "TargetSlot",
                 "sensorId", "targetEnemy",
                 "matchResult", "matched",
@@ -85,5 +87,48 @@ class NpcRuntimeAssertionTest {
 
         assertEquals("failed", result.status());
         assertTrue(result.message().contains("distance band is unsupported"));
+    }
+
+    @Test
+    void passesWhenExpectedActionEvidenceMatches() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "action",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "expectedLifecycle", "selected",
+                "expectedSelected", true
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "action-evidence",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "lifecycle", "selected",
+                "selected", true,
+                "unsupportedFields", List.of("preconditions")
+        )));
+
+        assertEquals("passed", result.status());
+    }
+
+    @Test
+    void failsWhenCombatEligibilityIsUnsupported() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "combat-evaluator",
+                "evaluatorType", "CombatSupport",
+                "evaluatorId", "combatSupport.executingAttack",
+                "expectedEligible", true
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "combat-evaluator-evidence",
+                "evaluatorType", "CombatSupport",
+                "evaluatorId", "combatSupport.executingAttack",
+                "selected", false,
+                "unsupportedFields", List.of("eligibility")
+        )));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("eligibility is unsupported"));
     }
 }

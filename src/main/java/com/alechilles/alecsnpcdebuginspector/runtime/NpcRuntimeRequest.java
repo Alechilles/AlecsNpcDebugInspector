@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -22,6 +23,7 @@ public record NpcRuntimeRequest(
         @Nonnull WorldSpec world,
         @Nonnull EnvironmentSpec environment,
         @Nonnull Fixtures fixtures,
+        @Nonnull EngineHooksSpec engineHooks,
         @Nonnull RecordSpec record,
         @Nonnull List<AssertionSpec> assertions,
         @Nonnull LimitsSpec limits
@@ -40,7 +42,7 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "environment", "fixtures", "record", "assertions", "limits"),
+                        "environment", "fixtures", "engineHooks", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -61,6 +63,7 @@ public record NpcRuntimeRequest(
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
         EnvironmentSpec environment = EnvironmentSpec.from(asMap(data.get("environment"), requestId), requestId);
         Fixtures fixtures = Fixtures.from(asMap(data.get("fixtures"), requestId), requestId, roleId);
+        EngineHooksSpec engineHooks = EngineHooksSpec.from(asMap(data.get("engineHooks"), requestId), requestId);
         LimitsSpec limits = LimitsSpec.from(asMap(data.get("limits"), requestId), config, requestId);
         validateEntityCount(config, fixtures.entityCount(), limits.maxEntities(), requestId);
         NpcRuntimeFixtureAllowlist.defaults().validate(fixtures.list(), requestId);
@@ -78,6 +81,7 @@ public record NpcRuntimeRequest(
                 world,
                 environment,
                 fixtures,
+                engineHooks,
                 record,
                 assertions,
                 limits
@@ -104,6 +108,9 @@ public record NpcRuntimeRequest(
         map.put("world", world.toMap());
         map.put("environment", environment.toMap());
         map.put("fixtures", fixtures.toMap());
+        if (engineHooks.anyEnabled()) {
+            map.put("engineHooks", engineHooks.toMap());
+        }
         map.put("record", record.toMap());
         map.put("assertions", assertions.stream().map(AssertionSpec::toMap).toList());
         map.put("limits", limits.toMap());
@@ -541,6 +548,56 @@ public record NpcRuntimeRequest(
             map.put("everyTicks", everyTicks);
             map.put("includeSnapshots", includeSnapshots);
             map.put("includeEvents", includeEvents);
+            return map;
+        }
+    }
+
+    public record EngineHooksSpec(
+            boolean targetSelection,
+            boolean pathing,
+            boolean combatEligibility,
+            boolean instructionLifecycle
+    ) {
+        private static final Set<String> SUPPORTED = Set.of(
+                "targetSelection",
+                "pathing",
+                "combatEligibility",
+                "instructionLifecycle"
+        );
+
+        @Nonnull
+        static EngineHooksSpec from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
+            List<UnsupportedField> unsupported = new ArrayList<>();
+            for (String key : data.keySet()) {
+                if (!SUPPORTED.contains(key)) {
+                    unsupported.add(new UnsupportedField(
+                            "engineHooks." + key,
+                            "engine hook is not supported by the current runtime contract"
+                    ));
+                }
+            }
+            if (!unsupported.isEmpty()) {
+                throw unsupported(requestId, "request contains unsupported engine hooks", unsupported);
+            }
+            return new EngineHooksSpec(
+                    boolValue(data.get("targetSelection"), false, requestId),
+                    boolValue(data.get("pathing"), false, requestId),
+                    boolValue(data.get("combatEligibility"), false, requestId),
+                    boolValue(data.get("instructionLifecycle"), false, requestId)
+            );
+        }
+
+        boolean anyEnabled() {
+            return targetSelection || pathing || combatEligibility || instructionLifecycle;
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("targetSelection", targetSelection);
+            map.put("pathing", pathing);
+            map.put("combatEligibility", combatEligibility);
+            map.put("instructionLifecycle", instructionLifecycle);
             return map;
         }
     }

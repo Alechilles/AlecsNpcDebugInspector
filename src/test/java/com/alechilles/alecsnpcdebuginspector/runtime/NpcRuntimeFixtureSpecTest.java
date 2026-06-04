@@ -38,6 +38,36 @@ class NpcRuntimeFixtureSpecTest {
     }
 
     @Test
+    void parsesTameworkMutationFieldsAndNormalizesCommandAlias() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "npc_under_test",
+                        "kind", "npcUnderTest",
+                        "tamework", Map.of(
+                                "tamed", true,
+                                "owner", Map.of("type", "syntheticPlayer", "id", "owner_a"),
+                                "needs", Map.of("hunger", 80, "thirst", 60),
+                                "effects", List.of("tamework:well_fed"),
+                                "command", "follow",
+                                "lifeStage", "adult"
+                        )
+                ),
+                "tamework_fixture",
+                "fixtures.list[0]",
+                "FallbackRole"
+        );
+
+        NpcRuntimeFixtureSpec.TameworkMutation mutation = spec.tamework();
+        assertEquals(true, mutation.tamed());
+        assertEquals("owner_a", mutation.owner().get("id"));
+        assertEquals(80, mutation.needs().get("hunger"));
+        assertEquals("tamework:well_fed", mutation.effects().getFirst());
+        assertEquals("follow", mutation.commandState());
+        assertEquals("adult", mutation.lifeStage());
+        assertTrue(spec.toMap().toString().contains("commandState=follow"));
+    }
+
+    @Test
     void mapsLegacyDummyTargetsToCanonicalTargetDummySpecs() {
         NpcRuntimeRequest.TargetFixture target = new NpcRuntimeRequest.TargetFixture(
                 "LockedTarget",

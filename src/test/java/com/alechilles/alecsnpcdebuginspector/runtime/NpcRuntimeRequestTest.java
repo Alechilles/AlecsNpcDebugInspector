@@ -107,6 +107,79 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesTameworkFixtureMutationsAndEngineHooks() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "tamework_mutation_contract",
+                  "assetId": "AlecNpcTest:Boar",
+                  "roleId": "Default",
+                  "ticks": 20,
+                  "fixtures": {
+                    "list": [
+                      {
+                        "fixtureId": "npc_under_test",
+                        "kind": "npcUnderTest",
+                        "asset": "AlecNpcTest:Boar",
+                        "tamework": {
+                          "tamed": true,
+                          "owner": {"type": "syntheticPlayer", "id": "owner_a"},
+                          "needs": {"hunger": 80, "thirst": 60},
+                          "effects": ["tamework:well_fed"],
+                          "command": "follow",
+                          "lifeStage": "adult"
+                        }
+                      }
+                    ]
+                  },
+                  "engineHooks": {
+                    "targetSelection": true,
+                    "pathing": true,
+                    "combatEligibility": true,
+                    "instructionLifecycle": true
+                  }
+                }
+                """,
+                config
+        );
+
+        NpcRuntimeFixtureSpec.TameworkMutation tamework = request.fixtures().list().getFirst().tamework();
+        assertEquals(true, tamework.tamed());
+        assertEquals("syntheticPlayer", tamework.owner().get("type"));
+        assertEquals("owner_a", tamework.owner().get("id"));
+        assertEquals(80, tamework.needs().get("hunger"));
+        assertEquals("tamework:well_fed", tamework.effects().getFirst());
+        assertEquals("follow", tamework.commandState());
+        assertEquals("adult", tamework.lifeStage());
+        assertTrue(request.engineHooks().targetSelection());
+        assertTrue(request.engineHooks().pathing());
+        assertTrue(request.engineHooks().combatEligibility());
+        assertTrue(request.engineHooks().instructionLifecycle());
+        assertTrue(request.toJson().contains("\"commandState\":\"follow\""));
+        assertTrue(request.toJson().contains("\"engineHooks\""));
+    }
+
+    @Test
+    void rejectsUnknownEngineHooks() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_hook\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"engineHooks\":{\"targetSelection\":true,\"weatherControl\":true}}",
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("engineHooks.weatherControl", exception.unsupported().getFirst().path());
+    }
+
+    @Test
     void rejectsUnknownFieldsInsideKnownSections() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

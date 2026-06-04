@@ -57,4 +57,68 @@ class NpcRuntimeTraceWriterTest {
 
         assertTrue(exception.getMessage().contains("reserved"));
     }
+
+    @Test
+    void serializesRuntimeContractEvidenceHelpers() {
+        String tameworkMutation = NpcRuntimeTraceRecord.tameworkFixtureMutation(
+                "request-a",
+                0,
+                "npc_under_test",
+                "tamed",
+                true,
+                true,
+                "applied",
+                List.of()
+        ).toJson();
+        String targetSelection = NpcRuntimeTraceRecord.targetSelectionEvidence(
+                "request-a",
+                4,
+                "npc_under_test",
+                "hostile_a",
+                2,
+                true,
+                "nearest-hostile"
+        ).toJson();
+        String pathing = NpcRuntimeTraceRecord.pathingEvidence(
+                "request-a",
+                5,
+                "npc_under_test",
+                "hostile_a",
+                List.of(4, 70, 3),
+                "pathing",
+                false
+        ).toJson();
+        String combatEligibility = NpcRuntimeTraceRecord.combatEligibilityEvidence(
+                "request-a",
+                6,
+                "npc_under_test",
+                "hostile_a",
+                "MeleeAttack",
+                true,
+                true,
+                true,
+                true,
+                "eligible"
+        ).toJson();
+        String lifecycle = NpcRuntimeTraceRecord.instructionLifecycleEvidence(
+                "request-a",
+                7,
+                "npc_under_test",
+                "MeleeAttack",
+                "started",
+                "candidate"
+        ).toJson();
+
+        assertTrue(tameworkMutation.contains("\"kind\":\"tamework-fixture-mutation\""));
+        assertTrue(tameworkMutation.contains("\"fixtureId\":\"npc_under_test\""));
+        assertTrue(tameworkMutation.contains("\"requestedValue\":true"));
+        assertTrue(targetSelection.contains("\"kind\":\"target-selection-evidence\""));
+        assertTrue(targetSelection.contains("\"candidateCount\":2"));
+        assertTrue(pathing.contains("\"kind\":\"pathing-evidence\""));
+        assertTrue(pathing.contains("\"destination\":[4,70,3]"));
+        assertTrue(combatEligibility.contains("\"kind\":\"combat-eligibility-evidence\""));
+        assertTrue(combatEligibility.contains("\"lineOfSightOk\":true"));
+        assertTrue(lifecycle.contains("\"kind\":\"instruction-lifecycle-evidence\""));
+        assertTrue(lifecycle.contains("\"previousStatus\":\"candidate\""));
+    }
 }

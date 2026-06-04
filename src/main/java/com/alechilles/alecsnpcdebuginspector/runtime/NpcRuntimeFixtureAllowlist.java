@@ -55,7 +55,7 @@ public final class NpcRuntimeFixtureAllowlist {
     private boolean allowsId(@Nonnull NpcRuntimeFixtureSpec spec) {
         String id = spec.fixtureId();
         return switch (spec.kind()) {
-            case NPC_UNDER_TEST -> "npcUnderTest".equals(id);
+            case NPC_UNDER_TEST -> "npcUnderTest".equals(id) || "npc_under_test".equals(id);
             case TARGET_DUMMY -> "targetDummy".equals(id) || id.startsWith("target.") || id.startsWith("target-");
             case NPC -> id.startsWith("npc.") || id.startsWith("npc-");
             case MOB -> id.startsWith("mob.") || id.startsWith("mob-");

@@ -51,4 +51,37 @@ class NpcRuntimeArenaTest {
         assertEquals(2, before.fields().get("fixtureCount"));
         assertTrue(before.fields().get("details").toString().contains("blockResetMode=no-block-mutations-yet"));
     }
+
+    @Test
+    void environmentSetupTraceRecordsRequestedWorldControls() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "environment_trace",
+                  "assetId": "Asset",
+                  "roleId": "Role",
+                  "ticks": 5,
+                  "environment": {
+                    "timeOfDay": 6000,
+                    "weather": "hytale:clear",
+                    "pauseTime": true,
+                    "light": 15
+                  }
+                }
+                """,
+                config
+        );
+
+        NpcRuntimeTraceRecord record = NpcRuntimeLiveScenarioRunner.environmentSetupRecord(request, 0);
+
+        assertEquals("environment-setup", record.fields().get("kind"));
+        assertEquals(6000, record.fields().get("timeOfDay"));
+        assertEquals("hytale:clear", record.fields().get("weather"));
+        assertEquals(true, record.fields().get("pauseTime"));
+        assertEquals(15, record.fields().get("light"));
+        assertEquals(false, record.fields().get("engineApplied"));
+        assertTrue(record.fields().get("unsupportedFields").toString().contains("engineTimeMutation"));
+    }
 }

@@ -196,6 +196,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("playerCount", world.getPlayerCount())
                     .with("chunkResidency", arena.residencyMode())
                     .with("spawnChunkIndex", arena.spawnChunkIndex()));
+            writeEventIfEnabled(writer, cadence, environmentSetupRecord(request, tick));
             writeEventIfEnabled(writer, cadence, arenaResetRecord(request, tick, arena, "before-fixture-setup"));
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "multi-npc-setup")
                     .with("mode", request.multiNpc().mode())
@@ -414,6 +415,31 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             case PLAYER_ANCHOR -> List.of("headlessPlayerEntity", "loggedInPlayerBinding");
             default -> List.of("engineWorldMutation");
         };
+    }
+
+    @Nonnull
+    static NpcRuntimeTraceRecord environmentSetupRecord(@Nonnull NpcRuntimeRequest request, int tick) {
+        List<String> unsupportedFields = new ArrayList<>();
+        if (request.environment().timeOfDay() != null) {
+            unsupportedFields.add("engineTimeMutation");
+        }
+        if (request.environment().weather() != null) {
+            unsupportedFields.add("engineWeatherMutation");
+        }
+        if (request.environment().effectivePauseTime()) {
+            unsupportedFields.add("engineTimePauseMutation");
+        }
+        if (request.environment().light() != null) {
+            unsupportedFields.add("engineLightMutation");
+        }
+        return NpcRuntimeTraceRecord.of(request.requestId(), tick, "environment-setup")
+                .with("timeOfDay", request.environment().timeOfDay())
+                .with("weather", request.environment().weather())
+                .with("pauseTime", request.environment().effectivePauseTime())
+                .with("light", request.environment().light())
+                .with("engineApplied", false)
+                .with("mode", "declarative-only")
+                .with("unsupportedFields", unsupportedFields);
     }
 
     @Nonnull

@@ -32,6 +32,7 @@ public record NpcRuntimeRequest(
         @Nonnull LimitsSpec limits
 ) {
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_.-]+");
+    private static final Pattern SAFE_ASSET_ID = Pattern.compile("[A-Za-z0-9_.:-]+");
 
     @Nonnull
     public static NpcRuntimeRequest parse(@Nonnull String json, @Nonnull NpcRuntimeHarnessConfig config) {
@@ -227,6 +228,17 @@ public record NpcRuntimeRequest(
     }
 
     @Nullable
+    private static Boolean booleanOrNull(@Nullable Object value, @Nonnull String requestId, @Nonnull String path) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        throw invalid(requestId, path + " must be a boolean");
+    }
+
+    @Nullable
     private static String stringOrNull(@Nullable Object value) {
         return value instanceof String text && !text.isBlank() ? text.trim() : null;
     }
@@ -403,14 +415,22 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record EnvironmentSpec(@Nullable Integer timeOfDay, @Nullable String weather, @Nullable Integer light) {
+    public record EnvironmentSpec(@Nullable Integer timeOfDay,
+                                  @Nullable String weather,
+                                  @Nullable Integer light,
+                                  @Nullable Boolean pauseTime) {
         @Nonnull
         static EnvironmentSpec from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
-            rejectUnsupportedKeys(data, "environment", List.of("timeOfDay", "weather", "light"), requestId);
+            rejectUnsupportedKeys(data, "environment", List.of("timeOfDay", "weather", "light", "pauseTime"), requestId);
+            String weather = stringOrNull(data.get("weather"));
+            if (weather != null && !SAFE_ASSET_ID.matcher(weather).matches()) {
+                throw invalid(requestId, "environment.weather must be a safe asset id or keyword");
+            }
             return new EnvironmentSpec(
                     integerOrNull(data.get("timeOfDay"), requestId),
-                    stringOrNull(data.get("weather")),
-                    integerOrNull(data.get("light"), requestId)
+                    weather,
+                    integerOrNull(data.get("light"), requestId),
+                    booleanOrNull(data.get("pauseTime"), requestId, "environment.pauseTime")
             );
         }
 
@@ -426,7 +446,14 @@ public record NpcRuntimeRequest(
             if (light != null) {
                 map.put("light", light);
             }
+            if (pauseTime != null) {
+                map.put("pauseTime", pauseTime);
+            }
             return map;
+        }
+
+        boolean effectivePauseTime() {
+            return pauseTime == null || pauseTime;
         }
     }
 

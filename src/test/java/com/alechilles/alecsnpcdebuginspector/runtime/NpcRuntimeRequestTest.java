@@ -48,6 +48,8 @@ class NpcRuntimeRequestTest {
         assertEquals("default", request.world().arena());
         assertEquals(12000, request.environment().timeOfDay());
         assertEquals("clear", request.environment().weather());
+        assertEquals(null, request.environment().pauseTime());
+        assertTrue(request.environment().effectivePauseTime());
         assertEquals(3, request.fixtures().npc().position().size());
         assertEquals("Idle", request.fixtures().npc().state());
         assertEquals(1, request.fixtures().targets().size());
@@ -229,6 +231,45 @@ class NpcRuntimeRequestTest {
         assertEquals("unsupported-request", exception.classification());
         assertEquals("environment.difficulty", exception.unsupported().getFirst().path());
         assertEquals("field is not supported by the current runtime contract", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void parsesPauseTimeAndRejectsUnsafeWeatherIds() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "paused_weather",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 20,
+                  "environment": {
+                    "timeOfDay": 6000,
+                    "weather": "hytale:clear",
+                    "pauseTime": true
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals(6000, request.environment().timeOfDay());
+        assertEquals("hytale:clear", request.environment().weather());
+        assertEquals(true, request.environment().pauseTime());
+        assertTrue(request.toJson().contains("\"pauseTime\":true"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_weather\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":20,"
+                                + "\"environment\":{\"weather\":\"bad weather!\"}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("environment.weather must be a safe asset id or keyword", exception.getMessage());
     }
 
     @Test

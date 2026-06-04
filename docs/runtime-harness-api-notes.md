@@ -54,6 +54,16 @@ Recovery results use error phase `recovery` and include cleanup evidence:
 
 The heartbeat includes a `lastRecovery` object with the trigger, recovered count, active path, result path, archive path, and request id. External tools should surface this as retry context instead of leaving the queue wedged.
 
+### Semantic Roadmap Gate
+
+Later semantic phases are tracked from the CLI side in:
+
+```text
+C:\Users\22ale\AppData\Roaming\Hytale\Modding\HytaleNpcAssetTools\docs\runtime-semantic-roadmap.json
+```
+
+Harness work for arena cleanup, fixtures, structured observations, sensors, actions, combat evaluators, Tamework state, and regression promotion should end with no-login `runtime-run --ensure-server` or `runtime-batch run` evidence.
+
 ### Headless Harness Heartbeat
 
 Phase 1 of the headless runtime work adds a filesystem heartbeat at:

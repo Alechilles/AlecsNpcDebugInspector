@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -175,5 +176,94 @@ class NpcRuntimeAssertionTest {
 
         assertEquals("failed", result.status());
         assertTrue(result.message().contains("expected value=HEALTHY"));
+    }
+
+    @Test
+    void eventuallyWindowIgnoresWarmupEvidenceAndPassesOnLaterMatch() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "target-eventual",
+                "kind", "sensor",
+                "sensorType", "TargetSlot",
+                "sensorId", "targetLockedtarget",
+                "expectedMatchResult", "matched",
+                "window", Map.of("mode", "eventually", "startTick", 60, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(10, "sensor-evidence", "sensorType", "TargetSlot", "sensorId", "targetLockedtarget", "matchResult", "matched"),
+                evidence(80, "sensor-evidence", "sensorType", "TargetSlot", "sensorId", "targetLockedtarget", "matchResult", "matched")
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(80, result.firstMatchedTick());
+    }
+
+    @Test
+    void sustainedWindowRequiresConsecutiveMatchingTicks() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "combat-sustained",
+                "kind", "combat-evaluator",
+                "evaluatorId", "combatSupport.executingAttack",
+                "expectedLifecycle", "running",
+                "window", Map.of("mode", "sustained", "startTick", 20, "endTick", 80, "sustainedTicks", 3)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(40, "combat-evaluator-evidence", "evaluatorId", "combatSupport.executingAttack", "lifecycle", "running"),
+                evidence(41, "combat-evaluator-evidence", "evaluatorId", "combatSupport.executingAttack", "lifecycle", "running"),
+                evidence(42, "combat-evaluator-evidence", "evaluatorId", "combatSupport.executingAttack", "lifecycle", "running")
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(40, result.firstMatchedTick());
+        assertEquals(42, result.lastMatchedTick());
+    }
+
+    @Test
+    void neverWindowFailsWhenMatchingEvidenceAppears() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "no-attack",
+                "kind", "combat-evaluator",
+                "evaluatorId", "combatSupport.executingAttack",
+                "expectedLifecycle", "running",
+                "window", Map.of("mode", "never", "startTick", 0, "endTick", 60)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(30, "combat-evaluator-evidence", "evaluatorId", "combatSupport.executingAttack", "lifecycle", "running")
+        ));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("forbidden evidence observed"));
+    }
+
+    private static NpcRuntimeRequest.AssertionSpec assertionSpec(Map<String, Object> fields) {
+        Map<String, Object> copy = new LinkedHashMap<>(fields);
+        Object rawWindow = copy.get("window");
+        NpcRuntimeRequest.AssertionWindowSpec window = rawWindow instanceof Map<?, ?> windowFields
+                ? NpcRuntimeRequest.AssertionWindowSpec.from(castMap(windowFields), 0, 120, "test")
+                : new NpcRuntimeRequest.AssertionWindowSpec("eventually", 0, 120, 1);
+        return new NpcRuntimeRequest.AssertionSpec(copy, window);
+    }
+
+    private static Map<String, Object> evidence(int tick, String kind, Object... fields) {
+        LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+        map.put("tick", tick);
+        map.put("kind", kind);
+        for (int i = 0; i < fields.length; i += 2) {
+            map.put((String) fields[i], fields[i + 1]);
+        }
+        return map;
+    }
+
+    private static Map<String, Object> castMap(Map<?, ?> raw) {
+        LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            map.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return map;
     }
 }

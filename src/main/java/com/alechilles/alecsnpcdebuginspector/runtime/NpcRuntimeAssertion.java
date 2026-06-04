@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeSet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -31,7 +32,8 @@ public record NpcRuntimeAssertion(
         @Nullable Boolean expectedEligible,
         @Nullable String expectedAbility,
         @Nullable List<Object> expectedDistanceBand,
-        @Nullable Boolean expectUnsupported
+        @Nullable Boolean expectUnsupported,
+        @Nonnull NpcRuntimeRequest.AssertionWindowSpec window
 ) {
     @Nonnull
     static List<NpcRuntimeAssertion> fromSpecs(@Nonnull List<NpcRuntimeRequest.AssertionSpec> specs) {
@@ -73,7 +75,8 @@ public record NpcRuntimeAssertion(
                 boolOrNull(fields.containsKey("expectedEligible") ? fields.get("expectedEligible") : fields.get("eligible")),
                 string(fields, "expectedAbility", "ability"),
                 listOrNull(fields.get("expectedDistanceBand")),
-                boolOrNull(fields.get("expectUnsupported"))
+                boolOrNull(fields.get("expectUnsupported")),
+                spec.window()
         );
     }
 
@@ -82,10 +85,150 @@ public record NpcRuntimeAssertion(
         if (!supportedKind()) {
             return NpcRuntimeAssertionResult.unknown(assertionId, kind, "unsupported assertion kind: " + kind);
         }
-        Map<String, Object> evidence = matchingEvidence(evidenceRecords);
-        if (evidence == null) {
+        List<Map<String, Object>> candidates = matchingEvidenceCandidates(evidenceRecords);
+        if (candidates.isEmpty()) {
             return NpcRuntimeAssertionResult.unknown(assertionId, kind, "no matching " + kind + " evidence was observed");
         }
+        if ("never".equalsIgnoreCase(window.mode())) {
+            for (Map<String, Object> candidate : candidates) {
+                Evaluation evaluation = evaluationFor(candidate);
+                if (evaluation.passed()) {
+                    Map<String, Object> evidenceCopy = new LinkedHashMap<>(candidate);
+                    Integer tick = tickOrNull(candidate);
+                    return NpcRuntimeAssertionResult.failed(
+                            assertionId,
+                            kind,
+                            "forbidden evidence observed",
+                            evidenceCopy,
+                            tick,
+                            tick,
+                            tick != null ? 1 : 0
+                    );
+                }
+            }
+            return NpcRuntimeAssertionResult.passed(assertionId, kind, "forbidden evidence was not observed", null);
+        }
+        if ("sustained".equalsIgnoreCase(window.mode())) {
+            return evaluateSustained(candidates);
+        }
+
+        Evaluation firstFailure = null;
+        Map<String, Object> firstFailureEvidence = null;
+        for (Map<String, Object> candidate : candidates) {
+            Evaluation evaluation = evaluationFor(candidate);
+            if (evaluation.passed()) {
+                Map<String, Object> evidenceCopy = new LinkedHashMap<>(candidate);
+                Integer tick = tickOrNull(candidate);
+                return NpcRuntimeAssertionResult.passed(
+                        assertionId,
+                        kind,
+                        "assertion passed",
+                        evidenceCopy,
+                        tick,
+                        tick,
+                        tick != null ? 1 : 0
+                );
+            }
+            if (firstFailure == null) {
+                firstFailure = evaluation;
+                firstFailureEvidence = candidate;
+            }
+        }
+        if (firstFailure != null && firstFailureEvidence != null) {
+            Map<String, Object> evidenceCopy = new LinkedHashMap<>(firstFailureEvidence);
+            Integer tick = tickOrNull(firstFailureEvidence);
+            return NpcRuntimeAssertionResult.failed(
+                    assertionId,
+                    kind,
+                    String.join("; ", firstFailure.failures()),
+                    evidenceCopy,
+                    tick,
+                    tick,
+                    tick != null ? 1 : 0
+            );
+        }
+        return NpcRuntimeAssertionResult.unknown(assertionId, kind, "no matching " + kind + " evidence was observed");
+    }
+
+    boolean canResolveBeforeEnd() {
+        return !"never".equalsIgnoreCase(window.mode());
+    }
+
+    @Nonnull
+    private NpcRuntimeAssertionResult evaluateSustained(@Nonnull List<Map<String, Object>> candidates) {
+        TreeSet<Integer> passingTicks = new TreeSet<>();
+        LinkedHashMap<Integer, Map<String, Object>> evidenceByTick = new LinkedHashMap<>();
+        Evaluation firstFailure = null;
+        Map<String, Object> firstFailureEvidence = null;
+        for (Map<String, Object> candidate : candidates) {
+            Evaluation evaluation = evaluationFor(candidate);
+            if (evaluation.passed()) {
+                Integer tick = tickOrNull(candidate);
+                if (tick == null && window.sustainedTicks() <= 1) {
+                    return NpcRuntimeAssertionResult.passed(assertionId, kind, "assertion passed", new LinkedHashMap<>(candidate));
+                }
+                if (tick != null) {
+                    passingTicks.add(tick);
+                    evidenceByTick.putIfAbsent(tick, candidate);
+                }
+            } else if (firstFailure == null) {
+                firstFailure = evaluation;
+                firstFailureEvidence = candidate;
+            }
+        }
+
+        int streak = 0;
+        int streakStart = -1;
+        int previous = Integer.MIN_VALUE;
+        for (int tick : passingTicks) {
+            if (streak == 0 || tick != previous + 1) {
+                streak = 1;
+                streakStart = tick;
+            } else {
+                streak++;
+            }
+            if (streak >= window.sustainedTicks()) {
+                int lastTick = tick;
+                Map<String, Object> evidence = new LinkedHashMap<>(evidenceByTick.get(streakStart));
+                return NpcRuntimeAssertionResult.passed(
+                        assertionId,
+                        kind,
+                        "assertion passed",
+                        evidence,
+                        streakStart,
+                        lastTick,
+                        streak
+                );
+            }
+            previous = tick;
+        }
+
+        if (firstFailure != null && firstFailureEvidence != null) {
+            Map<String, Object> evidenceCopy = new LinkedHashMap<>(firstFailureEvidence);
+            Integer tick = tickOrNull(firstFailureEvidence);
+            return NpcRuntimeAssertionResult.failed(
+                    assertionId,
+                    kind,
+                    String.join("; ", firstFailure.failures()),
+                    evidenceCopy,
+                    tick,
+                    tick,
+                    tick != null ? 1 : 0
+            );
+        }
+        return NpcRuntimeAssertionResult.failed(
+                assertionId,
+                kind,
+                "expected sustained match for " + window.sustainedTicks() + " ticks but observed " + passingTicks.size(),
+                null,
+                passingTicks.isEmpty() ? null : passingTicks.getFirst(),
+                passingTicks.isEmpty() ? null : passingTicks.getLast(),
+                passingTicks.size()
+        );
+    }
+
+    @Nonnull
+    private Evaluation evaluationFor(@Nonnull Map<String, Object> evidence) {
         ArrayList<String> failures = new ArrayList<>();
         if (expectedMatchResult != null && !matchesText(expectedMatchResult, evidence.get("matchResult"))) {
             failures.add("expected matchResult=" + expectedMatchResult + " but observed " + evidence.get("matchResult"));
@@ -137,47 +280,48 @@ public record NpcRuntimeAssertion(
                 failures.add("expected unsupported=" + expectUnsupported + " but observed " + observedUnsupported);
             }
         }
-        Map<String, Object> evidenceCopy = new LinkedHashMap<>(evidence);
-        if (failures.isEmpty()) {
-            return NpcRuntimeAssertionResult.passed(assertionId, kind, "assertion passed", evidenceCopy);
-        }
-        return NpcRuntimeAssertionResult.failed(assertionId, kind, String.join("; ", failures), evidenceCopy);
+        return new Evaluation(failures.isEmpty(), failures);
     }
 
-    @Nullable
-    private Map<String, Object> matchingEvidence(@Nonnull List<Map<String, Object>> evidenceRecords) {
-        String evidenceKind = evidenceKind();
-        for (Map<String, Object> evidence : evidenceRecords) {
-            if (!matchesText(evidenceKind, evidence.get("kind"))) {
-                continue;
-            }
-            if (sensorType != null && !matchesText(sensorType, evidence.get("sensorType"))) {
-                continue;
-            }
-            if (sensorId != null && !matchesText(sensorId, evidence.get("sensorId"))) {
-                continue;
-            }
-            if (actionType != null && !matchesText(actionType, evidence.get("actionType"))) {
-                continue;
-            }
-            if (actionId != null && !matchesText(actionId, evidence.get("actionId"))) {
-                continue;
-            }
-            if (evaluatorType != null && !matchesText(evaluatorType, evidence.get("evaluatorType"))) {
-                continue;
-            }
-            if (evaluatorId != null && !matchesText(evaluatorId, evidence.get("evaluatorId"))) {
-                continue;
-            }
-            if (tameworkSection != null && !matchesText(tameworkSection, evidence.get("section"))) {
-                continue;
-            }
-            if (tameworkField != null && !matchesText(tameworkField, evidence.get("field"))) {
-                continue;
-            }
-            return evidence;
+    @Nonnull
+    private List<Map<String, Object>> matchingEvidenceCandidates(@Nonnull List<Map<String, Object>> evidenceRecords) {
+        return evidenceRecords.stream()
+                .filter(this::matchesIdentity)
+                .filter(this::withinWindow)
+                .toList();
+    }
+
+    private boolean matchesIdentity(@Nonnull Map<String, Object> evidence) {
+        if (!matchesText(evidenceKind(), evidence.get("kind"))) {
+            return false;
         }
-        return null;
+        if (sensorType != null && !matchesText(sensorType, evidence.get("sensorType"))) {
+            return false;
+        }
+        if (sensorId != null && !matchesText(sensorId, evidence.get("sensorId"))) {
+            return false;
+        }
+        if (actionType != null && !matchesText(actionType, evidence.get("actionType"))) {
+            return false;
+        }
+        if (actionId != null && !matchesText(actionId, evidence.get("actionId"))) {
+            return false;
+        }
+        if (evaluatorType != null && !matchesText(evaluatorType, evidence.get("evaluatorType"))) {
+            return false;
+        }
+        if (evaluatorId != null && !matchesText(evaluatorId, evidence.get("evaluatorId"))) {
+            return false;
+        }
+        if (tameworkSection != null && !matchesText(tameworkSection, evidence.get("section"))) {
+            return false;
+        }
+        return tameworkField == null || matchesText(tameworkField, evidence.get("field"));
+    }
+
+    private boolean withinWindow(@Nonnull Map<String, Object> evidence) {
+        Integer tick = tickOrNull(evidence);
+        return tick == null || (tick >= window.startTick() && tick <= window.endTick());
     }
 
     private boolean supportedKind() {
@@ -228,5 +372,14 @@ public record NpcRuntimeAssertion(
 
     private static boolean containsValue(@Nullable Object value, @Nonnull String expected) {
         return value instanceof List<?> list && list.stream().anyMatch(item -> matchesText(expected, item));
+    }
+
+    @Nullable
+    private static Integer tickOrNull(@Nonnull Map<String, Object> evidence) {
+        Object tick = evidence.get("tick");
+        return tick instanceof Number number ? number.intValue() : null;
+    }
+
+    private record Evaluation(boolean passed, @Nonnull List<String> failures) {
     }
 }

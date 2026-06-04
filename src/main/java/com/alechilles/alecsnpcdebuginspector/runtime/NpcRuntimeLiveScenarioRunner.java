@@ -94,7 +94,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     tick -> runOneTick(request, world, writer, run, cadence, fixtureRegistry, spawnedFixtures, arena, assertions, tick)
             );
 
-            NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, fixtureRegistry, spawnedFixtures.spawnedNpcs);
+            NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs);
             spawnedFixtures.spawnedNpcs.clear();
             run.markCleanup(cleanupReport.succeeded(), cleanupReport.message());
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "cleanup")
@@ -171,7 +171,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     NpcRuntimeResult.Cleanup.fromReport(cleanupReport)
             );
         } finally {
-            cleanupOnWorldThread(world, fixtureRegistry, spawnedFixtures.spawnedNpcs);
+            cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs);
         }
     }
 
@@ -487,9 +487,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
     @Nonnull
     private NpcRuntimeCleanupReport cleanupOnWorldThread(@Nonnull World world,
+                                                         @Nonnull NpcRuntimeRequest request,
                                                          @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
                                                          @Nonnull List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs) {
         NpcRuntimeCleanupReport.Builder report = NpcRuntimeCleanupReport.builder();
+        recordEnvironmentCleanup(request, report);
         if (spawnedNpcs.isEmpty()) {
             for (NpcRuntimeFixtureRegistry.FixtureRecord fixture : fixtureRegistry.fixtures()) {
                 report.unresolvedFixture(fixture.fixtureId());
@@ -512,6 +514,14 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
         }
         return report.build();
+    }
+
+    private void recordEnvironmentCleanup(@Nonnull NpcRuntimeRequest request,
+                                          @Nonnull NpcRuntimeCleanupReport.Builder report) {
+        if (request.environment().toMap().isEmpty()) {
+            return;
+        }
+        report.environmentRestoreSkipped("environment setup was declarative-only; no engine mutation applied");
     }
 
     @Nonnull

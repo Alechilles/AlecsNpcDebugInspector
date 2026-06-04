@@ -27,10 +27,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     private final NpcDebugSnapshotService snapshotService;
     private final NpcRuntimeTickScheduler tickScheduler;
     private final NpcRuntimeObserver observer;
+    private final NpcRuntimeTameworkFixtureMutator tameworkFixtureMutator;
 
     public NpcRuntimeLiveScenarioRunner(@Nonnull NpcRuntimeHarnessConfig config,
                                         @Nonnull NpcDebugSnapshotService snapshotService) {
-        this(config, new NpcRuntimeFlatworldManager(), new NpcRuntimeFixtureSpawner(), snapshotService, new NpcRuntimeTickScheduler(), new NpcRuntimeObserver());
+        this(config, new NpcRuntimeFlatworldManager(), new NpcRuntimeFixtureSpawner(), snapshotService, new NpcRuntimeTickScheduler(), new NpcRuntimeObserver(), new NpcRuntimeTameworkFixtureMutator());
     }
 
     NpcRuntimeLiveScenarioRunner(@Nonnull NpcRuntimeHarnessConfig config,
@@ -38,13 +39,15 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                  @Nonnull NpcRuntimeFixtureSpawner fixtureSpawner,
                                  @Nonnull NpcDebugSnapshotService snapshotService,
                                  @Nonnull NpcRuntimeTickScheduler tickScheduler,
-                                 @Nonnull NpcRuntimeObserver observer) {
+                                 @Nonnull NpcRuntimeObserver observer,
+                                 @Nonnull NpcRuntimeTameworkFixtureMutator tameworkFixtureMutator) {
         this.config = config;
         this.flatworldManager = flatworldManager;
         this.fixtureSpawner = fixtureSpawner;
         this.snapshotService = snapshotService;
         this.tickScheduler = tickScheduler;
         this.observer = observer;
+        this.tameworkFixtureMutator = tameworkFixtureMutator;
     }
 
     @Nonnull
@@ -199,6 +202,10 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("targetSlot", fixture.targetSlot())
                         .with("npcUuid", spawned.uuid() != null ? spawned.uuid().toString() : null)
                         .with("result", spawned.toSpawnResult().toMap()));
+                for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
+                    writer.write(record);
+                    spawnedFixtures.evidenceRecords.add(record.fields());
+                }
             }
         }
 
@@ -329,7 +336,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         return "sensor-evidence".equals(kind)
                 || "action-evidence".equals(kind)
                 || "combat-evaluator-evidence".equals(kind)
-                || "tamework-evidence".equals(kind);
+                || "tamework-evidence".equals(kind)
+                || "tamework-fixture-mutation".equals(kind);
     }
 
     private static final class SpawnedFixtureHolder {
@@ -341,7 +349,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         @Nullable
         private NpcRuntimeFixtureSpawner.SpawnedNpc npcUnderTest() {
             return spawnedNpcs.stream()
-                    .filter(spawned -> "npcUnderTest".equals(spawned.fixtureId()))
+                    .filter(spawned -> spawned.kind() == NpcRuntimeFixtureKind.NPC_UNDER_TEST)
                     .findFirst()
                     .orElse(null);
         }

@@ -17,6 +17,9 @@ public record NpcRuntimeHarnessStatus(
         boolean worldReady,
         @Nonnull String worldId,
         boolean worldTicking,
+        boolean worldPaused,
+        @Nonnull String worldReadyReason,
+        @Nullable String worldReadyDetail,
         int playerCount,
         @Nullable String activeRequestId,
         long queuedCount,
@@ -30,16 +33,19 @@ public record NpcRuntimeHarnessStatus(
                                                       @Nullable String activeRequestId,
                                                       long queuedCount,
                                                       @Nullable LastResult lastResult,
-                                                      @Nonnull WorldSnapshot worldSnapshot,
+                                                      @Nonnull NpcRuntimeWorldReadiness worldReadiness,
                                                       @Nonnull Instant updatedAt) {
         return new NpcRuntimeHarnessStatus(
                 1,
                 true,
                 harnessEnabled,
-                worldSnapshot.ready(),
-                worldSnapshot.worldId(),
-                worldSnapshot.ticking(),
-                worldSnapshot.playerCount(),
+                worldReadiness.ready(),
+                worldReadiness.worldId(),
+                worldReadiness.ticking(),
+                worldReadiness.paused(),
+                worldReadiness.reason(),
+                worldReadiness.detail(),
+                worldReadiness.playerCount(),
                 activeRequestId,
                 queuedCount,
                 lastResult,
@@ -62,6 +68,9 @@ public record NpcRuntimeHarnessStatus(
         map.put("worldReady", worldReady);
         map.put("worldId", worldId);
         map.put("worldTicking", worldTicking);
+        map.put("worldPaused", worldPaused);
+        map.put("worldReadyReason", worldReadyReason);
+        map.put("worldReadyDetail", worldReadyDetail);
         map.put("playerCount", playerCount);
         map.put("activeRequestId", activeRequestId);
         map.put("queuedCount", queuedCount);
@@ -115,13 +124,4 @@ public record NpcRuntimeHarnessStatus(
         }
     }
 
-    public record WorldSnapshot(boolean ready,
-                                @Nonnull String worldId,
-                                boolean ticking,
-                                int playerCount) {
-        @Nonnull
-        public static WorldSnapshot notReady(@Nonnull String worldId) {
-            return new WorldSnapshot(false, worldId, false, 0);
-        }
-    }
 }

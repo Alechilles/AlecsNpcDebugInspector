@@ -161,7 +161,16 @@ class NpcRuntimeHarnessServiceTest {
                         NpcRuntimeResult.Summary.empty()
                 ),
                 new NpcRuntimeHarnessStatusWriter(config.paths()),
-                () -> new NpcRuntimeHarnessStatus.WorldSnapshot(false, config.defaultWorldId(), false, 0)
+                () -> NpcRuntimeWorldReadiness.notReady(
+                        config.defaultWorldId(),
+                        NpcRuntimeWorldReadiness.WORLD_NOT_LOADED,
+                        "World readiness test fixture"
+                ),
+                () -> NpcRuntimeWorldReadiness.notReady(
+                        config.defaultWorldId(),
+                        NpcRuntimeWorldReadiness.WORLD_NOT_LOADED,
+                        "World readiness test fixture"
+                )
         );
 
         service.start();
@@ -171,6 +180,7 @@ class NpcRuntimeHarnessServiceTest {
             assertEquals(false, status.get("harnessEnabled"));
             assertEquals(false, status.get("worldReady"));
             assertEquals("npc_runtime_test_flatworld", status.get("worldId"));
+            assertEquals("world-not-loaded", status.get("worldReadyReason"));
             assertEquals(0, ((Number) status.get("queuedCount")).intValue());
         } finally {
             service.shutdown();
@@ -197,7 +207,10 @@ class NpcRuntimeHarnessServiceTest {
                 1,
                 config.paths().traces().resolve(request.requestId() + ".trace.jsonl"),
                 NpcRuntimeResult.Summary.empty()
-        ));
+        ),
+                new NpcRuntimeHarnessStatusWriter(config.paths()),
+                () -> NpcRuntimeWorldReadiness.ready(config.defaultWorldId(), 0),
+                () -> NpcRuntimeWorldReadiness.ready(config.defaultWorldId(), 0));
         service.initializeDirectories();
         Files.writeString(
                 config.paths().requests().resolve("auto.request.json"),
@@ -214,10 +227,62 @@ class NpcRuntimeHarnessServiceTest {
             assertTrue(Files.exists(config.paths().results().resolve("auto.result.json")));
             Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
             assertEquals(true, status.get("harnessEnabled"));
+            assertEquals(true, status.get("worldReady"));
             assertEquals("auto", ((Map<?, ?>) status.get("lastResult")).get("requestId"));
         } finally {
             service.shutdown();
         }
+    }
+
+    @Test
+    void enabledServiceFailsQueuedRequestWhenWorldCannotBecomeReady() throws Exception {
+        NpcRuntimeHarnessConfig config = new NpcRuntimeHarnessConfig(
+                false,
+                true,
+                1200,
+                64,
+                1_048_576L,
+                "npc_runtime_test_flatworld",
+                25,
+                25,
+                5000,
+                "npc_runtime_test_flatworld",
+                NpcRuntimePaths.underUserData(tempDir)
+        );
+        NpcRuntimeWorldReadiness notTicking = NpcRuntimeWorldReadiness.fromWorld(
+                config.defaultWorldId(),
+                config.defaultWorldId(),
+                false,
+                false,
+                0
+        );
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(
+                config,
+                request -> {
+                    throw new AssertionError("runner should not execute while world is not ready");
+                },
+                new NpcRuntimeHarnessStatusWriter(config.paths()),
+                () -> notTicking,
+                () -> notTicking
+        );
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().requests().resolve("world_bad.request.json"),
+                "{\"version\":1,\"requestId\":\"world_bad\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5}"
+        );
+
+        NpcRuntimeHarnessService.ProcessOutcome outcome = service.processNextQueuedRequest();
+
+        assertTrue(outcome.processed());
+        assertEquals("world_bad", outcome.requestId());
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("world_bad.result.json")));
+        assertEquals("failed", result.get("status"));
+        assertEquals("harness-world-not-ready", result.get("classification"));
+        assertTrue(result.get("error").toString().contains("world-not-ticking"));
+        Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
+        assertEquals(false, status.get("worldReady"));
+        assertEquals("world-not-ticking", status.get("worldReadyReason"));
+        assertTrue(Files.exists(config.paths().archive().resolve("world_bad.request.json")));
     }
 
     @Test

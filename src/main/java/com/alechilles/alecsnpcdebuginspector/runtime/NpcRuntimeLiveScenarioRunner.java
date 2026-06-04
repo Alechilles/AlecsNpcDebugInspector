@@ -46,6 +46,16 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     public NpcRuntimeResult run(@Nonnull NpcRuntimeRequest request) throws Exception {
         Path tracePath = config.paths().traces().resolve(request.requestId() + ".trace.jsonl");
         World world = flatworldManager.ensureWorld(request.world().instanceId());
+        NpcRuntimeWorldReadiness readiness = NpcRuntimeWorldReadiness.fromWorld(
+                request.world().instanceId(),
+                world.getName(),
+                world.isTicking(),
+                world.isPaused(),
+                world.getPlayerCount()
+        );
+        if (!readiness.ready()) {
+            throw new IllegalStateException("harness-world-not-ready: " + readiness.displayReason());
+        }
         return runOnPreparedWorld(request, tracePath, world);
     }
 

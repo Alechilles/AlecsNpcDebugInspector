@@ -32,7 +32,19 @@ or:
 ALEC_NPC_RUNTIME_AUTO_ENABLE=true
 ```
 
-The status contract reports separate `serverReady`, `harnessEnabled`, and `worldReady` booleans. In Phase 1, `worldReady` is observational: it becomes true only if the configured runtime world is already loaded, ticking, and unpaused. Boot-time world creation/loading remains a Phase 2 responsibility.
+The status contract reports separate `serverReady`, `harnessEnabled`, and `worldReady` booleans. It also reports `worldPaused`, `worldReadyReason`, and `worldReadyDetail` so headless tools can distinguish normal startup from a broken runtime world.
+
+Phase 2 of the headless runtime work actively prepares the default flatworld when auto-enable is on. Startup and every enabled poll attempt to load or create `npc_runtime_test_flatworld` through `NpcRuntimeFlatworldManager.ensureWorldReady(defaultWorldId)`. The harness does not run queued requests while `worldReady=false`. If the world reaches a terminal bad state, such as loaded-but-not-ticking or loaded-but-paused, the queued request receives a failed result with classification `harness-world-not-ready` and phase `world`.
+
+Expected readiness reason values:
+
+- `ready`
+- `universe-not-available`
+- `universe-not-ready`
+- `world-not-loaded`
+- `world-load-failed`
+- `world-not-ticking`
+- `world-paused`
 
 ### Universe and World Lifecycle
 
@@ -77,6 +89,20 @@ Implication: the harness can locate or create a dedicated runtime world without 
 - `getGenerator()`
 
 Implication: a disposable flat test world should be possible by creating a `WorldConfig`, assigning a `FlatWorldGenProvider`, disabling chunk unload/save behavior as needed, and creating/loading through `Universe`.
+
+Current runtime guardrails for `npc_runtime_test_flatworld`:
+
+- `World.setTicking(true)`
+- `World.setPaused(false)`
+- `WorldConfig.setTicking(true)`
+- `WorldConfig.setGameTimePaused(false)`
+- `WorldConfig.setForcedWeather("clear")`
+- `WorldConfig.setCanUnloadChunks(false)`
+- `WorldConfig.setCanSaveChunks(false)`
+- `WorldConfig.setSaveNewChunks(false)`
+- `WorldConfig.setSpawningNPC(false)`
+- `WorldConfig.setIsAllNPCFrozen(false)`
+- `WorldConfig.markChanged()` after preparing an existing world
 
 ### World Ticking, Chunks, and Entities
 
@@ -187,11 +213,6 @@ Implication: direct block mutation is possible, but the safe harness API still n
 
 ## Next Implementation Slice
 
-1. Add `NpcRuntimeFlatworldManager` around `Universe` and `WorldConfig`.
-2. Add a live runner that:
-   - loads/creates `npc_runtime_test_flatworld`,
-   - sets ticking/unload/save guardrails,
-   - spawns the NPC under test through `NPCPlugin.spawnNPCWithSpaceValidation(...)`,
-   - writes `run-start`, `world-ready`, `fixture-spawn`, `npc-snapshot`, and `run-end` records,
-   - removes spawned entities in `finally`.
-3. Keep the runner one-shot at first. Add multi-tick observation only after the cleanup path is proven.
+1. Confirm whether `WorldConfig.setCanUnloadChunks(false)` keeps the runtime arena resident without players, or find the internal force-load/ticket API.
+2. Add a direct block placement/reset wrapper for repeatable arena layouts.
+3. Add explicit request-level time/weather overrides on top of the headless world defaults.

@@ -15,8 +15,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import com.hypixel.hytale.server.core.universe.Universe;
-import com.hypixel.hytale.server.core.universe.world.World;
 
 /**
  * Coordinates request queue processing and the bounded scenario runner.
@@ -26,7 +24,8 @@ public final class NpcRuntimeHarnessService {
     private final NpcRuntimeRequestQueue queue;
     private final ScenarioRunner runner;
     private final NpcRuntimeHarnessStatusWriter statusWriter;
-    private final Supplier<NpcRuntimeHarnessStatus.WorldSnapshot> worldSnapshotSupplier;
+    private final Supplier<NpcRuntimeWorldReadiness> worldReadinessSupplier;
+    private final Supplier<NpcRuntimeWorldReadiness> worldReadinessPreparer;
     private final AtomicBoolean enabled;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private volatile String activeRequestId;
@@ -35,6 +34,7 @@ public final class NpcRuntimeHarnessService {
     private volatile String lastResultClassification;
     private volatile boolean lastStatusWriteSucceeded;
     private volatile String lastStatusWriteError;
+    private volatile NpcRuntimeWorldReadiness lastWorldReadiness;
     private ScheduledExecutorService executor;
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config) {
@@ -42,19 +42,38 @@ public final class NpcRuntimeHarnessService {
     }
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config, @Nonnull ScenarioRunner runner) {
-        this(config, runner, new NpcRuntimeHarnessStatusWriter(config.paths()), () -> defaultWorldSnapshot(config.defaultWorldId()));
+        this(config, runner, new NpcRuntimeFlatworldManager());
+    }
+
+    private NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config,
+                                     @Nonnull ScenarioRunner runner,
+                                     @Nonnull NpcRuntimeFlatworldManager flatworldManager) {
+        this(
+                config,
+                runner,
+                new NpcRuntimeHarnessStatusWriter(config.paths()),
+                () -> flatworldManager.currentReadiness(config.defaultWorldId()),
+                () -> flatworldManager.ensureWorldReady(config.defaultWorldId())
+        );
     }
 
     NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config,
                              @Nonnull ScenarioRunner runner,
                              @Nonnull NpcRuntimeHarnessStatusWriter statusWriter,
-                             @Nonnull Supplier<NpcRuntimeHarnessStatus.WorldSnapshot> worldSnapshotSupplier) {
+                             @Nonnull Supplier<NpcRuntimeWorldReadiness> worldReadinessSupplier,
+                             @Nonnull Supplier<NpcRuntimeWorldReadiness> worldReadinessPreparer) {
         this.config = config;
         this.queue = new NpcRuntimeRequestQueue(config.paths());
         this.runner = runner;
         this.statusWriter = statusWriter;
-        this.worldSnapshotSupplier = worldSnapshotSupplier;
+        this.worldReadinessSupplier = worldReadinessSupplier;
+        this.worldReadinessPreparer = worldReadinessPreparer;
         this.enabled = new AtomicBoolean(config.initiallyEnabled());
+        this.lastWorldReadiness = NpcRuntimeWorldReadiness.notReady(
+                config.defaultWorldId(),
+                NpcRuntimeWorldReadiness.WORLD_NOT_LOADED,
+                "World readiness has not been checked yet"
+        );
     }
 
     public void initializeDirectories() throws IOException {
@@ -66,6 +85,9 @@ public final class NpcRuntimeHarnessService {
         initializeDirectories();
         if (!started.compareAndSet(false, true)) {
             return;
+        }
+        if (config.autoEnable()) {
+            prepareRuntimeWorldBestEffort();
         }
         executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "npc-runtime-harness");
@@ -84,6 +106,11 @@ public final class NpcRuntimeHarnessService {
         ScheduledExecutorService service = executor;
         if (service != null) {
             service.shutdownNow();
+            try {
+                service.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
             executor = null;
         }
         started.set(false);
@@ -112,6 +139,7 @@ public final class NpcRuntimeHarnessService {
     public String statusText() {
         String active = activeRequestId != null ? activeRequestId : "<none>";
         String last = lastResultId != null ? lastResultId + ":" + lastResultStatus + ":" + lastResultClassification : "<none>";
+        NpcRuntimeWorldReadiness worldReadiness = currentWorldReadiness();
         long queued;
         try {
             queued = queuedCount();
@@ -119,6 +147,8 @@ public final class NpcRuntimeHarnessService {
                 return "NPC Runtime Harness: enabled=" + enabled() + " active=" + active
                     + " queue=<error: " + exception.getMessage() + ">"
                     + " last=" + last
+                    + " worldReady=" + worldReadiness.ready()
+                    + " worldReason=" + worldReadiness.reason()
                     + " root=" + config.paths().root()
                     + " statusFile=" + statusWriter.statusFile()
                     + " statusWrite=" + statusWriteText();
@@ -127,6 +157,8 @@ public final class NpcRuntimeHarnessService {
                 + " active=" + active
                 + " queued=" + queued
                 + " last=" + last
+                + " worldReady=" + worldReadiness.ready()
+                + " worldReason=" + worldReadiness.reason()
                 + " root=" + config.paths().root()
                 + " statusFile=" + statusWriter.statusFile()
                 + " statusWrite=" + statusWriteText();
@@ -163,6 +195,22 @@ public final class NpcRuntimeHarnessService {
             String text = Files.readString(active.path(), StandardCharsets.UTF_8);
             NpcRuntimeRequest request = NpcRuntimeRequest.parse(text, config);
             activeRequestId = request.requestId();
+            NpcRuntimeWorldReadiness readiness = enabled() ? refreshWorldReadiness() : currentWorldReadiness();
+            if (enabled() && !readiness.ready()) {
+                NpcRuntimeResult failed = NpcRuntimeResult.failed(
+                        request.requestId(),
+                        "harness-world-not-ready",
+                        request.ticks(),
+                        "world",
+                        readiness.displayReason(),
+                        List.of()
+                );
+                writeResult(failed.requestId(), failed);
+                rememberResult(failed);
+                queue.archive(active);
+                writeStatusBestEffort();
+                return new ProcessOutcome(true, failed.requestId());
+            }
             NpcRuntimeResult result;
             try {
                 result = runner.run(request);
@@ -298,7 +346,7 @@ public final class NpcRuntimeHarnessService {
                 activeRequestId,
                 queued,
                 lastResult,
-                worldSnapshotSupplier.get(),
+                currentWorldReadiness(),
                 Instant.now()
         );
     }
@@ -326,7 +374,12 @@ public final class NpcRuntimeHarnessService {
     private void pollSafely() {
         try {
             if (enabled()) {
-                processNextQueuedRequest();
+                NpcRuntimeWorldReadiness readiness = prepareRuntimeWorldBestEffort();
+                if (readiness.ready() || readiness.shouldFailQueuedRequests()) {
+                    processNextQueuedRequest();
+                } else {
+                    writeStatus();
+                }
             } else {
                 writeStatus();
             }
@@ -356,25 +409,44 @@ public final class NpcRuntimeHarnessService {
     }
 
     @Nonnull
-    private static NpcRuntimeHarnessStatus.WorldSnapshot defaultWorldSnapshot(@Nonnull String worldId) {
+    private NpcRuntimeWorldReadiness prepareRuntimeWorldBestEffort() {
         try {
-            Universe universe = Universe.get();
-            if (universe == null) {
-                return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
-            }
-            World world = universe.getWorld(worldId);
-            if (world == null) {
-                return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
-            }
-            return new NpcRuntimeHarnessStatus.WorldSnapshot(
-                    world.isTicking() && !world.isPaused(),
-                    world.getName(),
-                    world.isTicking(),
-                    world.getPlayerCount()
+            NpcRuntimeWorldReadiness readiness = worldReadinessPreparer.get();
+            lastWorldReadiness = readiness;
+            writeStatusBestEffort();
+            return readiness;
+        } catch (Throwable exception) {
+            NpcRuntimeWorldReadiness readiness = NpcRuntimeWorldReadiness.notReady(
+                    config.defaultWorldId(),
+                    NpcRuntimeWorldReadiness.WORLD_LOAD_FAILED,
+                    exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName()
             );
-        } catch (Throwable ignored) {
-            return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
+            lastWorldReadiness = readiness;
+            writeStatusBestEffort();
+            return readiness;
         }
+    }
+
+    @Nonnull
+    private NpcRuntimeWorldReadiness currentWorldReadiness() {
+        try {
+            NpcRuntimeWorldReadiness readiness = worldReadinessSupplier.get();
+            lastWorldReadiness = readiness;
+            return readiness;
+        } catch (Throwable exception) {
+            NpcRuntimeWorldReadiness readiness = NpcRuntimeWorldReadiness.notReady(
+                    config.defaultWorldId(),
+                    NpcRuntimeWorldReadiness.WORLD_LOAD_FAILED,
+                    exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName()
+            );
+            lastWorldReadiness = readiness;
+            return readiness;
+        }
+    }
+
+    @Nonnull
+    private NpcRuntimeWorldReadiness refreshWorldReadiness() {
+        return currentWorldReadiness();
     }
 
     private void ensureTraceExists(@Nonnull NpcRuntimeRequest request, @Nonnull NpcRuntimeResult result) throws IOException {

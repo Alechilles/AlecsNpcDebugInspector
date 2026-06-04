@@ -25,7 +25,7 @@ class NpcRuntimeHarnessStatusTest {
                 "active-request",
                 2,
                 new NpcRuntimeHarnessStatus.LastResult("last-request", "passed", "passed"),
-                new NpcRuntimeHarnessStatus.WorldSnapshot(true, "npc_runtime_test_flatworld", true, 0),
+                NpcRuntimeWorldReadiness.ready("npc_runtime_test_flatworld", 0),
                 Instant.parse("2026-06-03T23:38:29.358562Z")
         );
 
@@ -37,6 +37,8 @@ class NpcRuntimeHarnessStatusTest {
         assertEquals(true, json.get("worldReady"));
         assertEquals("npc_runtime_test_flatworld", json.get("worldId"));
         assertEquals(true, json.get("worldTicking"));
+        assertEquals(false, json.get("worldPaused"));
+        assertEquals("ready", json.get("worldReadyReason"));
         assertEquals(0, ((Number) json.get("playerCount")).intValue());
         assertEquals("active-request", json.get("activeRequestId"));
         assertEquals(2, ((Number) json.get("queuedCount")).intValue());
@@ -58,7 +60,11 @@ class NpcRuntimeHarnessStatusTest {
                 null,
                 0,
                 null,
-                NpcRuntimeHarnessStatus.WorldSnapshot.notReady(config.defaultWorldId()),
+                NpcRuntimeWorldReadiness.notReady(
+                        config.defaultWorldId(),
+                        NpcRuntimeWorldReadiness.UNIVERSE_NOT_READY,
+                        "Universe startup future is not complete"
+                ),
                 Instant.parse("2026-06-03T23:38:29Z")
         );
 
@@ -70,5 +76,6 @@ class NpcRuntimeHarnessStatusTest {
         assertEquals(false, json.get("harnessEnabled"));
         assertEquals(false, json.get("worldReady"));
         assertEquals("npc_runtime_test_flatworld", json.get("worldId"));
+        assertEquals("universe-not-ready", json.get("worldReadyReason"));
     }
 }

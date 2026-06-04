@@ -29,7 +29,7 @@ public record NpcRuntimeHarnessConfig(
                 autoEnableFromEnvironment(),
                 1200,
                 64,
-                1_048_576L,
+                8_388_608L,
                 "npc_runtime_test_flatworld",
                 1000,
                 1000,

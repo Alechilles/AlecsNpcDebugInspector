@@ -213,7 +213,7 @@ class NpcRuntimeRequestTest {
         assertTrue(json.contains("\"scenario\":{\"id\":\"simple\"}"));
         assertTrue(json.contains("\"environment\":{}"));
         assertTrue(json.contains("\"assertions\":[]"));
-        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":1048576}"));
+        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":8388608}"));
     }
 
     @Test

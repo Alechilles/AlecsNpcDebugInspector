@@ -20,6 +20,7 @@ class NpcRuntimeHarnessConfigTest {
         assertFalse(config.initiallyEnabled());
         assertEquals(1200, config.maxTicks());
         assertEquals(64, config.maxEntities());
+        assertEquals(8_388_608L, config.maxTraceBytes());
         assertEquals("npc_runtime_test_flatworld", config.instanceId());
         assertEquals("npc_runtime_test_flatworld", config.defaultWorldId());
         assertEquals(1000, config.statusWriteIntervalMillis());

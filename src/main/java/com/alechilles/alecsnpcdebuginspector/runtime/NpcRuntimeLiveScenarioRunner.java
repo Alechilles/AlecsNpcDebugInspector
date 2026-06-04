@@ -76,6 +76,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                                 @Nonnull NpcRuntimeArena arena) throws Exception {
         NpcRuntimeScenarioRun run = NpcRuntimeScenarioRun.start(request.requestId(), world.getName(), request.ticks());
         NpcRuntimeObservationCadence cadence = NpcRuntimeObservationCadence.from(request);
+        List<NpcRuntimeAssertion> assertions = NpcRuntimeAssertion.fromSpecs(request.assertions());
         NpcRuntimeFixtureRegistry fixtureRegistry = new NpcRuntimeFixtureRegistry();
         SpawnedFixtureHolder spawnedFixtures = new SpawnedFixtureHolder();
 
@@ -88,7 +89,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             NpcRuntimeTickScheduler.RunSummary summary = tickScheduler.run(
                     run,
                     step -> executeWorldStep(world, step),
-                    tick -> runOneTick(request, world, writer, run, cadence, fixtureRegistry, spawnedFixtures, arena, tick)
+                    tick -> runOneTick(request, world, writer, run, cadence, fixtureRegistry, spawnedFixtures, arena, assertions, tick)
             );
 
             NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, fixtureRegistry, spawnedFixtures.spawnedNpcs);
@@ -122,7 +123,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             }
 
-            List<NpcRuntimeAssertionResult> assertionResults = NpcRuntimeAssertion.fromSpecs(request.assertions()).stream()
+            List<NpcRuntimeAssertionResult> assertionResults = assertions.stream()
                     .map(assertion -> assertion.evaluate(spawnedFixtures.evidenceRecords))
                     .toList();
             NpcRuntimeResult.Summary resultSummary = NpcRuntimeResult.Summary.empty().withAssertions(assertionResults);
@@ -150,7 +151,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())
-                    .with("mode", "tick-driven"));
+                    .with("mode", summary.completedEarly() ? "assertion-driven" : "tick-driven")
+                    .with("completionReason", summary.completionReason()));
             return NpcRuntimeResult.passed(
                     request,
                     summary.ticksRun(),
@@ -172,6 +174,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                                            @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
                                                            @Nonnull SpawnedFixtureHolder spawnedFixtures,
                                                            @Nonnull NpcRuntimeArena arena,
+                                                           @Nonnull List<NpcRuntimeAssertion> assertions,
                                                            int tick) throws Exception {
         Store<EntityStore> store = world.getEntityStore().getStore();
 
@@ -204,7 +207,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("result", spawned.toSpawnResult().toMap()));
                 for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
                     writer.write(record);
-                    spawnedFixtures.evidenceRecords.add(record.fields());
+                    if (tick >= request.timing().warmupTicks()) {
+                        spawnedFixtures.evidenceRecords.add(record.fields());
+                    }
                 }
             }
         }
@@ -231,11 +236,20 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     npcUnderTest.fixtureId()
             )) {
                 writer.write(record);
-                if (isAssertionEvidence(record)) {
+                if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {
                     spawnedFixtures.evidenceRecords.add(record.fields());
                 }
             }
             spawnedFixtures.previousObserved = observed;
+        }
+
+        if (shouldStopAfterAssertionsResolve(request, assertions, spawnedFixtures.evidenceRecords, tick)) {
+            List<NpcRuntimeAssertionResult> currentResults = assertions.stream()
+                    .map(assertion -> assertion.evaluate(spawnedFixtures.evidenceRecords))
+                    .toList();
+            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "assertions-resolved")
+                    .with("results", currentResults.stream().map(NpcRuntimeAssertionResult::toMap).toList()));
+            return NpcRuntimeTickScheduler.TickOutcome.completed("assertions resolved");
         }
 
         if (cadence.includeEvents()) {
@@ -349,6 +363,22 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 || "pathing-evidence".equals(kind)
                 || "combat-eligibility-evidence".equals(kind)
                 || "instruction-lifecycle-evidence".equals(kind);
+    }
+
+    private static boolean shouldStopAfterAssertionsResolve(@Nonnull NpcRuntimeRequest request,
+                                                            @Nonnull List<NpcRuntimeAssertion> assertions,
+                                                            @Nonnull List<java.util.Map<String, Object>> evidenceRecords,
+                                                            int tick) {
+        if (!request.timing().stopWhenAssertionsResolved() || assertions.isEmpty() || tick < request.timing().warmupTicks()) {
+            return false;
+        }
+        if (!assertions.stream().allMatch(NpcRuntimeAssertion::canResolveBeforeEnd)) {
+            return false;
+        }
+        List<NpcRuntimeAssertionResult> currentResults = assertions.stream()
+                .map(assertion -> assertion.evaluate(evidenceRecords))
+                .toList();
+        return currentResults.stream().allMatch(result -> "passed".equals(result.status()));
     }
 
     private static final class SpawnedFixtureHolder {

@@ -96,13 +96,13 @@ Current runtime guardrails for `npc_runtime_test_flatworld`:
 - `World.setPaused(false)`
 - `WorldConfig.setTicking(true)`
 - `WorldConfig.setGameTimePaused(false)`
-- `WorldConfig.setForcedWeather("clear")`
 - `WorldConfig.setCanUnloadChunks(false)`
 - `WorldConfig.setCanSaveChunks(false)`
 - `WorldConfig.setSaveNewChunks(false)`
 - `WorldConfig.setSpawningNPC(false)`
 - `WorldConfig.setIsAllNPCFrozen(false)`
 - `WorldConfig.markChanged()` after preparing an existing world
+- The harness does not force weather by default. Earlier builds wrote `ForcedWeather: "clear"`, but `clear` is not a valid Weather asset id in the current runtime asset set; startup repairs that stale value out of the dedicated flatworld config before loading it.
 
 ### World Ticking, Chunks, and Entities
 

@@ -1,13 +1,19 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeWorldReadinessTest {
+    @TempDir
+    Path tempDir;
+
     @Test
     void readyStateSerializesForStatus() {
         NpcRuntimeWorldReadiness readiness = NpcRuntimeWorldReadiness.ready("npc_runtime_test_flatworld", 0);
@@ -50,5 +56,66 @@ class NpcRuntimeWorldReadinessTest {
         assertTrue(readiness.shouldFailQueuedRequests());
         assertEquals("world-not-ticking", readiness.reason());
         assertEquals(false, readiness.ticking());
+    }
+
+    @Test
+    void repairsPersistedRuntimeWorldConfigWithInvalidClearWeather() throws Exception {
+        Path world = tempDir.resolve("npc_runtime_test_flatworld");
+        Files.createDirectories(world);
+        Path config = world.resolve("config.json");
+        Files.writeString(
+                config,
+                "{\"Version\":4.0,\"DisplayName\":\"Runtime\",\"Seed\":1.780536172895E12,"
+                        + "\"WorldGen\":{\"Layers\":[{\"From\":0.0,\"To\":1.0}]},"
+                        + "\"ForcedWeather\":\"clear\",\"IsTicking\":true}"
+        );
+
+        boolean repaired = NpcRuntimeFlatworldManager.repairPersistedWorldConfig(world);
+
+        assertTrue(repaired);
+        String repairedText = Files.readString(config);
+        Map<String, Object> payload = NpcRuntimeJson.parseObject(repairedText);
+        assertFalse(payload.containsKey("ForcedWeather"));
+        assertTrue(repairedText.contains("\"Version\":4"));
+        assertFalse(repairedText.contains("\"Version\":4.0"));
+        assertTrue(repairedText.contains("\"Seed\":1780536172895"));
+        assertFalse(repairedText.contains("1.780536172895E12"));
+        assertTrue(repairedText.contains("\"From\":0"));
+        assertTrue(repairedText.contains("\"To\":1"));
+        assertFalse(repairedText.contains("\"From\":0.0"));
+        assertFalse(repairedText.contains("\"To\":1.0"));
+        assertEquals("Runtime", payload.get("DisplayName"));
+        assertEquals(true, payload.get("IsTicking"));
+    }
+
+    @Test
+    void repairsPersistedRuntimeWorldConfigWithFloatingVersion() throws Exception {
+        Path world = tempDir.resolve("npc_runtime_test_flatworld");
+        Files.createDirectories(world);
+        Path config = world.resolve("config.json");
+        Files.writeString(config, "{\"Version\":4.0,\"DisplayName\":\"Runtime\"}");
+
+        boolean repaired = NpcRuntimeFlatworldManager.repairPersistedWorldConfig(world);
+
+        assertTrue(repaired);
+        String repairedText = Files.readString(config);
+        Map<String, Object> payload = NpcRuntimeJson.parseObject(repairedText);
+        assertTrue(repairedText.contains("\"Version\":4"));
+        assertFalse(repairedText.contains("\"Version\":4.0"));
+        assertEquals("Runtime", payload.get("DisplayName"));
+    }
+
+    @Test
+    void leavesPersistedRuntimeWorldConfigWithoutInvalidWeatherAlone() throws Exception {
+        Path world = tempDir.resolve("npc_runtime_test_flatworld");
+        Files.createDirectories(world);
+        Path config = world.resolve("config.json");
+        Files.writeString(config, "{\"DisplayName\":\"Runtime\",\"IsTicking\":true}");
+
+        boolean repaired = NpcRuntimeFlatworldManager.repairPersistedWorldConfig(world);
+
+        assertFalse(repaired);
+        Map<String, Object> payload = NpcRuntimeJson.parseObject(Files.readString(config));
+        assertFalse(payload.containsKey("ForcedWeather"));
     }
 }

@@ -4,10 +4,15 @@ import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.WorldConfig;
 import com.hypixel.hytale.server.core.universe.world.worldgen.provider.FlatWorldGenProvider;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 
 /**
@@ -15,6 +20,7 @@ import javax.annotation.Nonnull;
  */
 public final class NpcRuntimeFlatworldManager {
     private static final long WORLD_LOAD_TIMEOUT_SECONDS = 30L;
+    private static final Pattern SCIENTIFIC_SEED = Pattern.compile("\"Seed\"\\s*:\\s*([0-9]+)\\.([0-9]+)E([0-9]+)");
 
     @Nonnull
     public NpcRuntimeWorldReadiness ensureWorldReady(@Nonnull String instanceId) {
@@ -83,9 +89,14 @@ public final class NpcRuntimeFlatworldManager {
             return prepareWorld(existing);
         }
 
-        World loaded = universe.isWorldLoadable(instanceId)
-                ? universe.loadWorld(instanceId).get(WORLD_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                : createWorld(universe, instanceId);
+        Path worldPath = universe.validateWorldPath(instanceId);
+        World loaded;
+        if (universe.isWorldLoadable(instanceId)) {
+            repairPersistedWorldConfig(worldPath);
+            loaded = universe.loadWorld(instanceId).get(WORLD_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } else {
+            loaded = createWorld(universe, instanceId, worldPath);
+        }
         return prepareWorld(loaded);
     }
 
@@ -119,9 +130,8 @@ public final class NpcRuntimeFlatworldManager {
     }
 
     @Nonnull
-    private World createWorld(@Nonnull Universe universe, @Nonnull String instanceId) throws Exception {
+    private World createWorld(@Nonnull Universe universe, @Nonnull String instanceId, @Nonnull Path worldPath) throws Exception {
         WorldConfig config = createFlatworldConfig(instanceId);
-        Path worldPath = universe.validateWorldPath(instanceId);
         return universe.makeWorld(instanceId, worldPath, config).get(WORLD_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
@@ -134,7 +144,6 @@ public final class NpcRuntimeFlatworldManager {
         config.setDefaultSpawnProvider(flatWorldGenProvider.getGenerator());
         config.setTicking(true);
         config.setGameTimePaused(false);
-        config.setForcedWeather("clear");
         config.setCanUnloadChunks(false);
         config.setCanSaveChunks(false);
         config.setSaveNewChunks(false);
@@ -151,7 +160,6 @@ public final class NpcRuntimeFlatworldManager {
         WorldConfig config = world.getWorldConfig();
         config.setTicking(true);
         config.setGameTimePaused(false);
-        config.setForcedWeather("clear");
         config.setCanUnloadChunks(false);
         config.setCanSaveChunks(false);
         config.setSaveNewChunks(false);
@@ -159,6 +167,43 @@ public final class NpcRuntimeFlatworldManager {
         config.setIsAllNPCFrozen(false);
         config.markChanged();
         return world;
+    }
+
+    static boolean repairPersistedWorldConfig(@Nonnull Path worldPath) throws Exception {
+        Path configPath = worldPath.resolve("config.json");
+        if (!Files.isRegularFile(configPath)) {
+            return false;
+        }
+        String original = Files.readString(configPath, StandardCharsets.UTF_8);
+        String repaired = original
+                .replaceAll("(?s),\\s*\"ForcedWeather\"\\s*:\\s*\"clear\"", "")
+                .replaceAll("(?s)\"ForcedWeather\"\\s*:\\s*\"clear\"\\s*,", "")
+                .replaceAll("\"Version\"\\s*:\\s*(\\d+)\\.0\\b", "\"Version\":$1")
+                .replaceAll("\"(From|To)\"\\s*:\\s*(\\d+)\\.0\\b", "\"$1\":$2");
+        repaired = repairScientificSeed(repaired);
+        if (original.equals(repaired)) {
+            return false;
+        }
+        Path tempPath = configPath.resolveSibling(configPath.getFileName() + ".npc-runtime-repair.tmp");
+        Files.writeString(tempPath, repaired, StandardCharsets.UTF_8);
+        Files.move(tempPath, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        return true;
+    }
+
+    @Nonnull
+    private static String repairScientificSeed(@Nonnull String config) {
+        Matcher matcher = SCIENTIFIC_SEED.matcher(config);
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            String digits = matcher.group(1) + matcher.group(2);
+            int exponent = Integer.parseInt(matcher.group(3));
+            int decimalDigits = matcher.group(2).length();
+            int zeroesToAppend = Math.max(0, exponent - decimalDigits);
+            String replacement = "\"Seed\":" + digits + "0".repeat(zeroesToAppend);
+            matcher.appendReplacement(out, replacement);
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     @Nonnull

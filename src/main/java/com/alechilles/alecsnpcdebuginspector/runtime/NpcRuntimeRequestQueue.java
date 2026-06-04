@@ -25,6 +25,7 @@ public final class NpcRuntimeRequestQueue {
         Files.createDirectories(paths.results());
         Files.createDirectories(paths.traces());
         Files.createDirectories(paths.archive());
+        Files.createDirectories(paths.status());
     }
 
     public long queuedCount() throws IOException {

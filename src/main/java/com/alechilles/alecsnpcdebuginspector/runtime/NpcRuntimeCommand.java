@@ -20,6 +20,8 @@ public final class NpcRuntimeCommand extends AbstractPlayerCommand {
     public NpcRuntimeCommand(@Nonnull NpcRuntimeHarnessService harnessService) {
         super("npcruntime", "Control Alec's NPC runtime harness.");
         this.harnessService = harnessService;
+        requirePermission("alecsnpcdebuginspector.command.npcruntime");
+        setPermissionGroups("OP", "Admin", "Operator");
         setAllowsExtraArguments(true);
     }
 

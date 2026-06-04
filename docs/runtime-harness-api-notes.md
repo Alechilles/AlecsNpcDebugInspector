@@ -10,6 +10,30 @@ These notes are based on `javap` inspection of public APIs and targeted bytecode
 
 ## Confirmed APIs
 
+### Headless Harness Heartbeat
+
+Phase 1 of the headless runtime work adds a filesystem heartbeat at:
+
+```text
+UserData\NpcRuntimeHarness\status\harness-status.json
+```
+
+The heartbeat is written on plugin startup, enable/disable changes, queue/result changes, active request changes, and idle polling. It is intended for external tools such as `HytaleNpcAssetTools` to detect whether the server-side harness is alive without a logged-in player.
+
+The harness can be auto-enabled for development runs with:
+
+```text
+-Dalec.npcRuntime.autoEnable=true
+```
+
+or:
+
+```text
+ALEC_NPC_RUNTIME_AUTO_ENABLE=true
+```
+
+The status contract reports separate `serverReady`, `harnessEnabled`, and `worldReady` booleans. In Phase 1, `worldReady` is observational: it becomes true only if the configured runtime world is already loaded, ticking, and unpaused. Boot-time world creation/loading remains a Phase 2 responsibility.
+
 ### Universe and World Lifecycle
 
 `com.hypixel.hytale.server.core.universe.Universe`

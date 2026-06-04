@@ -12,7 +12,8 @@ public record NpcRuntimePaths(
         @Nonnull Path active,
         @Nonnull Path results,
         @Nonnull Path traces,
-        @Nonnull Path archive
+        @Nonnull Path archive,
+        @Nonnull Path status
 ) {
     @Nonnull
     public static NpcRuntimePaths underUserData(@Nonnull Path userDataRoot) {
@@ -23,7 +24,13 @@ public record NpcRuntimePaths(
                 root.resolve("active"),
                 root.resolve("results"),
                 root.resolve("traces"),
-                root.resolve("archive")
+                root.resolve("archive"),
+                root.resolve("status")
         );
+    }
+
+    @Nonnull
+    public Path statusFile() {
+        return status.resolve("harness-status.json");
     }
 }

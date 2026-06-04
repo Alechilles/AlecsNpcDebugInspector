@@ -48,6 +48,12 @@ class NpcRuntimeHarnessServiceTest {
         assertTrue(result.containsKey("cleanup"));
         assertTrue(result.containsKey("artifacts"));
         assertTrue(result.containsKey("summary"));
+
+        Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
+        assertEquals("simple", ((Map<?, ?>) status.get("lastResult")).get("requestId"));
+        assertEquals("passed", ((Map<?, ?>) status.get("lastResult")).get("status"));
+        assertEquals("passed", ((Map<?, ?>) status.get("lastResult")).get("classification"));
+        assertEquals(0, ((Number) status.get("queuedCount")).intValue());
     }
 
     @Test
@@ -139,6 +145,79 @@ class NpcRuntimeHarnessServiceTest {
         assertTrue(status.contains("queued=0"));
         assertTrue(status.contains("last=simple:passed"));
         assertTrue(status.contains("root=" + config.paths().root()));
+        assertTrue(status.contains("statusFile=" + config.paths().statusFile()));
+        assertTrue(status.contains("statusWrite=ok"));
+    }
+
+    @Test
+    void startWritesStatusHeartbeatWithoutPlayerCommand() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(
+                config,
+                request -> NpcRuntimeResult.passed(
+                        request,
+                        0,
+                        config.paths().traces().resolve(request.requestId() + ".trace.jsonl"),
+                        NpcRuntimeResult.Summary.empty()
+                ),
+                new NpcRuntimeHarnessStatusWriter(config.paths()),
+                () -> new NpcRuntimeHarnessStatus.WorldSnapshot(false, config.defaultWorldId(), false, 0)
+        );
+
+        service.start();
+        try {
+            assertTrue(Files.exists(config.paths().statusFile()));
+            Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
+            assertEquals(false, status.get("harnessEnabled"));
+            assertEquals(false, status.get("worldReady"));
+            assertEquals("npc_runtime_test_flatworld", status.get("worldId"));
+            assertEquals(0, ((Number) status.get("queuedCount")).intValue());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void autoEnabledServiceProcessesQueuedRequestFromBackgroundPoller() throws Exception {
+        NpcRuntimeHarnessConfig config = new NpcRuntimeHarnessConfig(
+                false,
+                true,
+                1200,
+                64,
+                1_048_576L,
+                "npc_runtime_test_flatworld",
+                25,
+                25,
+                5000,
+                "npc_runtime_test_flatworld",
+                NpcRuntimePaths.underUserData(tempDir)
+        );
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> NpcRuntimeResult.passed(
+                request,
+                1,
+                config.paths().traces().resolve(request.requestId() + ".trace.jsonl"),
+                NpcRuntimeResult.Summary.empty()
+        ));
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().requests().resolve("auto.request.json"),
+                "{\"version\":1,\"requestId\":\"auto\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5}"
+        );
+
+        service.start();
+        try {
+            long deadline = System.currentTimeMillis() + 3000;
+            while (!Files.exists(config.paths().results().resolve("auto.result.json")) && System.currentTimeMillis() < deadline) {
+                Thread.sleep(25);
+            }
+
+            assertTrue(Files.exists(config.paths().results().resolve("auto.result.json")));
+            Map<String, Object> status = NpcRuntimeJson.parseObject(Files.readString(config.paths().statusFile()));
+            assertEquals(true, status.get("harnessEnabled"));
+            assertEquals("auto", ((Map<?, ?>) status.get("lastResult")).get("requestId"));
+        } finally {
+            service.shutdown();
+        }
     }
 
     @Test

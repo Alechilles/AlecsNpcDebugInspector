@@ -21,6 +21,7 @@
         <hytale.install.path>${hytale.install.path.release}</hytale.install.path>
         <hytale.userdata.path>C:/Users/22ale/AppData/Roaming/Hytale/UserData</hytale.userdata.path>
         <hytale.jdk.path>C:/Program Files/Eclipse Adoptium/jdk-25.0.1.8-hotspot</hytale.jdk.path>
+        <alec.npcRuntime.autoEnable>false</alec.npcRuntime.autoEnable>
     </properties>
 
     <dependencies>
@@ -176,6 +177,7 @@
                                     <workingDirectory>${hytale.install.path}/Server</workingDirectory>
                                     <arguments>
                                         <argument>--enable-native-access=ALL-UNNAMED</argument>
+                                        <argument>-Dalec.npcRuntime.autoEnable=${alec.npcRuntime.autoEnable}</argument>
                                         <argument>-jar</argument>
                                         <argument>HytaleServer.jar</argument>
                                         <argument>--assets</argument>

@@ -24,6 +24,8 @@ public final class NpcDebugCommand extends AbstractPlayerCommand {
     public NpcDebugCommand(@Nonnull NpcDebugSnapshotService snapshotService) {
         super("npcdebug", "Open NPC Debug Inspector for the NPC in view or by UUID.");
         this.snapshotService = snapshotService;
+        requirePermission("alecsnpcdebuginspector.command.npcdebug");
+        setPermissionGroups("OP", "Admin", "Operator");
         setAllowsExtraArguments(true);
     }
 

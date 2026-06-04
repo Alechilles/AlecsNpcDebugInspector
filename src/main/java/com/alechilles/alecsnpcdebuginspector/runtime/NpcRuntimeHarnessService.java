@@ -4,12 +4,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import com.hypixel.hytale.server.core.universe.Universe;
+import com.hypixel.hytale.server.core.universe.world.World;
 
 /**
  * Coordinates request queue processing and the bounded scenario runner.
@@ -18,24 +25,69 @@ public final class NpcRuntimeHarnessService {
     private final NpcRuntimeHarnessConfig config;
     private final NpcRuntimeRequestQueue queue;
     private final ScenarioRunner runner;
+    private final NpcRuntimeHarnessStatusWriter statusWriter;
+    private final Supplier<NpcRuntimeHarnessStatus.WorldSnapshot> worldSnapshotSupplier;
     private final AtomicBoolean enabled;
+    private final AtomicBoolean started = new AtomicBoolean(false);
     private volatile String activeRequestId;
     private volatile String lastResultId;
     private volatile String lastResultStatus;
+    private volatile String lastResultClassification;
+    private volatile boolean lastStatusWriteSucceeded;
+    private volatile String lastStatusWriteError;
+    private ScheduledExecutorService executor;
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config) {
         this(config, NpcRuntimeHarnessService::defaultDryRun);
     }
 
     public NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config, @Nonnull ScenarioRunner runner) {
+        this(config, runner, new NpcRuntimeHarnessStatusWriter(config.paths()), () -> defaultWorldSnapshot(config.defaultWorldId()));
+    }
+
+    NpcRuntimeHarnessService(@Nonnull NpcRuntimeHarnessConfig config,
+                             @Nonnull ScenarioRunner runner,
+                             @Nonnull NpcRuntimeHarnessStatusWriter statusWriter,
+                             @Nonnull Supplier<NpcRuntimeHarnessStatus.WorldSnapshot> worldSnapshotSupplier) {
         this.config = config;
         this.queue = new NpcRuntimeRequestQueue(config.paths());
         this.runner = runner;
-        this.enabled = new AtomicBoolean(config.enabledByDefault());
+        this.statusWriter = statusWriter;
+        this.worldSnapshotSupplier = worldSnapshotSupplier;
+        this.enabled = new AtomicBoolean(config.initiallyEnabled());
     }
 
     public void initializeDirectories() throws IOException {
         queue.ensureDirectories();
+        writeStatus();
+    }
+
+    public void start() throws IOException {
+        initializeDirectories();
+        if (!started.compareAndSet(false, true)) {
+            return;
+        }
+        executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "npc-runtime-harness");
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.scheduleWithFixedDelay(
+                this::pollSafely,
+                config.pollIntervalMillis(),
+                config.pollIntervalMillis(),
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    public void shutdown() {
+        ScheduledExecutorService service = executor;
+        if (service != null) {
+            service.shutdownNow();
+            executor = null;
+        }
+        started.set(false);
+        writeStatusBestEffort();
     }
 
     public boolean enabled() {
@@ -44,6 +96,7 @@ public final class NpcRuntimeHarnessService {
 
     public void setEnabled(boolean enabled) {
         this.enabled.set(enabled);
+        writeStatusBestEffort();
     }
 
     @Nullable
@@ -58,7 +111,7 @@ public final class NpcRuntimeHarnessService {
     @Nonnull
     public String statusText() {
         String active = activeRequestId != null ? activeRequestId : "<none>";
-        String last = lastResultId != null ? lastResultId + ":" + lastResultStatus : "<none>";
+        String last = lastResultId != null ? lastResultId + ":" + lastResultStatus + ":" + lastResultClassification : "<none>";
         long queued;
         try {
             queued = queuedCount();
@@ -66,13 +119,17 @@ public final class NpcRuntimeHarnessService {
                 return "NPC Runtime Harness: enabled=" + enabled() + " active=" + active
                     + " queue=<error: " + exception.getMessage() + ">"
                     + " last=" + last
-                    + " root=" + config.paths().root();
+                    + " root=" + config.paths().root()
+                    + " statusFile=" + statusWriter.statusFile()
+                    + " statusWrite=" + statusWriteText();
         }
         return "NPC Runtime Harness: enabled=" + enabled()
                 + " active=" + active
                 + " queued=" + queued
                 + " last=" + last
-                + " root=" + config.paths().root();
+                + " root=" + config.paths().root()
+                + " statusFile=" + statusWriter.statusFile()
+                + " statusWrite=" + statusWriteText();
     }
 
     @Nonnull
@@ -82,7 +139,8 @@ public final class NpcRuntimeHarnessService {
                 + " requests=" + paths.requests()
                 + " results=" + paths.results()
                 + " traces=" + paths.traces()
-                + " archive=" + paths.archive();
+                + " archive=" + paths.archive()
+                + " status=" + paths.status();
     }
 
     @Nonnull
@@ -94,11 +152,13 @@ public final class NpcRuntimeHarnessService {
     public ProcessOutcome processNextQueuedRequest() throws IOException {
         Optional<NpcRuntimeRequestQueue.ActiveRequest> claimed = queue.claimNext();
         if (claimed.isEmpty()) {
+            writeStatus();
             return new ProcessOutcome(false, null);
         }
 
         NpcRuntimeRequestQueue.ActiveRequest active = claimed.get();
         activeRequestId = active.requestId();
+        writeStatusBestEffort();
         try {
             String text = Files.readString(active.path(), StandardCharsets.UTF_8);
             NpcRuntimeRequest request = NpcRuntimeRequest.parse(text, config);
@@ -127,10 +187,12 @@ public final class NpcRuntimeHarnessService {
             }
             writeResult(result.requestId(), result);
             rememberResult(result);
+            writeStatusBestEffort();
             if ("passed".equals(result.status())) {
                 ensureTraceExists(request, result);
             }
             queue.archive(active);
+            writeStatusBestEffort();
             return new ProcessOutcome(true, result.requestId());
         } catch (NpcRuntimeRequest.ValidationException exception) {
             String resultRequestId = exception.requestId().equals("<unknown>") ? active.requestId() : exception.requestId();
@@ -145,6 +207,7 @@ public final class NpcRuntimeHarnessService {
             writeResult(resultRequestId, failed);
             rememberResult(failed);
             queue.archive(active);
+            writeStatusBestEffort();
             return new ProcessOutcome(true, resultRequestId);
         } catch (Exception exception) {
             NpcRuntimeResult failed = NpcRuntimeResult.failed(
@@ -158,9 +221,11 @@ public final class NpcRuntimeHarnessService {
             writeResult(active.requestId(), failed);
             rememberResult(failed);
             queue.archive(active);
+            writeStatusBestEffort();
             return new ProcessOutcome(true, active.requestId());
         } finally {
             activeRequestId = null;
+            writeStatusBestEffort();
         }
     }
 
@@ -187,6 +252,7 @@ public final class NpcRuntimeHarnessService {
         writeResult(active.requestId(), canceled);
         rememberResult(canceled);
         queue.archive(active);
+        writeStatusBestEffort();
         return new CancelOutcome(true, active.requestId(), "canceled queued request");
     }
 
@@ -208,6 +274,107 @@ public final class NpcRuntimeHarnessService {
     private void rememberResult(@Nonnull NpcRuntimeResult result) {
         lastResultId = result.requestId();
         lastResultStatus = result.status();
+        lastResultClassification = result.classification();
+    }
+
+    @Nonnull
+    public NpcRuntimeHarnessStatus currentStatus() {
+        long queued;
+        try {
+            queued = queuedCount();
+        } catch (IOException ignored) {
+            queued = -1;
+        }
+        NpcRuntimeHarnessStatus.LastResult lastResult = lastResultId != null
+                ? new NpcRuntimeHarnessStatus.LastResult(
+                        lastResultId,
+                        lastResultStatus != null ? lastResultStatus : "unknown",
+                        lastResultClassification != null ? lastResultClassification : "unknown"
+                )
+                : null;
+        return NpcRuntimeHarnessStatus.fromService(
+                config,
+                enabled(),
+                activeRequestId,
+                queued,
+                lastResult,
+                worldSnapshotSupplier.get(),
+                Instant.now()
+        );
+    }
+
+    public void writeStatus() throws IOException {
+        statusWriter.write(currentStatus());
+        lastStatusWriteSucceeded = true;
+        lastStatusWriteError = null;
+    }
+
+    @Nonnull
+    public Path statusFile() {
+        return statusWriter.statusFile();
+    }
+
+    public boolean lastStatusWriteSucceeded() {
+        return lastStatusWriteSucceeded;
+    }
+
+    @Nullable
+    public String lastStatusWriteError() {
+        return lastStatusWriteError;
+    }
+
+    private void pollSafely() {
+        try {
+            if (enabled()) {
+                processNextQueuedRequest();
+            } else {
+                writeStatus();
+            }
+        } catch (Exception exception) {
+            rememberStatusWriteFailure(exception);
+        }
+    }
+
+    private void writeStatusBestEffort() {
+        try {
+            writeStatus();
+        } catch (Exception exception) {
+            rememberStatusWriteFailure(exception);
+        }
+    }
+
+    private void rememberStatusWriteFailure(@Nonnull Exception exception) {
+        lastStatusWriteSucceeded = false;
+        lastStatusWriteError = exception.getMessage() != null ? exception.getMessage() : exception.getClass().getSimpleName();
+    }
+
+    @Nonnull
+    private String statusWriteText() {
+        return lastStatusWriteSucceeded
+                ? "ok"
+                : "failed:" + (lastStatusWriteError != null ? lastStatusWriteError : "not-written");
+    }
+
+    @Nonnull
+    private static NpcRuntimeHarnessStatus.WorldSnapshot defaultWorldSnapshot(@Nonnull String worldId) {
+        try {
+            Universe universe = Universe.get();
+            if (universe == null) {
+                return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
+            }
+            World world = universe.getWorld(worldId);
+            if (world == null) {
+                return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
+            }
+            return new NpcRuntimeHarnessStatus.WorldSnapshot(
+                    world.isTicking() && !world.isPaused(),
+                    world.getName(),
+                    world.isTicking(),
+                    world.getPlayerCount()
+            );
+        } catch (Throwable ignored) {
+            return NpcRuntimeHarnessStatus.WorldSnapshot.notReady(worldId);
+        }
     }
 
     private void ensureTraceExists(@Nonnull NpcRuntimeRequest request, @Nonnull NpcRuntimeResult result) throws IOException {

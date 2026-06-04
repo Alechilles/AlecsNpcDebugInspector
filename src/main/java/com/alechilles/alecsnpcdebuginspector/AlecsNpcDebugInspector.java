@@ -61,7 +61,7 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
         }
         if (runtimeHarnessService != null) {
             try {
-                runtimeHarnessService.initializeDirectories();
+                runtimeHarnessService.start();
             } catch (Exception exception) {
                 getLogger().at(Level.WARNING).log("Could not initialize NPC runtime harness directories.", exception);
             }
@@ -71,6 +71,9 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
     @Override
     protected void shutdown() {
         NpcDebugHighlightManager.stopAll();
+        if (runtimeHarnessService != null) {
+            runtimeHarnessService.shutdown();
+        }
         if (snapshotService != null) {
             snapshotService.close();
         }

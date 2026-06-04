@@ -57,16 +57,18 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         if (!readiness.ready()) {
             throw new IllegalStateException("harness-world-not-ready: " + readiness.displayReason());
         }
-        ensureArenaChunkLoaded(world, request);
-        return runOnPreparedWorld(request, tracePath, world);
+        NpcRuntimeArena arena = ensureArenaChunkLoaded(world, request);
+        return runOnPreparedWorld(request, tracePath, world, arena);
     }
 
     @Nonnull
     private NpcRuntimeResult runOnPreparedWorld(@Nonnull NpcRuntimeRequest request,
                                                 @Nonnull Path tracePath,
-                                                @Nonnull World world) throws Exception {
+                                                @Nonnull World world,
+                                                @Nonnull NpcRuntimeArena arena) throws Exception {
         NpcRuntimeScenarioRun run = NpcRuntimeScenarioRun.start(request.requestId(), world.getName(), request.ticks());
         NpcRuntimeObservationCadence cadence = NpcRuntimeObservationCadence.from(request);
+        NpcRuntimeFixtureRegistry fixtureRegistry = new NpcRuntimeFixtureRegistry();
         SpawnedNpcHolder spawnedNpc = new SpawnedNpcHolder();
 
         try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(tracePath, cadence.maxTraceBytes())) {
@@ -78,22 +80,24 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             NpcRuntimeTickScheduler.RunSummary summary = tickScheduler.run(
                     run,
                     step -> executeWorldStep(world, step),
-                    tick -> runOneTick(request, world, writer, run, cadence, spawnedNpc, tick)
+                    tick -> runOneTick(request, world, writer, run, cadence, fixtureRegistry, spawnedNpc, arena, tick)
             );
 
-            boolean cleanupSucceeded = cleanupOnWorldThread(world, spawnedNpc.npc);
+            NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, fixtureRegistry, spawnedNpc.npc);
             spawnedNpc.npc = null;
-            run.markCleanup(cleanupSucceeded, cleanupSucceeded ? "removed spawned fixtures" : "cleanup failed");
+            run.markCleanup(cleanupReport.succeeded(), cleanupReport.message());
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "cleanup")
                     .with("attempted", run.cleanupAttempted())
                     .with("succeeded", run.cleanupSucceeded())
-                    .with("message", run.cleanupMessage()));
-            if (!cleanupSucceeded) {
+                    .with("message", run.cleanupMessage())
+                    .with("report", cleanupReport.toMap()));
+            if (!cleanupReport.succeeded()) {
                 writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "failed")
-                        .with("error", "cleanup failed")
+                        .with("classification", "cleanup-failed")
+                        .with("error", cleanupReport.message())
                         .with("ticksRun", summary.ticksRun()));
-                throw new IllegalStateException("NPC runtime scenario completed but cleanup failed");
+                return NpcRuntimeResult.cleanupFailed(request, summary.ticksRun(), tracePath, NpcRuntimeResult.Summary.empty(), cleanupReport);
             }
 
             if (summary.canceled()) {
@@ -106,7 +110,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         request.ticks(),
                         summary.ticksRun(),
                         summary.cancelReason() != null ? summary.cancelReason() : "canceled",
-                        NpcRuntimeResult.Cleanup.succeeded(run.cleanupMessage())
+                        NpcRuntimeResult.Cleanup.fromReport(cleanupReport)
                 );
             }
 
@@ -114,9 +118,15 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())
                     .with("mode", "tick-driven"));
-            return NpcRuntimeResult.passed(request, summary.ticksRun(), tracePath, NpcRuntimeResult.Summary.empty());
+            return NpcRuntimeResult.passed(
+                    request,
+                    summary.ticksRun(),
+                    tracePath,
+                    NpcRuntimeResult.Summary.empty(),
+                    NpcRuntimeResult.Cleanup.fromReport(cleanupReport)
+            );
         } finally {
-            cleanupOnWorldThread(world, spawnedNpc.npc);
+            cleanupOnWorldThread(world, fixtureRegistry, spawnedNpc.npc);
         }
     }
 
@@ -126,7 +136,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                                            @Nonnull NpcRuntimeTraceWriter writer,
                                                            @Nonnull NpcRuntimeScenarioRun run,
                                                            @Nonnull NpcRuntimeObservationCadence cadence,
+                                                           @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
                                                            @Nonnull SpawnedNpcHolder spawnedNpc,
+                                                           @Nonnull NpcRuntimeArena arena,
                                                            int tick) throws Exception {
         Store<EntityStore> store = world.getEntityStore().getStore();
 
@@ -136,14 +148,17 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("ticking", world.isTicking())
                     .with("paused", world.isPaused())
                     .with("playerCount", world.getPlayerCount())
-                    .with("chunkResidency", "world-config-canUnloadChunks=false; explicit chunk ticket not confirmed"));
+                    .with("chunkResidency", arena.residencyMode())
+                    .with("spawnChunkIndex", arena.spawnChunkIndex()));
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "arena-reset")
                     .with("arena", request.world().arena())
-                    .with("mode", "no-block-reset-yet"));
+                    .with("mode", "no-block-reset-yet")
+                    .with("details", arena.toMap()));
             spawnedNpc.npc = fixtureSpawner.spawnNpcUnderTest(world, request);
             if (spawnedNpc.npc.uuid() != null) {
                 run.addNpc("npcUnderTest", spawnedNpc.npc.uuid());
             }
+            fixtureRegistry.recordEntity("npcUnderTest", "npcUnderTest", spawnedNpc.npc.uuid());
             run.addFixture("npcUnderTest");
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-spawn")
                     .with("fixture", "npcUnderTest")
@@ -203,23 +218,33 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         }
     }
 
-    private boolean cleanupOnWorldThread(@Nonnull World world,
-                                         @Nullable NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc) {
+    @Nonnull
+    private NpcRuntimeCleanupReport cleanupOnWorldThread(@Nonnull World world,
+                                                         @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                                         @Nullable NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc) {
+        NpcRuntimeCleanupReport.Builder report = NpcRuntimeCleanupReport.builder();
         if (spawnedNpc == null) {
-            return true;
+            for (NpcRuntimeFixtureRegistry.FixtureRecord fixture : fixtureRegistry.fixtures()) {
+                if ("npcUnderTest".equals(fixture.fixtureId())) {
+                    report.unresolvedFixture(fixture.fixtureId());
+                }
+            }
+            return report.build();
         }
         try {
             executeWorldStep(world, () -> {
                 fixtureSpawner.cleanup(world.getEntityStore().getStore(), spawnedNpc);
                 return NpcRuntimeTickScheduler.TickOutcome.continueRunning();
             });
-            return true;
+            report.entityRemoval(true);
         } catch (Exception exception) {
-            return false;
+            report.entityRemoval(false);
         }
+        return report.build();
     }
 
-    private void ensureArenaChunkLoaded(@Nonnull World world, @Nonnull NpcRuntimeRequest request) throws Exception {
+    @Nonnull
+    private NpcRuntimeArena ensureArenaChunkLoaded(@Nonnull World world, @Nonnull NpcRuntimeRequest request) throws Exception {
         long chunkIndex = ChunkUtil.indexChunkFromBlock(
                 coordinate(request.fixtures().npc().position(), 0, "fixtures.npc.position"),
                 coordinate(request.fixtures().npc().position(), 2, "fixtures.npc.position")
@@ -236,6 +261,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         if (world.getChunkIfLoaded(chunkIndex) == null && world.getChunkIfNonTicking(chunkIndex) == null && world.getChunkIfInMemory(chunkIndex) == null) {
             throw new IllegalStateException("harness-arena-chunk-not-ready: chunk " + chunkIndex + " is not resident after load");
         }
+        return NpcRuntimeArena.defaultArena(world.getName(), request.world().arena(), chunkIndex);
     }
 
     private double coordinate(@Nonnull java.util.List<Object> values, int index, @Nonnull String fieldName) {

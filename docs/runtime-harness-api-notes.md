@@ -157,6 +157,19 @@ Current runtime guardrails for `npc_runtime_test_flatworld`:
 - `WorldConfig.setIsAllNPCFrozen(false)`
 - `WorldConfig.markChanged()` after preparing an existing world
 - The harness does not force weather by default. Earlier builds wrote `ForcedWeather: "clear"`, but `clear` is not a valid Weather asset id in the current runtime asset set; startup repairs that stale value out of the dedicated flatworld config before loading it.
+- Before spawning the NPC under test, the live runner computes the spawn chunk with `ChunkUtil.indexChunkFromBlock(...)`, calls `World.getChunkAsync(chunkIndex)`, and verifies the chunk is loaded, non-ticking, or in memory. This is the currently confirmed residency mechanism used by no-login smoke runs.
+
+### Arena, Fixture Ownership, and Cleanup
+
+Main endgame Phase 3 adds first-class arena and cleanup evidence for the default runtime arena:
+
+- `NpcRuntimeArena` records the world id, arena id, spawn chunk index, and residency mode.
+- `NpcRuntimeFixtureRegistry` records harness-owned fixture ids in deterministic order and rejects duplicate fixture ids before cleanup can become ambiguous.
+- `NpcRuntimeCleanupReport` records entity removal attempts/successes/failures, block reset attempts/successes/failures, unresolved fixture ids, and overall success.
+
+Cleanup evidence is embedded under `result.cleanup.report` while preserving the older `cleanup.attempted`, `cleanup.succeeded`, and `cleanup.message` fields. If behavior completes but cleanup fails, the harness returns a failed result with classification `cleanup-failed` instead of a generic runtime error.
+
+Current block reset status: the default smoke arena does not mutate blocks yet, so block reset counts are expected to remain zero. Future fixture phases should register every block mutation before applying it and increment the same cleanup report during reset.
 
 ### World Ticking, Chunks, and Entities
 

@@ -32,6 +32,15 @@ public record NpcRuntimeResult(
                                           int ticksRun,
                                           @Nonnull Path tracePath,
                                           @Nonnull Summary summary) {
+        return passed(request, ticksRun, tracePath, summary, Cleanup.succeeded("completed"));
+    }
+
+    @Nonnull
+    public static NpcRuntimeResult passed(@Nonnull NpcRuntimeRequest request,
+                                          int ticksRun,
+                                          @Nonnull Path tracePath,
+                                          @Nonnull Summary summary,
+                                          @Nonnull Cleanup cleanup) {
         Instant now = Instant.now();
         return new NpcRuntimeResult(
                 "passed",
@@ -44,7 +53,31 @@ public record NpcRuntimeResult(
                 now,
                 now,
                 List.of(),
-                Cleanup.succeeded("completed"),
+                cleanup,
+                Artifacts.withTrace(tracePath),
+                summary
+        );
+    }
+
+    @Nonnull
+    public static NpcRuntimeResult cleanupFailed(@Nonnull NpcRuntimeRequest request,
+                                                 int ticksRun,
+                                                 @Nonnull Path tracePath,
+                                                 @Nonnull Summary summary,
+                                                 @Nonnull NpcRuntimeCleanupReport cleanupReport) {
+        Instant now = Instant.now();
+        return new NpcRuntimeResult(
+                "failed",
+                "cleanup-failed",
+                request.requestId(),
+                request.ticks(),
+                ticksRun,
+                tracePath.toString(),
+                new ErrorInfo("cleanup", cleanupReport.message(), null),
+                now,
+                now,
+                List.of(),
+                Cleanup.fromReport(cleanupReport),
                 Artifacts.withTrace(tracePath),
                 summary
         );
@@ -97,7 +130,7 @@ public record NpcRuntimeResult(
                 now,
                 now,
                 List.of(),
-                new Cleanup(true, true, "archived stale active request during " + trigger),
+                new Cleanup(true, true, "archived stale active request during " + trigger, null),
                 Artifacts.empty(),
                 Summary.empty()
         );
@@ -169,15 +202,23 @@ public record NpcRuntimeResult(
         }
     }
 
-    public record Cleanup(boolean attempted, boolean succeeded, @Nonnull String message) {
+    public record Cleanup(boolean attempted,
+                          boolean succeeded,
+                          @Nonnull String message,
+                          @Nullable NpcRuntimeCleanupReport report) {
         @Nonnull
         static Cleanup succeeded(@Nonnull String message) {
-            return new Cleanup(true, true, message);
+            return new Cleanup(true, true, message, null);
         }
 
         @Nonnull
         static Cleanup notStarted() {
-            return new Cleanup(false, true, "not started");
+            return new Cleanup(false, true, "not started", null);
+        }
+
+        @Nonnull
+        static Cleanup fromReport(@Nonnull NpcRuntimeCleanupReport report) {
+            return new Cleanup(true, report.succeeded(), report.message(), report);
         }
 
         @Nonnull
@@ -186,6 +227,9 @@ public record NpcRuntimeResult(
             map.put("attempted", attempted);
             map.put("succeeded", succeeded);
             map.put("message", message);
+            if (report != null) {
+                map.put("report", report.toMap());
+            }
             return map;
         }
     }

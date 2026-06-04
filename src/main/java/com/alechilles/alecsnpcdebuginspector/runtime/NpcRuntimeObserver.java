@@ -13,6 +13,8 @@ import javax.annotation.Nullable;
  * Emits structured runtime observation records from inspector snapshots.
  */
 public final class NpcRuntimeObserver {
+    private final NpcRuntimeSensorObserver sensorObserver = new NpcRuntimeSensorObserver();
+
     @Nonnull
     public NpcRuntimeObservedNpc observe(@Nullable UUID npcUuid, @Nonnull NpcDebugSnapshot snapshot) {
         return NpcRuntimeObservedNpc.fromSnapshot(npcUuid, snapshot);
@@ -34,6 +36,7 @@ public final class NpcRuntimeObserver {
         addSection(records, requestId, tick, "flags", current.section("Flags"));
         addSection(records, requestId, tick, "components", current.section("Components"));
         addSection(records, requestId, tick, "flock", current.section("Flock"));
+        records.addAll(sensorObserver.traceRecords(requestId, tick, current));
         Map<String, Object> tamework = current.tameworkMap();
         if (!tamework.isEmpty()) {
             records.add(record(requestId, tick, "tamework", tamework));

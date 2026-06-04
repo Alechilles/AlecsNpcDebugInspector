@@ -204,6 +204,17 @@ Main endgame Phase 5 keeps the existing human-readable `npc-snapshot` trace reco
 
 The structured records are intended for Python-side comparison and triage. Consumers should prefer these records over scraping `npc-snapshot.details`; the text snapshot remains for interactive inspector users and artifact bundles.
 
+### Sensor Evidence Records
+
+Main endgame Phase 6 begins live sensor evidence with explicit `sensor-evidence` trace records derived from normalized targeting, timer, alarm, and flag observations:
+
+- Target slot evidence records `sensorType=TargetSlot`, `sensorId`, `targetSlot`, `matchResult`, and the observed target label.
+- Sensor scope evidence records the observed sensor scope key count.
+- Timer, alarm, and flag evidence records boolean observed values as `matched` or `not-matched`.
+- Fields the current inspector cannot observe directly, such as exact distance, visibility, tags, faction checks, configured thresholds, and cooldown gates, are listed in `unsupportedFields` on the evidence record.
+
+These records make current live evidence machine-readable without pretending that all sensor internals are available yet.
+
 ### World Ticking, Chunks, and Entities
 
 `com.hypixel.hytale.server.core.universe.world.World`

@@ -23,6 +23,7 @@ class NpcRuntimeObserverTest {
         assertTrue(records.stream().anyMatch(record -> "components".equals(record.fields().get("kind"))));
         assertTrue(records.stream().anyMatch(record -> "flock".equals(record.fields().get("kind"))));
         assertTrue(records.stream().anyMatch(record -> "tamework".equals(record.fields().get("kind"))));
+        assertTrue(records.stream().anyMatch(record -> "sensor-evidence".equals(record.fields().get("kind"))));
         assertEquals("Idle", observed.section("AI").get("state"));
         assertEquals("false", observed.section("Pathing").get("followingPath"));
     }

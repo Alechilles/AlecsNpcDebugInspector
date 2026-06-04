@@ -46,7 +46,9 @@ public final class NpcRuntimeTameworkFixtureMutator {
             records.add(record(requestId, tick, spawned.fixtureId(), "owner", mutation.owner(),
                     bridge.setOwner(store, spawned, mutation.owner())));
         }
-        for (Map.Entry<String, Object> need : mutation.needs().entrySet()) {
+        for (Map.Entry<String, Object> need : mutation.needs().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList()) {
             String key = need.getKey();
             Object value = need.getValue();
             if (value instanceof Number number) {

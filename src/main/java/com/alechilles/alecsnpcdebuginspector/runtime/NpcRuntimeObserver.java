@@ -16,6 +16,7 @@ public final class NpcRuntimeObserver {
     private final NpcRuntimeSensorObserver sensorObserver = new NpcRuntimeSensorObserver();
     private final NpcRuntimeActionObserver actionObserver = new NpcRuntimeActionObserver();
     private final NpcRuntimeTameworkObserver tameworkObserver = new NpcRuntimeTameworkObserver();
+    private final NpcRuntimeEngineHookObserver engineHookObserver = new NpcRuntimeEngineHookObserver();
 
     @Nonnull
     public NpcRuntimeObservedNpc observe(@Nullable UUID npcUuid, @Nonnull NpcDebugSnapshot snapshot) {
@@ -27,6 +28,23 @@ public final class NpcRuntimeObserver {
                                                     int tick,
                                                     @Nonnull NpcRuntimeObservedNpc current,
                                                     @Nullable NpcRuntimeObservedNpc previous) {
+        return traceRecords(
+                requestId,
+                tick,
+                current,
+                previous,
+                new NpcRuntimeRequest.EngineHooksSpec(false, false, false, false),
+                current.npcUuid() != null ? current.npcUuid().toString() : "npc_under_test"
+        );
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull NpcRuntimeObservedNpc current,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull NpcRuntimeRequest.EngineHooksSpec engineHooks,
+                                                    @Nonnull String npcId) {
         ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
         records.add(record(requestId, tick, "npc-state", current.stateMap()));
         addSection(records, requestId, tick, "targeting", current.section("Targeting / Sensors"));
@@ -45,6 +63,7 @@ public final class NpcRuntimeObserver {
             records.add(record(requestId, tick, "tamework", tamework));
             records.addAll(tameworkObserver.traceRecords(requestId, tick, tamework));
         }
+        records.addAll(engineHookObserver.traceRecords(requestId, tick, npcId, current, previous, engineHooks));
 
         NpcRuntimeObservationDiff diff = NpcRuntimeObservationDiff.between(previous, current);
         if (diff.changed()) {

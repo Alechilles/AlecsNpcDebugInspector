@@ -222,7 +222,14 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("subtitle", snapshot.subtitle())
                     .with("details", snapshot.details()));
             NpcRuntimeObservedNpc observed = observer.observe(npcUnderTest.uuid(), snapshot);
-            for (NpcRuntimeTraceRecord record : observer.traceRecords(request.requestId(), tick, observed, spawnedFixtures.previousObserved)) {
+            for (NpcRuntimeTraceRecord record : observer.traceRecords(
+                    request.requestId(),
+                    tick,
+                    observed,
+                    spawnedFixtures.previousObserved,
+                    request.engineHooks(),
+                    npcUnderTest.fixtureId()
+            )) {
                 writer.write(record);
                 if (isAssertionEvidence(record)) {
                     spawnedFixtures.evidenceRecords.add(record.fields());
@@ -337,7 +344,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 || "action-evidence".equals(kind)
                 || "combat-evaluator-evidence".equals(kind)
                 || "tamework-evidence".equals(kind)
-                || "tamework-fixture-mutation".equals(kind);
+                || "tamework-fixture-mutation".equals(kind)
+                || "target-selection-evidence".equals(kind)
+                || "pathing-evidence".equals(kind)
+                || "combat-eligibility-evidence".equals(kind)
+                || "instruction-lifecycle-evidence".equals(kind);
     }
 
     private static final class SpawnedFixtureHolder {

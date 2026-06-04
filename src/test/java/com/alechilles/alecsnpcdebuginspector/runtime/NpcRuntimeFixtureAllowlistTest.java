@@ -51,7 +51,7 @@ class NpcRuntimeFixtureAllowlistTest {
                                   "ticks": 3,
                                   "fixtures": {
                                     "list": [
-                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
                                       {"fixtureId": "block.cover", "kind": "block", "position": [1, 64, 0], "blockId": "Stone"}
                                     ]
                                   }
@@ -85,7 +85,7 @@ class NpcRuntimeFixtureAllowlistTest {
                                   "ticks": 3,
                                   "fixtures": {
                                     "list": [
-                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
                                       {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "hytale:apple"}
                                     ]
                                   }
@@ -117,9 +117,9 @@ class NpcRuntimeFixtureAllowlistTest {
                           "ticks": 120,
                           "fixtures": {
                             "list": [
-                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
-                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "position": [3, 64, 0], "targetSlot": "Enemy"},
-                              {"fixtureId": "flock.follower_one", "kind": "flockMember", "position": [-2, 64, 0], "leaderFixtureId": "npcUnderTest"},
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "position": [3, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "targetSlot": "Enemy"},
+                              {"fixtureId": "flock.follower_one", "kind": "flockMember", "position": [-2, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "leaderFixtureId": "npcUnderTest"},
                               {"fixtureId": "message.threat", "kind": "message", "messageType": "threat.broadcast", "senderFixtureId": "npcUnderTest", "receiverFixtureId": "flock.follower_one", "targetFixtureId": "target.Enemy"},
                               {"fixtureId": "beacon.threat", "kind": "beacon", "beaconType": "threat", "sourceFixtureId": "npcUnderTest", "targetFixtureId": "target.Enemy", "requiredConsumerFixtureIds": ["flock.follower_one"]}
                             ]
@@ -148,7 +148,7 @@ class NpcRuntimeFixtureAllowlistTest {
                           "ticks": 120,
                           "fixtures": {
                             "list": [
-                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
                               {"fixtureId": "playerAnchor", "kind": "playerAnchor", "position": [2, 64, 0], "tags": ["owner", "nearby"]}
                             ]
                           }
@@ -179,7 +179,7 @@ class NpcRuntimeFixtureAllowlistTest {
                                   "ticks": 120,
                                   "fixtures": {
                                     "list": [
-                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
                                       {"fixtureId": "message.threat", "kind": "message", "messageType": "threat.broadcast", "senderFixtureId": "npcUnderTest", "receiverFixtureId": "flock.missing"},
                                       {"fixtureId": "beacon.threat", "kind": "beacon", "beaconType": "threat", "sourceFixtureId": "npcUnderTest", "requiredConsumerFixtureIds": ["flock.missing"]}
                                     ]
@@ -211,8 +211,8 @@ class NpcRuntimeFixtureAllowlistTest {
                                   "ticks": 3,
                                   "fixtures": {
                                     "list": [
-                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
-                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [1, 64, 0]}
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [1, 64, 0], "roleId": "Mob_Tamework_Example_Simple"}
                                     ]
                                   }
                                 }

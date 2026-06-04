@@ -545,9 +545,10 @@ public record NpcRuntimeRequest(
                     .toList();
             List<NpcRuntimeFixtureSpec> specs = new ArrayList<>();
             if (data.containsKey("list")) {
-                specs.addAll(objectList(data.get("list"), requestId).stream()
-                        .map(item -> NpcRuntimeFixtureSpec.fromMap(item, requestId, "fixtures.list[]", defaultRoleId))
-                        .toList());
+                List<Map<String, Object>> fixtureItems = objectList(data.get("list"), requestId);
+                for (int i = 0; i < fixtureItems.size(); i++) {
+                    specs.add(NpcRuntimeFixtureSpec.fromMap(fixtureItems.get(i), requestId, "fixtures.list[" + i + "]", defaultRoleId));
+                }
             } else {
                 specs.add(NpcRuntimeFixtureSpec.npcUnderTest(npc, defaultRoleId));
                 for (TargetFixture target : targets) {

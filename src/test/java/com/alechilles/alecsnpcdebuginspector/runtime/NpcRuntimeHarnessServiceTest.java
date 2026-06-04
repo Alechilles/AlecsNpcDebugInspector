@@ -123,7 +123,7 @@ class NpcRuntimeHarnessServiceTest {
                           "ticks": 1,
                           "fixtures": {
                             "list": [
-                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Role"},
                               {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "Apple"}
                             ]
                           }

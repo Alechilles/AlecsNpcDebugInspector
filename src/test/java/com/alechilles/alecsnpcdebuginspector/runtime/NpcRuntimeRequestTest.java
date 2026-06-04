@@ -159,6 +159,7 @@ class NpcRuntimeRequestTest {
                       {
                         "fixtureId": "npc_under_test",
                         "kind": "npcUnderTest",
+                        "roleId": "Default",
                         "asset": "AlecNpcTest:Boar",
                         "tamework": {
                           "tamed": true,
@@ -270,6 +271,134 @@ class NpcRuntimeRequestTest {
         );
         assertEquals("invalid-request", exception.classification());
         assertEquals("environment.weather must be a safe asset id or keyword", exception.getMessage());
+    }
+
+    @Test
+    void rejectsDuplicateFixtureIdsWithExactPath() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "duplicate_fixture",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[2].fixtureId", exception.unsupported().getFirst().path());
+        assertEquals("duplicate fixture id: target.Enemy", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsMissingRoleIdOnExplicitEntityLikeFixtures() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "missing_fixture_role",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "npc.helper", "kind": "npc"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].roleId", exception.unsupported().getFirst().path());
+        assertEquals("entity-like fixtures require a roleId", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsUnsupportedFixtureFieldsWithIndexedPath() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "unsupported_fixture_field",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "brainOverride": "Aggressive"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].brainOverride", exception.unsupported().getFirst().path());
+        assertEquals("field is not supported by the fixture schema", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsItemAndBlockFixtureWorldMutationsWithExactPaths() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "unsupported_item_block",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "item.food", "kind": "item", "itemId": "hytale:apple"},
+                              {"fixtureId": "block.wall", "kind": "block", "blockId": "hytale:stone"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
+        assertEquals("item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed", exception.unsupported().getFirst().reason());
+        assertEquals("fixtures.list[2].kind", exception.unsupported().get(1).path());
+        assertEquals("block fixture placement is not implemented; safe block placement/reset API is unconfirmed", exception.unsupported().get(1).reason());
     }
 
     @Test

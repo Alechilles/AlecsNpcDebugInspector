@@ -10,6 +10,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeFixtureSpecTest {
     @Test
+    void parsesEverySupportedFixtureKind() {
+        Map<String, NpcRuntimeFixtureKind> cases = Map.ofEntries(
+                Map.entry("npcUnderTest", NpcRuntimeFixtureKind.NPC_UNDER_TEST),
+                Map.entry("targetDummy", NpcRuntimeFixtureKind.TARGET_DUMMY),
+                Map.entry("npc", NpcRuntimeFixtureKind.NPC),
+                Map.entry("mob", NpcRuntimeFixtureKind.MOB),
+                Map.entry("familyMember", NpcRuntimeFixtureKind.FAMILY_MEMBER),
+                Map.entry("flockMember", NpcRuntimeFixtureKind.FLOCK_MEMBER),
+                Map.entry("playerAnchor", NpcRuntimeFixtureKind.PLAYER_ANCHOR),
+                Map.entry("item", NpcRuntimeFixtureKind.ITEM),
+                Map.entry("block", NpcRuntimeFixtureKind.BLOCK),
+                Map.entry("beacon", NpcRuntimeFixtureKind.BEACON)
+        );
+
+        for (Map.Entry<String, NpcRuntimeFixtureKind> entry : cases.entrySet()) {
+            NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                    Map.of(
+                            "fixtureId", entry.getKey().equals("npcUnderTest") ? "npcUnderTest" : entry.getKey() + ".fixture",
+                            "kind", entry.getKey(),
+                            "roleId", "Role"
+                    ),
+                    "all_kinds",
+                    "fixtures.list[0]",
+                    "FallbackRole"
+            );
+
+            assertEquals(entry.getValue(), spec.kind());
+        }
+    }
+
+    @Test
     void parsesRichNpcBackedFixtureFields() {
         NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
                 Map.ofEntries(

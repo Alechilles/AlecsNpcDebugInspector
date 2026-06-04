@@ -166,9 +166,6 @@ public record NpcRuntimeFixtureSpec(
         validateFixtureId(resolvedFixtureId, requestId, path + ".fixtureId");
 
         String roleId = stringOrNull(data.get("roleId"));
-        if (roleId == null && kind.entityLike()) {
-            roleId = defaultRoleId;
-        }
 
         return new NpcRuntimeFixtureSpec(
                 resolvedFixtureId,

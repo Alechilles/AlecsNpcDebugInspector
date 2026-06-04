@@ -215,6 +215,19 @@ Main endgame Phase 6 begins live sensor evidence with explicit `sensor-evidence`
 
 These records make current live evidence machine-readable without pretending that all sensor internals are available yet.
 
+Runtime requests may include sensor assertions under `assertions`. Supported assertion fields are:
+
+- `assertionId`
+- `kind: "sensor"`
+- `sensorType`
+- `sensorId`
+- `expectedMatchResult`
+- `expectedTargetFixtureId`
+- `expectedDistanceBand`
+- `expectUnsupported`
+
+Assertions are evaluated after cleanup succeeds. Passing assertions keep the result `passed`; failed assertions return `status=failed` with classification `assertion-failed`; assertions that cannot find matching live evidence return classification `assertion-unknown`. All assertion outcomes are serialized under `result.summary.assertions` and emitted as an `assertions` trace record.
+
 ### World Ticking, Chunks, and Entities
 
 `com.hypixel.hytale.server.core.universe.world.World`

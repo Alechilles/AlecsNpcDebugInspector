@@ -92,22 +92,18 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
-    void rejectsUnsupportedFutureFacingSectionsWithMachineReadableDetails() {
+    void parsesSensorAssertionsForRuntimeEvaluation() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
-        NpcRuntimeRequest.ValidationException exception = assertThrows(
-                NpcRuntimeRequest.ValidationException.class,
-                () -> NpcRuntimeRequest.parse(
-                        "{\"version\":1,\"requestId\":\"unsupported\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
-                                + "\"assertions\":[{\"kind\":\"sensor\",\"sensorId\":\"EnemyNearby\"}]}",
-                        config
-                )
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"assert_sensor\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"assertions\":[{\"kind\":\"sensor\",\"sensorType\":\"TargetSlot\",\"sensorId\":\"targetEnemy\","
+                        + "\"expectedMatchResult\":\"matched\",\"expectUnsupported\":false}]}",
+                config
         );
 
-        assertEquals("unsupported-request", exception.classification());
-        assertEquals("unsupported", exception.requestId());
-        assertEquals("assertions[0]", exception.unsupported().getFirst().path());
-        assertEquals("assertions are not supported by the current runtime contract", exception.unsupported().getFirst().reason());
+        assertEquals(1, request.assertions().size());
+        assertEquals("TargetSlot", request.assertions().getFirst().fields().get("sensorType"));
     }
 
     @Test

@@ -84,6 +84,32 @@ public record NpcRuntimeResult(
     }
 
     @Nonnull
+    public static NpcRuntimeResult assertionFailed(@Nonnull NpcRuntimeRequest request,
+                                                   int ticksRun,
+                                                   @Nonnull Path tracePath,
+                                                   @Nonnull Summary summary,
+                                                   @Nonnull Cleanup cleanup,
+                                                   @Nonnull String classification,
+                                                   @Nonnull String message) {
+        Instant now = Instant.now();
+        return new NpcRuntimeResult(
+                "failed",
+                classification,
+                request.requestId(),
+                request.ticks(),
+                ticksRun,
+                tracePath.toString(),
+                new ErrorInfo("assertions", message, null),
+                now,
+                now,
+                List.of(),
+                cleanup,
+                Artifacts.withTrace(tracePath),
+                summary
+        );
+    }
+
+    @Nonnull
     public static NpcRuntimeResult failed(@Nonnull String requestId, @Nonnull String error) {
         return failed(requestId, "runtime-error", 0, "run", error, List.of());
     }
@@ -264,6 +290,7 @@ public record NpcRuntimeResult(
         private final List<String> combatAbilitiesSeen = new ArrayList<>();
         private final List<String> timersSeen = new ArrayList<>();
         private final List<String> alarmsSeen = new ArrayList<>();
+        private final List<NpcRuntimeAssertionResult> assertionResults = new ArrayList<>();
 
         private Summary() {
         }
@@ -280,6 +307,21 @@ public record NpcRuntimeResult(
         }
 
         @Nonnull
+        public Summary withAssertions(@Nonnull List<NpcRuntimeAssertionResult> results) {
+            assertionResults.clear();
+            assertionResults.addAll(results);
+            return this;
+        }
+
+        public boolean hasAssertionFailures() {
+            return assertionResults.stream().anyMatch(result -> "failed".equals(result.status()));
+        }
+
+        public boolean hasAssertionUnknowns() {
+            return assertionResults.stream().anyMatch(result -> "unknown".equals(result.status()));
+        }
+
+        @Nonnull
         public Map<String, Object> toMap() {
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
             map.put("statesSeen", List.copyOf(statesSeen));
@@ -287,6 +329,7 @@ public record NpcRuntimeResult(
             map.put("combatAbilitiesSeen", List.copyOf(combatAbilitiesSeen));
             map.put("timersSeen", List.copyOf(timersSeen));
             map.put("alarmsSeen", List.copyOf(alarmsSeen));
+            map.put("assertions", assertionResults.stream().map(NpcRuntimeAssertionResult::toMap).toList());
             return map;
         }
 

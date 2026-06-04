@@ -119,6 +119,31 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             }
 
+            List<NpcRuntimeAssertionResult> assertionResults = NpcRuntimeAssertion.fromSpecs(request.assertions()).stream()
+                    .map(assertion -> assertion.evaluate(spawnedFixtures.sensorEvidence))
+                    .toList();
+            NpcRuntimeResult.Summary resultSummary = NpcRuntimeResult.Summary.empty().withAssertions(assertionResults);
+            if (!assertionResults.isEmpty()) {
+                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "assertions")
+                        .with("results", assertionResults.stream().map(NpcRuntimeAssertionResult::toMap).toList()));
+            }
+            if (resultSummary.hasAssertionFailures() || resultSummary.hasAssertionUnknowns()) {
+                String classification = resultSummary.hasAssertionFailures() ? "assertion-failed" : "assertion-unknown";
+                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
+                        .with("status", "failed")
+                        .with("classification", classification)
+                        .with("ticksRun", summary.ticksRun()));
+                return NpcRuntimeResult.assertionFailed(
+                        request,
+                        summary.ticksRun(),
+                        tracePath,
+                        resultSummary,
+                        NpcRuntimeResult.Cleanup.fromReport(cleanupReport),
+                        classification,
+                        "runtime assertions did not all pass"
+                );
+            }
+
             writer.write(NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())
@@ -127,7 +152,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     request,
                     summary.ticksRun(),
                     tracePath,
-                    NpcRuntimeResult.Summary.empty(),
+                    resultSummary,
                     NpcRuntimeResult.Cleanup.fromReport(cleanupReport)
             );
         } finally {
@@ -192,6 +217,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             NpcRuntimeObservedNpc observed = observer.observe(npcUnderTest.uuid(), snapshot);
             for (NpcRuntimeTraceRecord record : observer.traceRecords(request.requestId(), tick, observed, spawnedFixtures.previousObserved)) {
                 writer.write(record);
+                if ("sensor-evidence".equals(record.fields().get("kind"))) {
+                    spawnedFixtures.sensorEvidence.add(record.fields());
+                }
             }
             spawnedFixtures.previousObserved = observed;
         }
@@ -298,6 +326,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
+        private final List<java.util.Map<String, Object>> sensorEvidence = new ArrayList<>();
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

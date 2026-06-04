@@ -66,16 +66,6 @@ public record NpcRuntimeRequest(
         NpcRuntimeFixtureAllowlist.defaults().validate(fixtures.list(), requestId);
         RecordSpec record = RecordSpec.from(asMap(data.get("record"), requestId), requestId);
         List<AssertionSpec> assertions = assertions(data.get("assertions"), requestId);
-        if (!assertions.isEmpty()) {
-            List<UnsupportedField> unsupported = new ArrayList<>();
-            for (int i = 0; i < assertions.size(); i++) {
-                unsupported.add(new UnsupportedField(
-                        "assertions[" + i + "]",
-                        "assertions are not supported by the current runtime contract"
-                ));
-            }
-            throw unsupported(requestId, "request contains unsupported assertion sections", unsupported);
-        }
 
         return new NpcRuntimeRequest(
                 version,

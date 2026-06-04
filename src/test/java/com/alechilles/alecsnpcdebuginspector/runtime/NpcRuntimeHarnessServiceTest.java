@@ -78,24 +78,31 @@ class NpcRuntimeHarnessServiceTest {
     }
 
     @Test
-    void unsupportedRequestWritesUnsupportedDetails() throws Exception {
+    void sensorAssertionRequestReachesRunner() throws Exception {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
-        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {
+            assertEquals(1, request.assertions().size());
+            return NpcRuntimeResult.passed(
+                    request,
+                    0,
+                    config.paths().traces().resolve(request.requestId() + ".trace.jsonl"),
+                    NpcRuntimeResult.Summary.empty()
+            );
+        });
         service.initializeDirectories();
         Files.writeString(
-                config.paths().requests().resolve("unsupported.request.json"),
-                "{\"version\":1,\"requestId\":\"unsupported\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
-                        + "\"assertions\":[{\"kind\":\"sensor\"}]}"
+                config.paths().requests().resolve("assert_sensor.request.json"),
+                "{\"version\":1,\"requestId\":\"assert_sensor\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"assertions\":[{\"kind\":\"sensor\",\"sensorType\":\"TargetSlot\",\"expectedMatchResult\":\"matched\"}]}"
         );
 
         NpcRuntimeHarnessService.ProcessOutcome outcome = service.processNextQueuedRequest();
 
         assertTrue(outcome.processed());
-        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("unsupported.result.json")));
-        assertEquals("failed", result.get("status"));
-        assertEquals("unsupported-request", result.get("classification"));
-        assertTrue(result.get("unsupported").toString().contains("assertions[0]"));
-        assertTrue(Files.exists(config.paths().archive().resolve("unsupported.request.json")));
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("assert_sensor.result.json")));
+        assertEquals("passed", result.get("status"));
+        assertEquals("passed", result.get("classification"));
+        assertTrue(Files.exists(config.paths().archive().resolve("assert_sensor.request.json")));
     }
 
     @Test

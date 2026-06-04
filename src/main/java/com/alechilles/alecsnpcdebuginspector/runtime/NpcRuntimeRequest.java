@@ -20,6 +20,7 @@ public record NpcRuntimeRequest(
         @Nonnull String roleId,
         int ticks,
         @Nullable Long seed,
+        @Nonnull TimingSpec timing,
         @Nonnull WorldSpec world,
         @Nonnull EnvironmentSpec environment,
         @Nonnull Fixtures fixtures,
@@ -42,7 +43,7 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "environment", "fixtures", "engineHooks", "record", "assertions", "limits"),
+                        "timing", "environment", "fixtures", "engineHooks", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -59,6 +60,7 @@ public record NpcRuntimeRequest(
         String roleId = requiredString(data, "roleId", requestId);
         int ticks = clampTicks(config, intValue(data.get("ticks"), 1, requestId), requestId);
         Long seed = longOrNull(data.get("seed"), requestId);
+        TimingSpec timing = TimingSpec.from(asMap(data.get("timing"), requestId), ticks, requestId);
         ScenarioSpec scenario = ScenarioSpec.from(asMap(data.get("scenario"), requestId), requestId);
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
         EnvironmentSpec environment = EnvironmentSpec.from(asMap(data.get("environment"), requestId), requestId);
@@ -68,7 +70,7 @@ public record NpcRuntimeRequest(
         validateEntityCount(config, fixtures.entityCount(), limits.maxEntities(), requestId);
         NpcRuntimeFixtureAllowlist.defaults().validate(fixtures.list(), requestId);
         RecordSpec record = RecordSpec.from(asMap(data.get("record"), requestId), requestId);
-        List<AssertionSpec> assertions = assertions(data.get("assertions"), requestId);
+        List<AssertionSpec> assertions = assertions(data.get("assertions"), requestId, timing.warmupTicks(), ticks);
 
         return new NpcRuntimeRequest(
                 version,
@@ -78,6 +80,7 @@ public record NpcRuntimeRequest(
                 roleId,
                 ticks,
                 seed,
+                timing,
                 world,
                 environment,
                 fixtures,
@@ -105,6 +108,7 @@ public record NpcRuntimeRequest(
         if (seed != null) {
             map.put("seed", seed);
         }
+        map.put("timing", timing.toMap());
         map.put("world", world.toMap());
         map.put("environment", environment.toMap());
         map.put("fixtures", fixtures.toMap());
@@ -221,9 +225,12 @@ public record NpcRuntimeRequest(
     }
 
     @Nonnull
-    private static List<AssertionSpec> assertions(@Nullable Object value, @Nonnull String requestId) {
+    private static List<AssertionSpec> assertions(@Nullable Object value,
+                                                  @Nonnull String requestId,
+                                                  int defaultStartTick,
+                                                  int defaultEndTick) {
         return objectList(value, requestId).stream()
-                .map(AssertionSpec::from)
+                .map(item -> AssertionSpec.from(item, defaultStartTick, defaultEndTick, requestId))
                 .toList();
     }
 
@@ -405,6 +412,29 @@ public record NpcRuntimeRequest(
         }
     }
 
+    public record TimingSpec(int warmupTicks, boolean stopWhenAssertionsResolved) {
+        @Nonnull
+        static TimingSpec from(@Nonnull Map<String, Object> data, int ticks, @Nonnull String requestId) {
+            rejectUnsupportedKeys(data, "timing", List.of("warmupTicks", "stopWhenAssertionsResolved"), requestId);
+            int warmupTicks = Math.max(0, intValue(data.get("warmupTicks"), 0, requestId));
+            if (warmupTicks > ticks) {
+                throw invalid(requestId, "timing.warmupTicks must not exceed ticks");
+            }
+            return new TimingSpec(
+                    warmupTicks,
+                    boolValue(data.get("stopWhenAssertionsResolved"), false, requestId)
+            );
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("warmupTicks", warmupTicks);
+            map.put("stopWhenAssertionsResolved", stopWhenAssertionsResolved);
+            return map;
+        }
+    }
+
     public record Fixtures(@Nonnull NpcFixture npc,
                            @Nonnull List<TargetFixture> targets,
                            @Nonnull List<NpcRuntimeFixtureSpec> list) {
@@ -531,11 +561,19 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record RecordSpec(int everyTicks, boolean includeSnapshots, boolean includeEvents) {
+    public record RecordSpec(@Nonnull String profile, int everyTicks, boolean includeSnapshots, boolean includeEvents) {
         @Nonnull
         static RecordSpec from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
-            rejectUnsupportedKeys(data, "record", List.of("everyTicks", "includeSnapshots", "includeEvents"), requestId);
+            rejectUnsupportedKeys(data, "record", List.of("profile", "everyTicks", "includeSnapshots", "includeEvents"), requestId);
+            String profile = stringOrNull(data.get("profile"));
+            if (profile == null) {
+                profile = "full";
+            }
+            if (!List.of("full", "standard", "minimal").contains(profile)) {
+                throw invalid(requestId, "unsupported record profile " + profile);
+            }
             return new RecordSpec(
+                    profile,
                     Math.max(1, intValue(data.get("everyTicks"), 1, requestId)),
                     boolValue(data.get("includeSnapshots"), true, requestId),
                     boolValue(data.get("includeEvents"), true, requestId)
@@ -545,6 +583,7 @@ public record NpcRuntimeRequest(
         @Nonnull
         Map<String, Object> toMap() {
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("profile", profile);
             map.put("everyTicks", everyTicks);
             map.put("includeSnapshots", includeSnapshots);
             map.put("includeEvents", includeEvents);
@@ -602,15 +641,60 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record AssertionSpec(@Nonnull Map<String, Object> fields) {
+    public record AssertionSpec(@Nonnull Map<String, Object> fields, @Nonnull AssertionWindowSpec window) {
+        public AssertionSpec(@Nonnull Map<String, Object> fields) {
+            this(fields, AssertionWindowSpec.from(Map.of(), 0, Integer.MAX_VALUE, "<direct>"));
+        }
+
         @Nonnull
-        static AssertionSpec from(@Nonnull Map<String, Object> data) {
-            return new AssertionSpec(new LinkedHashMap<>(data));
+        static AssertionSpec from(@Nonnull Map<String, Object> data,
+                                  int defaultStartTick,
+                                  int defaultEndTick,
+                                  @Nonnull String requestId) {
+            LinkedHashMap<String, Object> copy = new LinkedHashMap<>(data);
+            AssertionWindowSpec window = AssertionWindowSpec.from(asMap(copy.get("window"), requestId), defaultStartTick, defaultEndTick, requestId);
+            return new AssertionSpec(copy, window);
         }
 
         @Nonnull
         Map<String, Object> toMap() {
-            return new LinkedHashMap<>(fields);
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>(fields);
+            map.put("window", window.toMap());
+            return map;
+        }
+    }
+
+    public record AssertionWindowSpec(@Nonnull String mode, int startTick, int endTick, int sustainedTicks) {
+        @Nonnull
+        static AssertionWindowSpec from(@Nonnull Map<String, Object> data,
+                                        int defaultStartTick,
+                                        int defaultEndTick,
+                                        @Nonnull String requestId) {
+            rejectUnsupportedKeys(data, "assertions[].window", List.of("mode", "startTick", "endTick", "sustainedTicks"), requestId);
+            String mode = stringOrNull(data.get("mode"));
+            if (mode == null) {
+                mode = "eventually";
+            }
+            if (!List.of("eventually", "sustained", "never").contains(mode)) {
+                throw invalid(requestId, "unsupported assertion window mode " + mode);
+            }
+            int startTick = intValue(data.get("startTick"), defaultStartTick, requestId);
+            int endTick = intValue(data.get("endTick"), defaultEndTick, requestId);
+            int sustainedTicks = Math.max(1, intValue(data.get("sustainedTicks"), 1, requestId));
+            if (startTick < 0 || endTick < startTick) {
+                throw invalid(requestId, "assertion window ticks are invalid");
+            }
+            return new AssertionWindowSpec(mode, startTick, endTick, sustainedTicks);
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("mode", mode);
+            map.put("startTick", startTick);
+            map.put("endTick", endTick);
+            map.put("sustainedTicks", sustainedTicks);
+            return map;
         }
     }
 

@@ -5,6 +5,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,6 +105,39 @@ class NpcRuntimeRequestTest {
 
         assertEquals(1, request.assertions().size());
         assertEquals("TargetSlot", request.assertions().getFirst().fields().get("sensorType"));
+    }
+
+    @Test
+    void parsesTimingRecordProfileAndAssertionWindows() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "guard_long",
+                  "assetId": "Territorial_Guard_Boar",
+                  "roleId": "Territorial_Guard_Boar",
+                  "ticks": 300,
+                  "timing": {"warmupTicks": 60, "stopWhenAssertionsResolved": true},
+                  "world": {"instanceId": "npc_runtime_test_flatworld"},
+                  "fixtures": {"npc": {"position": [0, 64, 0]}},
+                  "record": {"profile": "standard", "everyTicks": 3, "includeSnapshots": true, "includeEvents": false},
+                  "assertions": [
+                    {
+                      "assertionId": "eventual-target",
+                      "kind": "sensor",
+                      "window": {"mode": "eventually", "startTick": 60, "endTick": 300}
+                    }
+                  ]
+                }
+                """, config);
+
+        assertEquals(60, request.timing().warmupTicks());
+        assertTrue(request.timing().stopWhenAssertionsResolved());
+        assertEquals("standard", request.record().profile());
+        assertEquals(3, request.record().everyTicks());
+        assertFalse(request.record().includeEvents());
+        assertEquals("eventually", request.assertions().getFirst().window().mode());
     }
 
     @Test

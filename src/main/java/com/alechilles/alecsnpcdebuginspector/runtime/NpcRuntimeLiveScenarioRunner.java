@@ -213,8 +213,16 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("fixtureKind", fixture.kind().jsonName())
                         .with("roleId", fixture.roleId())
                         .with("targetSlot", fixture.targetSlot())
+                        .with("flockId", fixture.flockId())
+                        .with("flockRole", fixture.flockRole())
+                        .with("familyId", fixture.familyId())
+                        .with("familyRole", fixture.familyRole())
+                        .with("leaderFixtureId", fixture.leaderFixtureId())
+                        .with("parentFixtureId", fixture.parentFixtureId())
                         .with("npcUuid", spawned.uuid() != null ? spawned.uuid().toString() : null)
                         .with("result", spawned.toSpawnResult().toMap()));
+                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, tick, fixture, "flockLeader", fixture.leaderFixtureId());
+                writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, tick, fixture, "parent", fixture.parentFixtureId());
                 for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
                     writeEventIfEnabled(writer, cadence, record);
                     if (tick >= request.timing().warmupTicks()) {
@@ -265,6 +273,30 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         return run.canceled()
                 ? NpcRuntimeTickScheduler.TickOutcome.canceled(run.cancelReason() != null ? run.cancelReason() : "canceled")
                 : NpcRuntimeTickScheduler.TickOutcome.continueRunning();
+    }
+
+    private void writeFixtureLinkIfPresent(@Nonnull NpcRuntimeRequest request,
+                                           @Nonnull NpcRuntimeTraceWriter writer,
+                                           @Nonnull NpcRuntimeObservationCadence cadence,
+                                           @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                           int tick,
+                                           @Nonnull NpcRuntimeFixtureSpec fixture,
+                                           @Nonnull String relationship,
+                                           @Nullable String targetFixtureId) throws java.io.IOException {
+        if (targetFixtureId == null || targetFixtureId.isBlank()) {
+            return;
+        }
+        NpcRuntimeFixtureRegistry.FixtureLink link = fixtureRegistry.recordFixtureLink(fixture.fixtureId(), relationship, targetFixtureId);
+        writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-link")
+                .with("fixture", link.fixtureId())
+                .with("relationship", link.relationship())
+                .with("targetFixtureId", link.targetFixtureId())
+                .with("flockId", fixture.flockId())
+                .with("flockRole", fixture.flockRole())
+                .with("familyId", fixture.familyId())
+                .with("familyRole", fixture.familyRole())
+                .with("engineApplied", false)
+                .with("unsupportedFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation")));
     }
 
     @Nonnull

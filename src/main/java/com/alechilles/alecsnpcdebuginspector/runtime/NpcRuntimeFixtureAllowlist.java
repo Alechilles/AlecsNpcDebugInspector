@@ -18,7 +18,7 @@ public final class NpcRuntimeFixtureAllowlist {
     void validate(@Nonnull List<NpcRuntimeFixtureSpec> specs, @Nonnull String requestId) {
         List<NpcRuntimeRequest.UnsupportedField> unsupported = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        boolean foundNpcUnderTest = false;
+        int npcUnderTestCount = 0;
 
         for (int i = 0; i < specs.size(); i++) {
             NpcRuntimeFixtureSpec spec = specs.get(i);
@@ -27,7 +27,7 @@ public final class NpcRuntimeFixtureAllowlist {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "duplicate fixture id: " + spec.fixtureId()));
             }
             if (spec.kind() == NpcRuntimeFixtureKind.NPC_UNDER_TEST) {
-                foundNpcUnderTest = true;
+                npcUnderTestCount++;
             }
             if (!allowsId(spec)) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "fixture id is not allowlisted for kind " + spec.kind().jsonName()));
@@ -41,9 +41,11 @@ public final class NpcRuntimeFixtureAllowlist {
             if (spec.kind().entityLike() && (spec.roleId() == null || spec.roleId().isBlank())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".roleId", "entity-like fixtures require a roleId"));
             }
+            validateReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, unsupported);
+            validateReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, unsupported);
         }
 
-        if (!foundNpcUnderTest) {
+        if (npcUnderTestCount != 1) {
             unsupported.add(new NpcRuntimeRequest.UnsupportedField("fixtures.list", "exactly one npcUnderTest fixture is required"));
         }
 
@@ -61,9 +63,23 @@ public final class NpcRuntimeFixtureAllowlist {
             case MOB -> id.startsWith("mob.") || id.startsWith("mob-");
             case ITEM -> id.startsWith("item.") || id.startsWith("item-");
             case BLOCK -> id.startsWith("block.") || id.startsWith("block-");
+            case BEACON -> id.startsWith("beacon.") || id.startsWith("beacon-");
             case PLAYER_ANCHOR -> "playerAnchor".equals(id) || id.startsWith("playerAnchor.") || id.startsWith("anchor.");
             case FAMILY_MEMBER -> id.startsWith("family.") || id.startsWith("family-");
             case FLOCK_MEMBER -> id.startsWith("flock.") || id.startsWith("flock-");
         };
+    }
+
+    private void validateReference(String referencedFixtureId,
+                                   String path,
+                                   List<NpcRuntimeFixtureSpec> specs,
+                                   List<NpcRuntimeRequest.UnsupportedField> unsupported) {
+        if (referencedFixtureId == null || referencedFixtureId.isBlank()) {
+            return;
+        }
+        boolean exists = specs.stream().anyMatch(spec -> referencedFixtureId.equals(spec.fixtureId()));
+        if (!exists) {
+            unsupported.add(new NpcRuntimeRequest.UnsupportedField(path, "referenced fixture id does not exist: " + referencedFixtureId));
+        }
     }
 }

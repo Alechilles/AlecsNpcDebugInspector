@@ -13,6 +13,7 @@ public enum NpcRuntimeFixtureKind {
     MOB("mob", true),
     ITEM("item", false),
     BLOCK("block", false),
+    BEACON("beacon", false),
     PLAYER_ANCHOR("playerAnchor", false),
     FAMILY_MEMBER("familyMember", true),
     FLOCK_MEMBER("flockMember", true);

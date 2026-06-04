@@ -60,6 +60,7 @@ class NpcRuntimeObservationCadenceTest {
         assertTrue(cadence.shouldRecordEvent("run-start", 0));
         assertTrue(cadence.shouldRecordEvent("world-ready", 0));
         assertTrue(cadence.shouldRecordEvent("fixture-spawn", 0));
+        assertTrue(cadence.shouldRecordEvent("fixture-link", 0));
         assertTrue(cadence.shouldRecordEvent("assertions", 5));
         assertFalse(cadence.shouldRecordEvent("tick-start", 1));
         assertFalse(cadence.shouldRecordEvent("npc-sensor-delta", 3));
@@ -82,6 +83,7 @@ class NpcRuntimeObservationCadenceTest {
         assertTrue(cadence.shouldRecordEvent("run-end", 4));
         assertFalse(cadence.shouldRecordEvent("world-ready", 0));
         assertFalse(cadence.shouldRecordEvent("fixture-spawn", 0));
+        assertFalse(cadence.shouldRecordEvent("fixture-link", 0));
         assertFalse(cadence.shouldRecordEvent("tick-start", 1));
     }
 }

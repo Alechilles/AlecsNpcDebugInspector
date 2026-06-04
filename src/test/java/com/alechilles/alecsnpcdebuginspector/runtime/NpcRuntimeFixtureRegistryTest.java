@@ -30,4 +30,18 @@ class NpcRuntimeFixtureRegistryTest {
 
         assertThrows(IllegalArgumentException.class, () -> registry.recordBlockMutation("fixture", "0,64,0", "Air"));
     }
+
+    @Test
+    void recordsFixtureLinksInInsertionOrder() {
+        NpcRuntimeFixtureRegistry registry = new NpcRuntimeFixtureRegistry();
+
+        registry.recordFixtureLink("flock.child", "flockLeader", "npcUnderTest");
+        registry.recordFixtureLink("family.child", "parent", "family.parent");
+
+        assertEquals(2, registry.fixtureLinks().size());
+        Map<String, Object> first = registry.fixtureLinks().getFirst().toMap();
+        assertEquals("flock.child", first.get("fixtureId"));
+        assertEquals("flockLeader", first.get("relationship"));
+        assertEquals("npcUnderTest", first.get("targetFixtureId"));
+    }
 }

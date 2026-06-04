@@ -26,6 +26,13 @@ public record NpcRuntimeFixtureSpec(
         boolean visible,
         @Nullable String faction,
         @Nullable String attitude,
+        @Nullable Integer health,
+        @Nullable String flockId,
+        @Nullable String flockRole,
+        @Nullable String familyId,
+        @Nullable String familyRole,
+        @Nullable String leaderFixtureId,
+        @Nullable String parentFixtureId,
         @Nonnull TameworkMutation tamework
 ) {
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_.-]+");
@@ -46,6 +53,13 @@ public record NpcRuntimeFixtureSpec(
                 null,
                 null,
                 true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 TameworkMutation.empty()
@@ -72,6 +86,13 @@ public record NpcRuntimeFixtureSpec(
                 target.visible(),
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 TameworkMutation.empty()
         );
     }
@@ -86,6 +107,7 @@ public record NpcRuntimeFixtureSpec(
                 path,
                 List.of("id", "fixtureId", "kind", "type", "position", "rotation", "tags", "roleId",
                         "asset", "entityId", "blockId", "itemId", "slot", "targetSlot", "visible", "faction", "attitude",
+                        "health", "flockId", "flockRole", "familyId", "familyRole", "leaderFixtureId", "parentFixtureId",
                         "tamework"),
                 requestId
         );
@@ -113,9 +135,9 @@ public record NpcRuntimeFixtureSpec(
         return new NpcRuntimeFixtureSpec(
                 resolvedFixtureId,
                 kind,
-                listOrDefault(data.get("position"), DEFAULT_POSITION, requestId, path + ".position"),
-                asList(data.get("rotation"), requestId, path + ".rotation"),
-                asList(data.get("tags"), requestId, path + ".tags"),
+                coordinatesOrDefault(data.get("position"), DEFAULT_POSITION, requestId, path + ".position"),
+                optionalCoordinates(data.get("rotation"), requestId, path + ".rotation"),
+                stringObjectList(data.get("tags"), requestId, path + ".tags"),
                 roleId,
                 stringOrNull(data.get("asset")),
                 stringOrNull(data.get("entityId")),
@@ -125,6 +147,13 @@ public record NpcRuntimeFixtureSpec(
                 boolValue(data.get("visible"), true, requestId, path + ".visible"),
                 stringOrNull(data.get("faction")),
                 stringOrNull(data.get("attitude")),
+                integerOrNull(data.get("health"), requestId, path + ".health"),
+                stringOrNull(data.get("flockId")),
+                stringOrNull(data.get("flockRole")),
+                stringOrNull(data.get("familyId")),
+                stringOrNull(data.get("familyRole")),
+                stringOrNull(data.get("leaderFixtureId")),
+                stringOrNull(data.get("parentFixtureId")),
                 TameworkMutation.from(asMap(data.get("tamework"), requestId, path + ".tamework"), requestId, path + ".tamework")
         );
     }
@@ -171,6 +200,27 @@ public record NpcRuntimeFixtureSpec(
         if (attitude != null) {
             map.put("attitude", attitude);
         }
+        if (health != null) {
+            map.put("health", health);
+        }
+        if (flockId != null) {
+            map.put("flockId", flockId);
+        }
+        if (flockRole != null) {
+            map.put("flockRole", flockRole);
+        }
+        if (familyId != null) {
+            map.put("familyId", familyId);
+        }
+        if (familyRole != null) {
+            map.put("familyRole", familyRole);
+        }
+        if (leaderFixtureId != null) {
+            map.put("leaderFixtureId", leaderFixtureId);
+        }
+        if (parentFixtureId != null) {
+            map.put("parentFixtureId", parentFixtureId);
+        }
         if (!tamework.isEmpty()) {
             map.put("tamework", tamework.toMap());
         }
@@ -196,6 +246,7 @@ public record NpcRuntimeFixtureSpec(
             case MOB -> "mob.fixture";
             case ITEM -> "item.fixture";
             case BLOCK -> "block.fixture";
+            case BEACON -> "beacon.fixture";
             case PLAYER_ANCHOR -> "playerAnchor";
             case FAMILY_MEMBER -> "family.fixture";
             case FLOCK_MEMBER -> "flock.fixture";
@@ -245,6 +296,44 @@ public record NpcRuntimeFixtureSpec(
     }
 
     @Nonnull
+    private static List<Object> coordinatesOrDefault(@Nullable Object value,
+                                                     @Nonnull List<Object> defaultValue,
+                                                     @Nonnull String requestId,
+                                                     @Nonnull String path) {
+        if (value == null) {
+            return defaultValue;
+        }
+        List<Object> coordinates = asList(value, requestId, path);
+        validateCoordinateTriplet(coordinates, requestId, path);
+        return coordinates;
+    }
+
+    @Nonnull
+    private static List<Object> optionalCoordinates(@Nullable Object value,
+                                                    @Nonnull String requestId,
+                                                    @Nonnull String path) {
+        if (value == null) {
+            return List.of();
+        }
+        List<Object> coordinates = asList(value, requestId, path);
+        validateCoordinateTriplet(coordinates, requestId, path);
+        return coordinates;
+    }
+
+    private static void validateCoordinateTriplet(@Nonnull List<Object> coordinates,
+                                                  @Nonnull String requestId,
+                                                  @Nonnull String path) {
+        if (coordinates.size() != 3) {
+            throw NpcRuntimeRequest.invalid(requestId, path + " must contain exactly three numeric coordinates");
+        }
+        for (Object coordinate : coordinates) {
+            if (!(coordinate instanceof Number)) {
+                throw NpcRuntimeRequest.invalid(requestId, path + " must contain exactly three numeric coordinates");
+            }
+        }
+    }
+
+    @Nonnull
     private static List<Object> asList(@Nullable Object value, @Nonnull String requestId, @Nonnull String path) {
         if (value == null) {
             return List.of();
@@ -256,6 +345,31 @@ public record NpcRuntimeFixtureSpec(
             return List.of(value);
         }
         throw NpcRuntimeRequest.invalid(requestId, path + " must be an array-compatible value");
+    }
+
+    @Nonnull
+    private static List<Object> stringObjectList(@Nullable Object value, @Nonnull String requestId, @Nonnull String path) {
+        if (value == null) {
+            return List.of();
+        }
+        List<Object> list = asList(value, requestId, path);
+        for (Object item : list) {
+            if (!(item instanceof String text) || text.isBlank()) {
+                throw NpcRuntimeRequest.invalid(requestId, path + " must contain only non-empty strings");
+            }
+        }
+        return list;
+    }
+
+    @Nullable
+    private static Integer integerOrNull(@Nullable Object value, @Nonnull String requestId, @Nonnull String path) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        throw NpcRuntimeRequest.invalid(requestId, path + " must be an integer");
     }
 
     private static boolean boolValue(@Nullable Object value,

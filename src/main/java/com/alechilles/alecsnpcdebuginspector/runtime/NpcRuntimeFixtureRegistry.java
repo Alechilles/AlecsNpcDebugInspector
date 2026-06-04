@@ -13,6 +13,7 @@ import javax.annotation.Nullable;
 public final class NpcRuntimeFixtureRegistry {
     private final LinkedHashMap<String, FixtureRecord> fixtures = new LinkedHashMap<>();
     private final LinkedHashMap<String, BlockMutation> blockMutations = new LinkedHashMap<>();
+    private final List<FixtureLink> fixtureLinks = new java.util.ArrayList<>();
 
     @Nonnull
     public FixtureRecord recordEntity(@Nonnull String fixtureId, @Nonnull String kind, @Nullable UUID uuid) {
@@ -31,6 +32,15 @@ public final class NpcRuntimeFixtureRegistry {
     }
 
     @Nonnull
+    public FixtureLink recordFixtureLink(@Nonnull String fixtureId,
+                                         @Nonnull String relationship,
+                                         @Nonnull String targetFixtureId) {
+        FixtureLink link = new FixtureLink(fixtureId, relationship, targetFixtureId);
+        fixtureLinks.add(link);
+        return link;
+    }
+
+    @Nonnull
     public List<FixtureRecord> fixtures() {
         return List.copyOf(fixtures.values());
     }
@@ -38,6 +48,11 @@ public final class NpcRuntimeFixtureRegistry {
     @Nonnull
     public List<BlockMutation> blockMutations() {
         return List.copyOf(blockMutations.values());
+    }
+
+    @Nonnull
+    public List<FixtureLink> fixtureLinks() {
+        return List.copyOf(fixtureLinks);
     }
 
     public boolean contains(@Nonnull String fixtureId) {
@@ -68,6 +83,19 @@ public final class NpcRuntimeFixtureRegistry {
             map.put("fixtureId", fixtureId);
             map.put("position", position);
             map.put("originalBlockId", originalBlockId);
+            return map;
+        }
+    }
+
+    public record FixtureLink(@Nonnull String fixtureId,
+                              @Nonnull String relationship,
+                              @Nonnull String targetFixtureId) {
+        @Nonnull
+        public Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("fixtureId", fixtureId);
+            map.put("relationship", relationship);
+            map.put("targetFixtureId", targetFixtureId);
             return map;
         }
     }

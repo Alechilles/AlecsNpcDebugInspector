@@ -5,23 +5,25 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeFixtureSpecTest {
     @Test
     void parsesRichNpcBackedFixtureFields() {
         NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
-                Map.of(
-                        "fixtureId", "target.Enemy",
-                        "kind", "targetDummy",
-                        "position", List.of(4, 64, 0),
-                        "rotation", List.of(0, 90, 0),
-                        "tags", List.of("hostile", "close"),
-                        "roleId", "Mob_Tamework_Example_Simple",
-                        "targetSlot", "Enemy",
-                        "visible", true,
-                        "faction", "hostile",
-                        "attitude", "aggressive"
+                Map.ofEntries(
+                        Map.entry("fixtureId", "target.Enemy"),
+                        Map.entry("kind", "targetDummy"),
+                        Map.entry("position", List.of(4, 64, 0)),
+                        Map.entry("rotation", List.of(0, 90, 0)),
+                        Map.entry("tags", List.of("hostile", "close")),
+                        Map.entry("roleId", "Mob_Tamework_Example_Simple"),
+                        Map.entry("targetSlot", "Enemy"),
+                        Map.entry("visible", true),
+                        Map.entry("health", 25),
+                        Map.entry("faction", "hostile"),
+                        Map.entry("attitude", "aggressive")
                 ),
                 "rich_fixture",
                 "fixtures.list[1]",
@@ -32,6 +34,7 @@ class NpcRuntimeFixtureSpecTest {
         assertEquals(NpcRuntimeFixtureKind.TARGET_DUMMY, spec.kind());
         assertEquals("Mob_Tamework_Example_Simple", spec.roleId());
         assertEquals("Enemy", spec.targetSlot());
+        assertEquals(25, spec.health());
         assertEquals("hostile", spec.faction());
         assertEquals("aggressive", spec.attitude());
         assertTrue(spec.toMap().toString().contains("targetSlot=Enemy"));
@@ -83,5 +86,75 @@ class NpcRuntimeFixtureSpecTest {
         assertEquals(NpcRuntimeFixtureKind.TARGET_DUMMY, spec.kind());
         assertEquals("Role_Default", spec.roleId());
         assertEquals("LockedTarget", spec.targetSlot());
+    }
+
+    @Test
+    void parsesFlockFamilyRelationshipFields() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "flock.guard_1",
+                        "kind", "flockMember",
+                        "roleId", "Boar",
+                        "flockId", "guard-boars",
+                        "flockRole", "follower",
+                        "familyId", "boar-family",
+                        "familyRole", "adult",
+                        "leaderFixtureId", "npcUnderTest",
+                        "parentFixtureId", "family.parent"
+                ),
+                "relationship_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.FLOCK_MEMBER, spec.kind());
+        assertEquals("guard-boars", spec.flockId());
+        assertEquals("follower", spec.flockRole());
+        assertEquals("boar-family", spec.familyId());
+        assertEquals("adult", spec.familyRole());
+        assertEquals("npcUnderTest", spec.leaderFixtureId());
+        assertEquals("family.parent", spec.parentFixtureId());
+        assertTrue(spec.toMap().toString().contains("leaderFixtureId=npcUnderTest"));
+    }
+
+    @Test
+    void parsesBeaconFixtureKindButLeavesSafeMutationToAllowlist() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "beacon.combat",
+                        "kind", "beacon",
+                        "position", List.of(0, 64, 3),
+                        "blockId", "hytale:stone"
+                ),
+                "beacon_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.BEACON, spec.kind());
+        assertEquals("beacon.combat", spec.fixtureId());
+        assertEquals("hytale:stone", spec.blockId());
+    }
+
+    @Test
+    void rejectsMalformedPositionRotationAndTags() {
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "position", List.of(0, 64)),
+                "bad_position",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "rotation", List.of(0, "east", 0)),
+                "bad_rotation",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "tags", List.of("hostile", 7)),
+                "bad_tags",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
     }
 }

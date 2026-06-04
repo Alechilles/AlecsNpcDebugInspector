@@ -232,6 +232,68 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void rejectsMultipleNpcUnderTestFixtures() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "two_npcs",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "npc_under_test", "kind": "npcUnderTest", "roleId": "R"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list", exception.unsupported().getFirst().path());
+        assertEquals("exactly one npcUnderTest fixture is required", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsMissingFixtureRelationshipTargets() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "missing_leader",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "flock.child", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "flock.missing"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].leaderFixtureId", exception.unsupported().getFirst().path());
+        assertEquals("referenced fixture id does not exist: flock.missing", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
     void serializesDeterministicJsonForCliRoundTrip() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(

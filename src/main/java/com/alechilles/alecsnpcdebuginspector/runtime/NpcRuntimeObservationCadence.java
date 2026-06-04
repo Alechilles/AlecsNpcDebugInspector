@@ -47,7 +47,7 @@ public record NpcRuntimeObservationCadence(
 
     private static boolean isStandardEvent(@Nonnull String kind) {
         return switch (kind) {
-            case "world-ready", "arena-reset", "fixture-spawn" -> true;
+            case "world-ready", "arena-reset", "fixture-spawn", "fixture-link" -> true;
             default -> false;
         };
     }

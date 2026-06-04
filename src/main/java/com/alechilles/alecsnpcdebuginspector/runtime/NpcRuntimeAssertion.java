@@ -38,6 +38,13 @@ public record NpcRuntimeAssertion(
         @Nullable String expectedParentFixtureId,
         @Nullable Integer expectedMemberCount,
         @Nullable Integer expectedChildCount,
+        @Nullable String expectedMessageType,
+        @Nullable String expectedSenderFixtureId,
+        @Nullable String expectedReceiverFixtureId,
+        @Nullable Integer expectedReceiverCount,
+        @Nullable String expectedBeaconType,
+        @Nullable String expectedSourceFixtureId,
+        @Nullable Integer expectedConsumerCount,
         @Nullable Boolean expectUnsupported,
         @Nonnull NpcRuntimeRequest.AssertionWindowSpec window
 ) {
@@ -87,6 +94,13 @@ public record NpcRuntimeAssertion(
                 string(fields, "expectedParentFixtureId", "parentFixtureId"),
                 intOrNull(fields.get("expectedMemberCount")),
                 intOrNull(fields.get("expectedChildCount")),
+                string(fields, "expectedMessageType", "messageType"),
+                string(fields, "expectedSenderFixtureId", "senderFixtureId"),
+                string(fields, "expectedReceiverFixtureId", "receiverFixtureId"),
+                intOrNull(fields.get("expectedReceiverCount")),
+                string(fields, "expectedBeaconType", "beaconType"),
+                string(fields, "expectedSourceFixtureId", "sourceFixtureId"),
+                intOrNull(fields.get("expectedConsumerCount")),
                 boolOrNull(fields.get("expectUnsupported")),
                 spec.window()
         );
@@ -99,6 +113,12 @@ public record NpcRuntimeAssertion(
         }
         if (isFlockKind()) {
             return evaluateFlock(evidenceRecords);
+        }
+        if (isMessageKind()) {
+            return evaluateMessage(evidenceRecords);
+        }
+        if (isBeaconKind()) {
+            return evaluateBeacon(evidenceRecords);
         }
         List<Map<String, Object>> candidates = matchingEvidenceCandidates(evidenceRecords);
         if (candidates.isEmpty()) {
@@ -260,6 +280,186 @@ public record NpcRuntimeAssertion(
             evidence.put("tick", firstTick);
         }
         return new FlockEvaluation(failures.isEmpty(), failures, evidence, firstTick, lastTick, candidates.size());
+    }
+
+    @Nonnull
+    private NpcRuntimeAssertionResult evaluateMessage(@Nonnull List<Map<String, Object>> evidenceRecords) {
+        List<Map<String, Object>> candidates = evidenceRecords.stream()
+                .filter(evidence -> matchesText("message-evidence", evidence.get("kind")))
+                .filter(this::matchesSignalFixture)
+                .filter(this::withinWindow)
+                .toList();
+        if (candidates.isEmpty()) {
+            return "never".equalsIgnoreCase(window.mode())
+                    ? NpcRuntimeAssertionResult.passed(assertionId, kind, "forbidden evidence was not observed", null)
+                    : NpcRuntimeAssertionResult.unknown(assertionId, kind, "no matching message evidence was observed");
+        }
+
+        SignalEvaluation evaluation = evaluateMessageCandidates(candidates);
+        if ("never".equalsIgnoreCase(window.mode())) {
+            return evaluation.passed()
+                    ? NpcRuntimeAssertionResult.failed(assertionId, kind, "forbidden evidence observed", evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount())
+                    : NpcRuntimeAssertionResult.passed(assertionId, kind, "forbidden evidence was not observed", null);
+        }
+        if (evaluation.passed()) {
+            return NpcRuntimeAssertionResult.passed(assertionId, kind, "assertion passed", evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount());
+        }
+        return NpcRuntimeAssertionResult.failed(assertionId, kind, String.join("; ", evaluation.failures()), evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount());
+    }
+
+    @Nonnull
+    private SignalEvaluation evaluateMessageCandidates(@Nonnull List<Map<String, Object>> candidates) {
+        ArrayList<String> failures = new ArrayList<>();
+        List<Map<String, Object>> matching = candidates.stream()
+                .filter(candidate -> expectedMessageType == null || matchesText(expectedMessageType, candidate.get("messageType")))
+                .filter(candidate -> expectedSenderFixtureId == null || matchesText(expectedSenderFixtureId, candidate.get("senderFixtureId")))
+                .filter(candidate -> expectedReceiverFixtureId == null || matchesText(expectedReceiverFixtureId, candidate.get("receiverFixtureId")))
+                .filter(candidate -> expectedTargetFixtureId == null || matchesText(expectedTargetFixtureId, candidate.get("targetFixtureId")))
+                .toList();
+        if (matching.isEmpty()) {
+            failures.add("no message evidence matched expected sender, receiver, target, and type");
+            matching = candidates;
+        }
+
+        Integer observedReceiverCount = null;
+        if (expectedReceiverCount != null) {
+            observedReceiverCount = distinctStringCount(matching, "receiverFixtureId");
+            if (observedReceiverCount != expectedReceiverCount) {
+                failures.add("expected receiverCount=" + expectedReceiverCount + " but observed " + observedReceiverCount);
+            }
+        }
+        if (expectUnsupported != null) {
+            boolean observedUnsupported = matching.stream().anyMatch(candidate -> candidate.get("unsupportedFields") instanceof List<?> list && !list.isEmpty());
+            if (expectUnsupported != observedUnsupported) {
+                failures.add("expected unsupported=" + expectUnsupported + " but observed " + observedUnsupported);
+            }
+        }
+
+        LinkedHashMap<String, Object> evidence = signalEvidence("message-evidence", matching);
+        if (expectedMessageType != null) {
+            evidence.put("messageType", expectedMessageType);
+        }
+        if (expectedSenderFixtureId != null) {
+            evidence.put("senderFixtureId", expectedSenderFixtureId);
+        }
+        if (expectedReceiverFixtureId != null) {
+            evidence.put("receiverFixtureId", expectedReceiverFixtureId);
+        }
+        if (expectedTargetFixtureId != null) {
+            evidence.put("targetFixtureId", expectedTargetFixtureId);
+        }
+        if (observedReceiverCount != null) {
+            evidence.put("observedReceiverCount", observedReceiverCount);
+        }
+        return signalEvaluation(failures, evidence, matching);
+    }
+
+    @Nonnull
+    private NpcRuntimeAssertionResult evaluateBeacon(@Nonnull List<Map<String, Object>> evidenceRecords) {
+        List<Map<String, Object>> candidates = evidenceRecords.stream()
+                .filter(evidence -> matchesText("beacon-evidence", evidence.get("kind")))
+                .filter(this::matchesSignalFixture)
+                .filter(this::withinWindow)
+                .toList();
+        if (candidates.isEmpty()) {
+            return "never".equalsIgnoreCase(window.mode())
+                    ? NpcRuntimeAssertionResult.passed(assertionId, kind, "forbidden evidence was not observed", null)
+                    : NpcRuntimeAssertionResult.unknown(assertionId, kind, "no matching beacon evidence was observed");
+        }
+
+        SignalEvaluation evaluation = evaluateBeaconCandidates(candidates);
+        if ("never".equalsIgnoreCase(window.mode())) {
+            return evaluation.passed()
+                    ? NpcRuntimeAssertionResult.failed(assertionId, kind, "forbidden evidence observed", evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount())
+                    : NpcRuntimeAssertionResult.passed(assertionId, kind, "forbidden evidence was not observed", null);
+        }
+        if (evaluation.passed()) {
+            return NpcRuntimeAssertionResult.passed(assertionId, kind, "assertion passed", evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount());
+        }
+        return NpcRuntimeAssertionResult.failed(assertionId, kind, String.join("; ", evaluation.failures()), evaluation.evidence(), evaluation.firstTick(), evaluation.lastTick(), evaluation.matchedCount());
+    }
+
+    @Nonnull
+    private SignalEvaluation evaluateBeaconCandidates(@Nonnull List<Map<String, Object>> candidates) {
+        ArrayList<String> failures = new ArrayList<>();
+        List<Map<String, Object>> matching = candidates.stream()
+                .filter(candidate -> expectedBeaconType == null || matchesText(expectedBeaconType, candidate.get("beaconType")))
+                .filter(candidate -> expectedSourceFixtureId == null || matchesText(expectedSourceFixtureId, candidate.get("sourceFixtureId")))
+                .filter(candidate -> expectedTargetFixtureId == null || matchesText(expectedTargetFixtureId, candidate.get("targetFixtureId")))
+                .toList();
+        if (matching.isEmpty()) {
+            failures.add("no beacon evidence matched expected source, target, and type");
+            matching = candidates;
+        }
+
+        Integer observedConsumerCount = null;
+        if (expectedConsumerCount != null) {
+            observedConsumerCount = distinctStringCount(matching, "consumerFixtureId");
+            if (observedConsumerCount != expectedConsumerCount) {
+                failures.add("expected consumerCount=" + expectedConsumerCount + " but observed " + observedConsumerCount);
+            }
+        }
+        if (expectUnsupported != null) {
+            boolean observedUnsupported = matching.stream().anyMatch(candidate -> candidate.get("unsupportedFields") instanceof List<?> list && !list.isEmpty());
+            if (expectUnsupported != observedUnsupported) {
+                failures.add("expected unsupported=" + expectUnsupported + " but observed " + observedUnsupported);
+            }
+        }
+
+        LinkedHashMap<String, Object> evidence = signalEvidence("beacon-evidence", matching);
+        if (expectedBeaconType != null) {
+            evidence.put("beaconType", expectedBeaconType);
+        }
+        if (expectedSourceFixtureId != null) {
+            evidence.put("sourceFixtureId", expectedSourceFixtureId);
+        }
+        if (expectedTargetFixtureId != null) {
+            evidence.put("targetFixtureId", expectedTargetFixtureId);
+        }
+        if (observedConsumerCount != null) {
+            evidence.put("observedConsumerCount", observedConsumerCount);
+        }
+        return signalEvaluation(failures, evidence, matching);
+    }
+
+    @Nonnull
+    private static LinkedHashMap<String, Object> signalEvidence(@Nonnull String kind,
+                                                                 @Nonnull List<Map<String, Object>> matching) {
+        LinkedHashMap<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("kind", kind);
+        List<Object> unsupportedFields = matching.stream()
+                .flatMap(candidate -> candidate.get("unsupportedFields") instanceof List<?> list ? list.stream() : java.util.stream.Stream.empty())
+                .map(item -> (Object) item)
+                .distinct()
+                .toList();
+        evidence.put("unsupportedFields", unsupportedFields);
+        return evidence;
+    }
+
+    @Nonnull
+    private static SignalEvaluation signalEvaluation(@Nonnull List<String> failures,
+                                                     @Nonnull LinkedHashMap<String, Object> evidence,
+                                                     @Nonnull List<Map<String, Object>> matching) {
+        Integer firstTick = matching.stream().map(NpcRuntimeAssertion::tickOrNull).filter(java.util.Objects::nonNull).min(Integer::compareTo).orElse(null);
+        Integer lastTick = matching.stream().map(NpcRuntimeAssertion::tickOrNull).filter(java.util.Objects::nonNull).max(Integer::compareTo).orElse(null);
+        if (firstTick != null) {
+            evidence.put("tick", firstTick);
+        }
+        return new SignalEvaluation(failures.isEmpty(), failures, evidence, firstTick, lastTick, matching.size());
+    }
+
+    private boolean matchesSignalFixture(@Nonnull Map<String, Object> evidence) {
+        return fixtureId == null || matchesText(fixtureId, evidenceFixtureId(evidence));
+    }
+
+    private static int distinctStringCount(@Nonnull List<Map<String, Object>> candidates, @Nonnull String field) {
+        return Math.toIntExact(candidates.stream()
+                .map(candidate -> candidate.get(field))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .count());
     }
 
     private boolean leaderMatches(@Nonnull List<Map<String, Object>> flockLinks,
@@ -528,11 +728,21 @@ public record NpcRuntimeAssertion(
                 || "combat".equalsIgnoreCase(kind)
                 || "combat-evaluator".equalsIgnoreCase(kind)
                 || "tamework".equalsIgnoreCase(kind)
-                || isFlockKind();
+                || isFlockKind()
+                || isMessageKind()
+                || isBeaconKind();
     }
 
     private boolean isFlockKind() {
         return "flock".equalsIgnoreCase(kind) || "family".equalsIgnoreCase(kind);
+    }
+
+    private boolean isMessageKind() {
+        return "message".equalsIgnoreCase(kind);
+    }
+
+    private boolean isBeaconKind() {
+        return "beacon".equalsIgnoreCase(kind);
     }
 
     @Nonnull
@@ -622,5 +832,13 @@ public record NpcRuntimeAssertion(
                                    @Nullable Integer firstTick,
                                    @Nullable Integer lastTick,
                                    int matchedCount) {
+    }
+
+    private record SignalEvaluation(boolean passed,
+                                    @Nonnull List<String> failures,
+                                    @Nonnull Map<String, Object> evidence,
+                                    @Nullable Integer firstTick,
+                                    @Nullable Integer lastTick,
+                                    int matchedCount) {
     }
 }

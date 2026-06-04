@@ -208,12 +208,16 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("maxFixtureCount", request.multiNpc().maxFixtureCount())
                     .with("unsupportedRelationshipFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation", "engineMessageBusMutation", "engineBeaconMutation")));
             for (NpcRuntimeFixtureSpec fixture : request.fixtures().list()) {
-                NpcRuntimeFixtureSpawner.SpawnedNpc spawned = fixtureSpawner.spawnFixture(world, fixture);
-                spawnedFixtures.spawnedNpcs.add(spawned);
-                if (spawned.uuid() != null) {
+                NpcRuntimeFixtureSpawner.SpawnedNpc spawned = fixture.kind().entityLike()
+                        ? fixtureSpawner.spawnFixture(world, fixture)
+                        : null;
+                if (spawned != null) {
+                    spawnedFixtures.spawnedNpcs.add(spawned);
+                }
+                if (spawned != null && spawned.uuid() != null) {
                     run.addNpc(fixture.fixtureId(), spawned.uuid());
                 }
-                fixtureRegistry.recordEntity(fixture.fixtureId(), fixture.kind().jsonName(), spawned.uuid());
+                fixtureRegistry.recordEntity(fixture.fixtureId(), fixture.kind().jsonName(), spawned != null ? spawned.uuid() : null);
                 run.addFixture(fixture.fixtureId());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "fixture-spawn")
                         .with("fixture", fixture.fixtureId())
@@ -226,14 +230,17 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                         .with("familyRole", fixture.familyRole())
                         .with("leaderFixtureId", fixture.leaderFixtureId())
                         .with("parentFixtureId", fixture.parentFixtureId())
-                        .with("npcUuid", spawned.uuid() != null ? spawned.uuid().toString() : null)
-                        .with("result", spawned.toSpawnResult().toMap()));
+                        .with("npcUuid", spawned != null && spawned.uuid() != null ? spawned.uuid().toString() : null)
+                        .with("result", spawned != null ? spawned.toSpawnResult().toMap() : declarativeFixtureResult(fixture)));
                 writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, spawnedFixtures.evidenceRecords, tick, fixture, "flockLeader", fixture.leaderFixtureId());
                 writeFixtureLinkIfPresent(request, writer, cadence, fixtureRegistry, spawnedFixtures.evidenceRecords, tick, fixture, "parent", fixture.parentFixtureId());
-                for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
-                    writeEventIfEnabled(writer, cadence, record);
-                    if (tick >= request.timing().warmupTicks()) {
-                        spawnedFixtures.evidenceRecords.add(record.fields());
+                writeDeclarativeSignalEvidence(request, writer, cadence, spawnedFixtures.evidenceRecords, tick, fixture);
+                if (spawned != null) {
+                    for (NpcRuntimeTraceRecord record : tameworkFixtureMutator.apply(request.requestId(), tick, store, spawned, fixture.tamework())) {
+                        writeEventIfEnabled(writer, cadence, record);
+                        if (tick >= request.timing().warmupTicks()) {
+                            spawnedFixtures.evidenceRecords.add(record.fields());
+                        }
                     }
                 }
             }
@@ -313,6 +320,50 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         evidenceRecords.add(evidence.fields());
     }
 
+    private void writeDeclarativeSignalEvidence(@Nonnull NpcRuntimeRequest request,
+                                                @Nonnull NpcRuntimeTraceWriter writer,
+                                                @Nonnull NpcRuntimeObservationCadence cadence,
+                                                @Nonnull List<Map<String, Object>> evidenceRecords,
+                                                int tick,
+                                                @Nonnull NpcRuntimeFixtureSpec fixture) throws java.io.IOException {
+        if (fixture.kind() == NpcRuntimeFixtureKind.MESSAGE) {
+            NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(request.requestId(), tick, "message-evidence")
+                    .with("fixtureId", fixture.fixtureId())
+                    .with("messageId", fixture.messageId())
+                    .with("messageType", fixture.messageType())
+                    .with("senderFixtureId", fixture.senderFixtureId())
+                    .with("receiverFixtureId", fixture.receiverFixtureId())
+                    .with("targetFixtureId", fixture.targetFixtureId())
+                    .with("targetSlot", fixture.targetSlot())
+                    .with("payloadKeys", fixture.payloadKeys())
+                    .with("observedValue", "declared")
+                    .with("unsupportedFields", List.of("engineMessageBusMutation", "engineMessageDeliveryOrdering"));
+            writeEventIfEnabled(writer, cadence, record);
+            evidenceRecords.add(record.fields());
+        } else if (fixture.kind() == NpcRuntimeFixtureKind.BEACON) {
+            List<Object> consumers = fixture.requiredConsumerFixtureIds().isEmpty()
+                    ? List.of((Object) null)
+                    : fixture.requiredConsumerFixtureIds();
+            for (Object consumer : consumers) {
+                NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(request.requestId(), tick, "beacon-evidence")
+                        .with("fixtureId", fixture.fixtureId())
+                        .with("beaconId", fixture.beaconId())
+                        .with("beaconType", fixture.beaconType())
+                        .with("sourceFixtureId", fixture.sourceFixtureId())
+                        .with("targetFixtureId", fixture.targetFixtureId())
+                        .with("consumerFixtureId", consumer instanceof String text ? text : null)
+                        .with("position", fixture.position())
+                        .with("radius", fixture.radius())
+                        .with("ttlTicks", fixture.ttlTicks())
+                        .with("lifecycle", "declared")
+                        .with("observedValue", "declared")
+                        .with("unsupportedFields", List.of("engineBeaconMutation", "engineBeaconConsumptionOrdering"));
+                writeEventIfEnabled(writer, cadence, record);
+                evidenceRecords.add(record.fields());
+            }
+        }
+    }
+
     @Nonnull
     private NpcRuntimeTraceRecord flockEvidenceRecord(@Nonnull NpcRuntimeRequest request,
                                                       int tick,
@@ -335,6 +386,19 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("childCount", linkedChildCount(request.fixtures().list(), targetFixtureId));
         }
         return record;
+    }
+
+    @Nonnull
+    private Map<String, Object> declarativeFixtureResult(@Nonnull NpcRuntimeFixtureSpec fixture) {
+        java.util.LinkedHashMap<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("fixtureId", fixture.fixtureId());
+        map.put("kind", fixture.kind().jsonName());
+        map.put("spawned", false);
+        map.put("message", "declared evidence fixture; no world entity spawned");
+        map.put("unsupportedFields", fixture.kind() == NpcRuntimeFixtureKind.MESSAGE
+                ? List.of("engineMessageBusMutation")
+                : List.of("engineBeaconMutation"));
+        return map;
     }
 
     @Nonnull

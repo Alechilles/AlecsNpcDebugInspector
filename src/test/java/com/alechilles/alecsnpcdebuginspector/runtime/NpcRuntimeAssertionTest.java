@@ -390,6 +390,61 @@ class NpcRuntimeAssertionTest {
     }
 
     @Test
+    void passesMessageAssertionFromMessageEvidence() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "message-received",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "expectedSenderFixtureId", "npcUnderTest",
+                "expectedReceiverFixtureId", "flock.follower_one",
+                "expectedTargetFixtureId", "target.Enemy",
+                "expectUnsupported", true,
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(18, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_one",
+                        "targetFixtureId", "target.Enemy",
+                        "unsupportedFields", List.of("engineMessageBusMutation"))
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(18, result.firstMatchedTick());
+    }
+
+    @Test
+    void passesBeaconAssertionFromBeaconEvidence() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "beacon-consumed",
+                "kind", "beacon",
+                "expectedBeaconType", "threat",
+                "expectedSourceFixtureId", "npcUnderTest",
+                "expectedTargetFixtureId", "target.Enemy",
+                "expectedConsumerCount", 1,
+                "expectUnsupported", true,
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(20, "beacon-evidence",
+                        "beaconType", "threat",
+                        "sourceFixtureId", "npcUnderTest",
+                        "targetFixtureId", "target.Enemy",
+                        "consumerFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of("engineBeaconMutation"))
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(20, result.firstMatchedTick());
+        assertEquals(1, result.evidence().get("observedConsumerCount"));
+    }
+
+    @Test
     void failsFamilyAssertionWhenParentLinkDiffers() {
         NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
                 "assertionId", "family-link",

@@ -124,7 +124,13 @@ class NpcRuntimeFixtureSpecTest {
                         "fixtureId", "beacon.combat",
                         "kind", "beacon",
                         "position", List.of(0, 64, 3),
-                        "blockId", "hytale:stone"
+                        "beaconId", "combat-alert",
+                        "beaconType", "threat",
+                        "sourceFixtureId", "npcUnderTest",
+                        "targetFixtureId", "target.Enemy",
+                        "radius", 12,
+                        "ttlTicks", 90,
+                        "requiredConsumerFixtureIds", List.of("flock.follower_one", "flock.follower_two")
                 ),
                 "beacon_fixture",
                 "fixtures.list[1]",
@@ -133,7 +139,42 @@ class NpcRuntimeFixtureSpecTest {
 
         assertEquals(NpcRuntimeFixtureKind.BEACON, spec.kind());
         assertEquals("beacon.combat", spec.fixtureId());
-        assertEquals("hytale:stone", spec.blockId());
+        assertEquals("combat-alert", spec.beaconId());
+        assertEquals("threat", spec.beaconType());
+        assertEquals("npcUnderTest", spec.sourceFixtureId());
+        assertEquals("target.Enemy", spec.targetFixtureId());
+        assertEquals(12.0, spec.radius());
+        assertEquals(90, spec.ttlTicks());
+        assertEquals(List.of("flock.follower_one", "flock.follower_two"), spec.requiredConsumerFixtureIds());
+    }
+
+    @Test
+    void parsesDeclarativeMessageFixtureFields() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "message.threat",
+                        "kind", "message",
+                        "messageId", "threat-broadcast-1",
+                        "messageType", "threat.broadcast",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_one",
+                        "targetFixtureId", "target.Enemy",
+                        "targetSlot", "Enemy",
+                        "payloadKeys", List.of("target", "urgency")
+                ),
+                "message_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.MESSAGE, spec.kind());
+        assertEquals("message.threat", spec.fixtureId());
+        assertEquals("threat-broadcast-1", spec.messageId());
+        assertEquals("threat.broadcast", spec.messageType());
+        assertEquals("npcUnderTest", spec.senderFixtureId());
+        assertEquals("flock.follower_one", spec.receiverFixtureId());
+        assertEquals("target.Enemy", spec.targetFixtureId());
+        assertEquals(List.of("target", "urgency"), spec.payloadKeys());
     }
 
     @Test

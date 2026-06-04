@@ -14,6 +14,7 @@ public enum NpcRuntimeFixtureKind {
     ITEM("item", false),
     BLOCK("block", false),
     BEACON("beacon", false),
+    MESSAGE("message", false),
     PLAYER_ANCHOR("playerAnchor", false),
     FAMILY_MEMBER("familyMember", true),
     FLOCK_MEMBER("flockMember", true);

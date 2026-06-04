@@ -32,7 +32,7 @@ public final class NpcRuntimeFixtureAllowlist {
             if (!allowsId(spec)) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "fixture id is not allowlisted for kind " + spec.kind().jsonName()));
             }
-            if (!spec.kind().entityLike()) {
+            if (!spec.kind().entityLike() && !isDeclarativeSignal(spec.kind())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".kind", "fixture kind parses but safe world mutation is not implemented yet"));
             }
             if (spec.entityId() != null) {
@@ -43,6 +43,19 @@ public final class NpcRuntimeFixtureAllowlist {
             }
             validateReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, unsupported);
             validateReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, unsupported);
+            validateReference(spec.senderFixtureId(), path + ".senderFixtureId", specs, unsupported);
+            validateReference(spec.receiverFixtureId(), path + ".receiverFixtureId", specs, unsupported);
+            validateReference(spec.sourceFixtureId(), path + ".sourceFixtureId", specs, unsupported);
+            validateReference(spec.targetFixtureId(), path + ".targetFixtureId", specs, unsupported);
+            for (int consumerIndex = 0; consumerIndex < spec.requiredConsumerFixtureIds().size(); consumerIndex++) {
+                Object consumerFixtureId = spec.requiredConsumerFixtureIds().get(consumerIndex);
+                validateReference(
+                        consumerFixtureId instanceof String text ? text : null,
+                        path + ".requiredConsumerFixtureIds[" + consumerIndex + "]",
+                        specs,
+                        unsupported
+                );
+            }
         }
 
         if (npcUnderTestCount != 1) {
@@ -64,10 +77,15 @@ public final class NpcRuntimeFixtureAllowlist {
             case ITEM -> id.startsWith("item.") || id.startsWith("item-");
             case BLOCK -> id.startsWith("block.") || id.startsWith("block-");
             case BEACON -> id.startsWith("beacon.") || id.startsWith("beacon-");
+            case MESSAGE -> id.startsWith("message.") || id.startsWith("message-");
             case PLAYER_ANCHOR -> "playerAnchor".equals(id) || id.startsWith("playerAnchor.") || id.startsWith("anchor.");
             case FAMILY_MEMBER -> id.startsWith("family.") || id.startsWith("family-");
             case FLOCK_MEMBER -> id.startsWith("flock.") || id.startsWith("flock-");
         };
+    }
+
+    private boolean isDeclarativeSignal(@Nonnull NpcRuntimeFixtureKind kind) {
+        return kind == NpcRuntimeFixtureKind.MESSAGE || kind == NpcRuntimeFixtureKind.BEACON;
     }
 
     private void validateReference(String referencedFixtureId,

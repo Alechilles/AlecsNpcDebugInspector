@@ -33,6 +33,18 @@ public record NpcRuntimeFixtureSpec(
         @Nullable String familyRole,
         @Nullable String leaderFixtureId,
         @Nullable String parentFixtureId,
+        @Nullable String messageId,
+        @Nullable String messageType,
+        @Nullable String senderFixtureId,
+        @Nullable String receiverFixtureId,
+        @Nullable String targetFixtureId,
+        @Nonnull List<Object> payloadKeys,
+        @Nullable String beaconId,
+        @Nullable String beaconType,
+        @Nullable String sourceFixtureId,
+        @Nullable Double radius,
+        @Nullable Integer ttlTicks,
+        @Nonnull List<Object> requiredConsumerFixtureIds,
         @Nonnull TameworkMutation tamework
 ) {
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_.-]+");
@@ -62,6 +74,18 @@ public record NpcRuntimeFixtureSpec(
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
                 TameworkMutation.empty()
         );
     }
@@ -93,6 +117,18 @@ public record NpcRuntimeFixtureSpec(
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
                 TameworkMutation.empty()
         );
     }
@@ -108,6 +144,8 @@ public record NpcRuntimeFixtureSpec(
                 List.of("id", "fixtureId", "kind", "type", "position", "rotation", "tags", "roleId",
                         "asset", "entityId", "blockId", "itemId", "slot", "targetSlot", "visible", "faction", "attitude",
                         "health", "flockId", "flockRole", "familyId", "familyRole", "leaderFixtureId", "parentFixtureId",
+                        "messageId", "messageType", "senderFixtureId", "receiverFixtureId", "targetFixtureId", "payloadKeys",
+                        "beaconId", "beaconType", "sourceFixtureId", "radius", "ttlTicks", "requiredConsumerFixtureIds",
                         "tamework"),
                 requestId
         );
@@ -154,6 +192,18 @@ public record NpcRuntimeFixtureSpec(
                 stringOrNull(data.get("familyRole")),
                 stringOrNull(data.get("leaderFixtureId")),
                 stringOrNull(data.get("parentFixtureId")),
+                stringOrNull(data.get("messageId")),
+                stringOrNull(data.get("messageType")),
+                stringOrNull(data.get("senderFixtureId")),
+                stringOrNull(data.get("receiverFixtureId")),
+                stringOrNull(data.get("targetFixtureId")),
+                stringObjectList(data.get("payloadKeys"), requestId, path + ".payloadKeys"),
+                stringOrNull(data.get("beaconId")),
+                stringOrNull(data.get("beaconType")),
+                stringOrNull(data.get("sourceFixtureId")),
+                doubleOrNull(data.get("radius"), requestId, path + ".radius"),
+                integerOrNull(data.get("ttlTicks"), requestId, path + ".ttlTicks"),
+                stringObjectList(data.get("requiredConsumerFixtureIds"), requestId, path + ".requiredConsumerFixtureIds"),
                 TameworkMutation.from(asMap(data.get("tamework"), requestId, path + ".tamework"), requestId, path + ".tamework")
         );
     }
@@ -221,6 +271,42 @@ public record NpcRuntimeFixtureSpec(
         if (parentFixtureId != null) {
             map.put("parentFixtureId", parentFixtureId);
         }
+        if (messageId != null) {
+            map.put("messageId", messageId);
+        }
+        if (messageType != null) {
+            map.put("messageType", messageType);
+        }
+        if (senderFixtureId != null) {
+            map.put("senderFixtureId", senderFixtureId);
+        }
+        if (receiverFixtureId != null) {
+            map.put("receiverFixtureId", receiverFixtureId);
+        }
+        if (targetFixtureId != null) {
+            map.put("targetFixtureId", targetFixtureId);
+        }
+        if (!payloadKeys.isEmpty()) {
+            map.put("payloadKeys", payloadKeys);
+        }
+        if (beaconId != null) {
+            map.put("beaconId", beaconId);
+        }
+        if (beaconType != null) {
+            map.put("beaconType", beaconType);
+        }
+        if (sourceFixtureId != null) {
+            map.put("sourceFixtureId", sourceFixtureId);
+        }
+        if (radius != null) {
+            map.put("radius", radius);
+        }
+        if (ttlTicks != null) {
+            map.put("ttlTicks", ttlTicks);
+        }
+        if (!requiredConsumerFixtureIds.isEmpty()) {
+            map.put("requiredConsumerFixtureIds", requiredConsumerFixtureIds);
+        }
         if (!tamework.isEmpty()) {
             map.put("tamework", tamework.toMap());
         }
@@ -247,6 +333,7 @@ public record NpcRuntimeFixtureSpec(
             case ITEM -> "item.fixture";
             case BLOCK -> "block.fixture";
             case BEACON -> "beacon.fixture";
+            case MESSAGE -> "message.fixture";
             case PLAYER_ANCHOR -> "playerAnchor";
             case FAMILY_MEMBER -> "family.fixture";
             case FLOCK_MEMBER -> "flock.fixture";
@@ -370,6 +457,17 @@ public record NpcRuntimeFixtureSpec(
             return number.intValue();
         }
         throw NpcRuntimeRequest.invalid(requestId, path + " must be an integer");
+    }
+
+    @Nullable
+    private static Double doubleOrNull(@Nullable Object value, @Nonnull String requestId, @Nonnull String path) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        throw NpcRuntimeRequest.invalid(requestId, path + " must be a number");
     }
 
     private static boolean boolValue(@Nullable Object value,

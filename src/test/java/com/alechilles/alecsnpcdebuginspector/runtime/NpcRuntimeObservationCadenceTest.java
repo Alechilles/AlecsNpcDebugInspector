@@ -62,6 +62,9 @@ class NpcRuntimeObservationCadenceTest {
         assertTrue(cadence.shouldRecordEvent("fixture-spawn", 0));
         assertTrue(cadence.shouldRecordEvent("fixture-link", 0));
         assertTrue(cadence.shouldRecordEvent("multi-npc-setup", 0));
+        assertTrue(cadence.shouldRecordEvent("action-start", 3));
+        assertTrue(cadence.shouldRecordEvent("action-change", 3));
+        assertTrue(cadence.shouldRecordEvent("action-end", 3));
         assertTrue(cadence.shouldRecordEvent("assertions", 5));
         assertFalse(cadence.shouldRecordEvent("tick-start", 1));
         assertFalse(cadence.shouldRecordEvent("npc-sensor-delta", 3));

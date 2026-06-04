@@ -55,4 +55,70 @@ class NpcRuntimeActionObserverTest {
         assertEquals(true, combat.fields().get("selected"));
         assertTrue(combat.toJson().contains("eligibility"));
     }
+
+    @Test
+    void emitsActionStartChangeAndEndTransitionsFromAdjacentSnapshots() {
+        NpcRuntimeActionObserver observer = new NpcRuntimeActionObserver();
+        NpcRuntimeObservedNpc previous = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Patrol]
+                - Current Body Step: WalkToPoint
+                - Transition Actions Running: false
+                """);
+        NpcRuntimeObservedNpc current = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Attack]
+                - Current Body Step: MoveToTarget
+                - Transition Actions Running: true
+                """);
+        NpcRuntimeObservedNpc ended = observedWithAi("""
+                === AI ===
+                - Current Tree Step: <none>
+                - Current Body Step: <none>
+                - Transition Actions Running: false
+                """);
+
+        List<NpcRuntimeTraceRecord> initialRecords = observer.traceRecords("request-a", 1, previous, null);
+        List<NpcRuntimeTraceRecord> changedRecords = observer.traceRecords("request-a", 2, current, previous);
+        List<NpcRuntimeTraceRecord> endedRecords = observer.traceRecords("request-a", 3, ended, current);
+
+        NpcRuntimeTraceRecord start = initialRecords.stream()
+                .filter(record -> "action-start".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Sequence[Patrol]", start.fields().get("currentValue"));
+        assertEquals(1, start.fields().get("startTick"));
+
+        NpcRuntimeTraceRecord change = changedRecords.stream()
+                .filter(record -> "action-change".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Sequence[Patrol]", change.fields().get("previousValue"));
+        assertEquals("Sequence[Attack]", change.fields().get("currentValue"));
+
+        NpcRuntimeTraceRecord transitionStart = changedRecords.stream()
+                .filter(record -> "action-start".equals(record.fields().get("kind")))
+                .filter(record -> "transitionActionsRunning".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(true, transitionStart.fields().get("selected"));
+
+        NpcRuntimeTraceRecord end = endedRecords.stream()
+                .filter(record -> "action-end".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Sequence[Attack]", end.fields().get("previousValue"));
+        assertEquals(3, end.fields().get("endTick"));
+    }
+
+    private static NpcRuntimeObservedNpc observedWithAi(String details) {
+        return NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
+                "NPC Debug Inspector",
+                "UUID: sample | Loaded: true",
+                details
+        ));
+    }
 }

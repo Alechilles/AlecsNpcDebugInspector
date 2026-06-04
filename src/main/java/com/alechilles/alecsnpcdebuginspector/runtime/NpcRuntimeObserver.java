@@ -57,7 +57,7 @@ public final class NpcRuntimeObserver {
         addSection(records, requestId, tick, "components", current.section("Components"));
         addSection(records, requestId, tick, "flock", current.section("Flock"));
         records.addAll(sensorObserver.traceRecords(requestId, tick, current));
-        records.addAll(actionObserver.traceRecords(requestId, tick, current));
+        records.addAll(actionObserver.traceRecords(requestId, tick, current, previous));
         Map<String, Object> tamework = current.tameworkMap();
         if (!tamework.isEmpty()) {
             records.add(record(requestId, tick, "tamework", tamework));

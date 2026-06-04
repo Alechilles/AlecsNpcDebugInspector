@@ -115,6 +115,57 @@ class NpcRuntimeAssertionTest {
     }
 
     @Test
+    void passesWhenExpectedActionStartTransitionMatches() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "action",
+                "assertionId", "attack-started",
+                "expectedEventKind", "action-start",
+                "fixtureId", "npcUnderTest",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "expectedLifecycle", "selected"
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "action-start",
+                "fixtureId", "npcUnderTest",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "lifecycle", "selected",
+                "currentValue", "Sequence[Attack]",
+                "startTick", 42
+        )));
+
+        assertEquals("passed", result.status());
+        assertEquals(42, result.firstMatchedTick());
+    }
+
+    @Test
+    void passesWhenExpectedActionEndTransitionMatches() {
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
+                "kind", "action",
+                "assertionId", "attack-ended",
+                "expectedEventKind", "action-end",
+                "fixtureId", "npcUnderTest",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep"
+        )))).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(Map.of(
+                "kind", "action-end",
+                "fixtureId", "npcUnderTest",
+                "actionType", "InstructionStep",
+                "actionId", "currentTreeStep",
+                "lifecycle", "selected",
+                "previousValue", "Sequence[Attack]",
+                "endTick", 55
+        )));
+
+        assertEquals("passed", result.status());
+        assertEquals(55, result.firstMatchedTick());
+    }
+
+    @Test
     void ignoresEvidenceFromDifferentFixtureId() {
         NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(new NpcRuntimeRequest.AssertionSpec(Map.of(
                 "kind", "action",

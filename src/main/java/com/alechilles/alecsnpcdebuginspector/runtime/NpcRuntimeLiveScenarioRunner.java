@@ -405,6 +405,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         Object kind = record.fields().get("kind");
         return "sensor-evidence".equals(kind)
                 || "action-evidence".equals(kind)
+                || "action-start".equals(kind)
+                || "action-change".equals(kind)
+                || "action-end".equals(kind)
                 || "combat-evaluator-evidence".equals(kind)
                 || "tamework-evidence".equals(kind)
                 || "tamework-fixture-mutation".equals(kind)

@@ -25,6 +25,7 @@ public record NpcRuntimeAssertion(
         @Nullable String tameworkSection,
         @Nullable String tameworkField,
         @Nullable String expectedMatchResult,
+        @Nullable String expectedEventKind,
         @Nullable String expectedLifecycle,
         @Nullable String expectedValue,
         @Nullable String expectedTargetFixtureId,
@@ -73,6 +74,7 @@ public record NpcRuntimeAssertion(
                 string(fields, "section", "tameworkSection"),
                 string(fields, "field", "tameworkField"),
                 string(fields, "expectedMatchResult", "expectedResult"),
+                string(fields, "expectedEventKind", "eventKind"),
                 string(fields, "expectedLifecycle", "lifecycle"),
                 string(fields, "expectedValue", "value"),
                 string(fields, "expectedTargetFixtureId", "targetFixtureId"),
@@ -444,7 +446,10 @@ public record NpcRuntimeAssertion(
     }
 
     private boolean matchesIdentity(@Nonnull Map<String, Object> evidence) {
-        if (!matchesText(evidenceKind(), evidence.get("kind"))) {
+        if (expectedEventKind != null && !matchesText(expectedEventKind, evidence.get("kind"))) {
+            return false;
+        }
+        if (!matchesEvidenceKind(evidence)) {
             return false;
         }
         if (sensorType != null && !matchesText(sensorType, evidence.get("sensorType"))) {
@@ -506,6 +511,17 @@ public record NpcRuntimeAssertion(
         return "combat-evaluator-evidence";
     }
 
+    private boolean matchesEvidenceKind(@Nonnull Map<String, Object> evidence) {
+        Object observedKind = evidence.get("kind");
+        if ("action".equalsIgnoreCase(kind)) {
+            return matchesText("action-evidence", observedKind)
+                    || matchesText("action-start", observedKind)
+                    || matchesText("action-change", observedKind)
+                    || matchesText("action-end", observedKind);
+        }
+        return matchesText(evidenceKind(), observedKind);
+    }
+
     private static boolean matchesText(@Nonnull String expected, @Nullable Object observed) {
         return observed instanceof String text && expected.toLowerCase(Locale.ROOT).equals(text.toLowerCase(Locale.ROOT));
     }
@@ -548,7 +564,15 @@ public record NpcRuntimeAssertion(
     @Nullable
     private static Integer tickOrNull(@Nonnull Map<String, Object> evidence) {
         Object tick = evidence.get("tick");
-        return tick instanceof Number number ? number.intValue() : null;
+        if (tick instanceof Number number) {
+            return number.intValue();
+        }
+        Object startTick = evidence.get("startTick");
+        if (startTick instanceof Number number) {
+            return number.intValue();
+        }
+        Object endTick = evidence.get("endTick");
+        return endTick instanceof Number number ? number.intValue() : null;
     }
 
     private record Evaluation(boolean passed, @Nonnull List<String> failures) {

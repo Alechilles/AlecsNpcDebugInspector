@@ -84,4 +84,63 @@ class NpcRuntimeArenaTest {
         assertEquals(false, record.fields().get("engineApplied"));
         assertTrue(record.fields().get("unsupportedFields").toString().contains("engineTimeMutation"));
     }
+
+    @Test
+    void targetInductionTraceRecordsNaturalSensorModeWhenTargetFixturesExist() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "target_induction_available",
+                  "assetId": "Asset",
+                  "roleId": "Role",
+                  "ticks": 120,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "Role"},
+                      {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "Role", "targetSlot": "Enemy"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+
+        NpcRuntimeTraceRecord record = NpcRuntimeLiveScenarioRunner.targetInductionRecord(request, 0);
+
+        assertEquals("target-induction", record.fields().get("kind"));
+        assertEquals("natural-sensor", record.fields().get("inductionMode"));
+        assertEquals("available", record.fields().get("status"));
+        assertEquals(false, record.fields().get("preseeded"));
+        assertTrue(record.fields().get("targetFixtureIds").toString().contains("target.Enemy"));
+        assertTrue(record.fields().get("targetSlots").toString().contains("Enemy"));
+        assertTrue(record.fields().get("unsupportedFields").toString().contains("preseedTargetSlots"));
+    }
+
+    @Test
+    void targetInductionTraceRecordsUnavailableWhenNoTargetFixtureExists() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "target_induction_unavailable",
+                  "assetId": "Asset",
+                  "roleId": "Role",
+                  "ticks": 120
+                }
+                """,
+                config
+        );
+
+        NpcRuntimeTraceRecord record = NpcRuntimeLiveScenarioRunner.targetInductionRecord(request, 0);
+
+        assertEquals("target-induction", record.fields().get("kind"));
+        assertEquals("natural-sensor", record.fields().get("inductionMode"));
+        assertEquals("unavailable", record.fields().get("status"));
+        assertEquals(false, record.fields().get("preseeded"));
+        assertEquals("[]", record.fields().get("targetFixtureIds").toString());
+        assertEquals("[]", record.fields().get("targetSlots").toString());
+    }
 }

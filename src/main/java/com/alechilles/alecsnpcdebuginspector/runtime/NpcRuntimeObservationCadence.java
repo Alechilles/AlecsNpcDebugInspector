@@ -48,7 +48,7 @@ public record NpcRuntimeObservationCadence(
     private static boolean isStandardEvent(@Nonnull String kind) {
         return switch (kind) {
             case "world-ready", "environment-setup", "arena-reset", "multi-npc-setup", "fixture-spawn", "fixture-link",
-                 "flock-evidence", "message-evidence", "beacon-evidence",
+                 "target-induction", "flock-evidence", "message-evidence", "beacon-evidence",
                  "action-start", "action-change", "action-end" -> true;
             default -> false;
         };

@@ -46,7 +46,8 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "requiresPlayer", "timing", "environment", "multiNpc", "fixtures", "engineHooks", "record", "assertions", "limits"),
+                        "requiresPlayer", "timing", "environment", "multiNpc", "fixtures", "preseedTargetSlots",
+                        "engineHooks", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -69,6 +70,16 @@ public record NpcRuntimeRequest(
                     requestId,
                     "requiresPlayer is not supported in headless runtime mode",
                     List.of(new UnsupportedField("requiresPlayer", "logged-in player runtime mode is not implemented for headless batch runs"))
+            );
+        }
+        if (data.containsKey("preseedTargetSlots")) {
+            throw unsupported(
+                    requestId,
+                    "preseedTargetSlots is not supported in headless runtime mode",
+                    List.of(new UnsupportedField(
+                            "preseedTargetSlots",
+                            "direct target-slot preseeding is not implemented safely; use fixture-driven sensor induction"
+                    ))
             );
         }
         TimingSpec timing = TimingSpec.from(asMap(data.get("timing"), requestId), ticks, requestId);

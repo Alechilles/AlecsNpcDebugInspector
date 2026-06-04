@@ -228,6 +228,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("deliveryWindowTicks", request.multiNpc().deliveryWindowTicks())
                     .with("maxFixtureCount", request.multiNpc().maxFixtureCount())
                     .with("unsupportedRelationshipFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation", "engineMessageBusMutation", "engineBeaconMutation")));
+            writeEventIfEnabled(writer, cadence, targetInductionRecord(request, tick));
             for (NpcRuntimeFixtureSpec fixture : request.fixtures().list()) {
                 NpcRuntimeFixtureSpawner.SpawnedNpc spawned;
                 try {
@@ -422,6 +423,27 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 .with("result", spawnResult.toMap())
                 .with("spawnResult", spawnResult.toMap())
                 .with("unsupportedFields", fixture.kind().entityLike() ? List.of() : declarativeFixtureUnsupportedFields(fixture.kind()));
+    }
+
+    @Nonnull
+    static NpcRuntimeTraceRecord targetInductionRecord(@Nonnull NpcRuntimeRequest request, int tick) {
+        List<String> targetFixtureIds = request.fixtures().list().stream()
+                .filter(fixture -> fixture.targetSlot() != null && !fixture.targetSlot().isBlank())
+                .map(NpcRuntimeFixtureSpec::fixtureId)
+                .toList();
+        List<String> targetSlots = request.fixtures().list().stream()
+                .map(NpcRuntimeFixtureSpec::targetSlot)
+                .filter(slot -> slot != null && !slot.isBlank())
+                .distinct()
+                .toList();
+        return NpcRuntimeTraceRecord.of(request.requestId(), tick, "target-induction")
+                .with("inductionMode", "natural-sensor")
+                .with("status", targetFixtureIds.isEmpty() ? "unavailable" : "available")
+                .with("preseeded", false)
+                .with("targetFixtureIds", targetFixtureIds)
+                .with("targetSlots", targetSlots)
+                .with("reason", "direct target-slot preseeding is unsupported; harness relies on normal NPC sensors/actions")
+                .with("unsupportedFields", List.of("preseedTargetSlots"));
     }
 
     private NpcRuntimeTraceRecord flockEvidenceRecord(@Nonnull NpcRuntimeRequest request,

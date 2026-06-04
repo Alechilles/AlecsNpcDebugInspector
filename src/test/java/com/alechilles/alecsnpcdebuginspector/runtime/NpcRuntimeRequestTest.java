@@ -235,6 +235,40 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void rejectsPreseedTargetSlotsAsUnsafeHeadlessMutation() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "preseed_target_slots",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "preseedTargetSlots": [
+                            {"slot": "Enemy", "fixtureId": "target.Enemy", "mode": "beforeRun"}
+                          ],
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "targetSlot": "Enemy"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("preseedTargetSlots", exception.unsupported().getFirst().path());
+        assertEquals("direct target-slot preseeding is not implemented safely; use fixture-driven sensor induction", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
     void parsesPauseTimeAndRejectsUnsafeWeatherIds() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

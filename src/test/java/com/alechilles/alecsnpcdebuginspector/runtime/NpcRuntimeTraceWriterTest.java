@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeTraceWriterTest {
@@ -45,5 +46,15 @@ class NpcRuntimeTraceWriterTest {
                             .with("details", "this record is intentionally too large for the test limit")
             ));
         }
+    }
+
+    @Test
+    void refusesToOverwriteReservedTraceFields() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> NpcRuntimeTraceRecord.of("request-a", 0, "fixture-spawn").with("kind", "targetDummy")
+        );
+
+        assertTrue(exception.getMessage().contains("reserved"));
     }
 }

@@ -99,6 +99,42 @@ class NpcRuntimeHarnessServiceTest {
     }
 
     @Test
+    void unsupportedFixtureWritesUnsupportedFixtureDetails() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {
+            throw new AssertionError("runner should not execute for unsupported fixture requests");
+        });
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().requests().resolve("unsupported_fixture.request.json"),
+                """
+                        {
+                          "version": 1,
+                          "requestId": "unsupported_fixture",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0]},
+                              {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "Apple"}
+                            ]
+                          }
+                        }
+                        """
+        );
+
+        NpcRuntimeHarnessService.ProcessOutcome outcome = service.processNextQueuedRequest();
+
+        assertTrue(outcome.processed());
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("unsupported_fixture.result.json")));
+        assertEquals("failed", result.get("status"));
+        assertEquals("unsupported-fixture", result.get("classification"));
+        assertTrue(result.get("unsupported").toString().contains("fixtures.list[1].kind"));
+        assertTrue(Files.exists(config.paths().archive().resolve("unsupported_fixture.request.json")));
+    }
+
+    @Test
     void runnerTimeoutWritesHarnessTimeoutResult() throws Exception {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
         NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {

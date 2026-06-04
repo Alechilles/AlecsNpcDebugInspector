@@ -22,37 +22,49 @@ import org.joml.Vector3d;
 public final class NpcRuntimeFixtureSpawner {
     @Nonnull
     public SpawnedNpc spawnNpcUnderTest(@Nonnull World world, @Nonnull NpcRuntimeRequest request) {
+        return spawnFixture(world, request.fixtures().npcUnderTest());
+    }
+
+    @Nonnull
+    public SpawnedNpc spawnFixture(@Nonnull World world, @Nonnull NpcRuntimeFixtureSpec fixture) {
+        if (!fixture.kind().entityLike()) {
+            throw new IllegalArgumentException("Fixture kind is not an entity fixture: " + fixture.kind().jsonName());
+        }
+        if (fixture.roleId() == null || fixture.roleId().isBlank()) {
+            throw new IllegalArgumentException("Fixture " + fixture.fixtureId() + " requires a roleId");
+        }
         NPCPlugin npcPlugin = NPCPlugin.get();
         if (npcPlugin == null) {
             throw new IllegalStateException("NPCPlugin is not available yet");
         }
-        if (!npcPlugin.hasRoleName(request.roleId())) {
-            throw new IllegalArgumentException("Unknown NPC role: " + request.roleId());
+        if (!npcPlugin.hasRoleName(fixture.roleId())) {
+            throw new IllegalArgumentException("Unknown NPC role: " + fixture.roleId());
         }
 
         Store<EntityStore> store = world.getEntityStore().getStore();
-        Vector3d position = toVector3d(request.fixtures().npc().position(), "fixtures.npc.position");
+        Vector3d position = toVector3d(fixture.position(), "fixtures.list[" + fixture.fixtureId() + "].position");
         Pair<Ref<EntityStore>, INonPlayerCharacter> spawned = npcPlugin.spawnNPC(
                 store,
-                request.roleId(),
+                fixture.roleId(),
                 null,
                 position,
                 Rotation3f.IDENTITY
         );
         if (spawned == null || spawned.first() == null || spawned.second() == null) {
-            throw new IllegalStateException("Hytale returned no NPC for role " + request.roleId());
+            throw new IllegalStateException("Hytale returned no NPC for role " + fixture.roleId());
         }
         if (!(spawned.second() instanceof NPCEntity npcEntity)) {
-            throw new IllegalStateException("Spawned non-NPC entity for role " + request.roleId());
+            throw new IllegalStateException("Spawned non-NPC entity for role " + fixture.roleId());
         }
-        return new SpawnedNpc(spawned.first(), npcEntity);
+        return new SpawnedNpc(fixture.fixtureId(), fixture.kind(), fixture.roleId(), fixture.targetSlot(), spawned.first(), npcEntity);
     }
 
-    public void cleanup(@Nonnull Store<EntityStore> store, @Nullable SpawnedNpc npc) {
+    public boolean cleanup(@Nonnull Store<EntityStore> store, @Nullable SpawnedNpc npc) {
         if (npc == null || npc.ref() == null || !npc.ref().isValid()) {
-            return;
+            return true;
         }
         store.removeEntity(npc.ref(), RemoveReason.REMOVE);
+        return true;
     }
 
     @Nonnull
@@ -70,10 +82,20 @@ public final class NpcRuntimeFixtureSpawner {
         throw new IllegalArgumentException(fieldName + " must contain only numbers");
     }
 
-    public record SpawnedNpc(@Nonnull Ref<EntityStore> ref, @Nonnull NPCEntity npc) {
+    public record SpawnedNpc(@Nonnull String fixtureId,
+                             @Nonnull NpcRuntimeFixtureKind kind,
+                             @Nonnull String roleId,
+                             @Nullable String targetSlot,
+                             @Nonnull Ref<EntityStore> ref,
+                             @Nonnull NPCEntity npc) {
         @Nullable
         public UUID uuid() {
             return npc.getUuid();
+        }
+
+        @Nonnull
+        public NpcRuntimeFixtureSpawnResult toSpawnResult() {
+            return new NpcRuntimeFixtureSpawnResult(fixtureId, kind, true, uuid(), roleId, targetSlot, "spawned");
         }
     }
 }

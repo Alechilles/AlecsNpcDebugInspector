@@ -171,6 +171,24 @@ Cleanup evidence is embedded under `result.cleanup.report` while preserving the 
 
 Current block reset status: the default smoke arena does not mutate blocks yet, so block reset counts are expected to remain zero. Future fixture phases should register every block mutation before applying it and increment the same cleanup report during reset.
 
+### Fixture Schema and Spawn Support
+
+Main endgame Phase 4 adds a canonical `fixtures.list` schema while preserving the legacy `fixtures.npc` plus `fixtures.targets` request shape. The canonical list supports:
+
+- `npcUnderTest`
+- `targetDummy`
+- `npc`
+- `mob`
+- `item`
+- `block`
+- `playerAnchor`
+- `familyMember`
+- `flockMember`
+
+NPC-backed fixture kinds (`npcUnderTest`, `targetDummy`, `npc`, `mob`, `familyMember`, and `flockMember`) can currently spawn through `NPCPlugin.spawnNPC(...)` when a `roleId` is present. Spawned fixtures are emitted as `fixture-spawn` trace records with deterministic fixture ids, kind, role id, target slot, NPC UUID, and a structured spawn result. The cleanup report counts each spawned NPC fixture removal.
+
+The schema accepts item, block, and player-anchor fixture declarations, but the harness rejects them before world mutation with classification `unsupported-fixture` until safe item, block, and player-anchor engine APIs are implemented. Direct `entityId` spawning is also rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
+
 ### World Ticking, Chunks, and Entities
 
 `com.hypixel.hytale.server.core.universe.world.World`

@@ -25,6 +25,9 @@ public final class NpcRuntimeTraceRecord {
 
     @Nonnull
     public NpcRuntimeTraceRecord with(@Nonnull String key, @Nullable Object value) {
+        if ("version".equals(key) || "requestId".equals(key) || "tick".equals(key) || "kind".equals(key)) {
+            throw new IllegalArgumentException("Trace field '" + key + "' is reserved");
+        }
         fields.put(key, value);
         return this;
     }

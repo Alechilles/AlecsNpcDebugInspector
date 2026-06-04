@@ -60,9 +60,10 @@ public record NpcRuntimeRequest(
         ScenarioSpec scenario = ScenarioSpec.from(asMap(data.get("scenario"), requestId), requestId);
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
         EnvironmentSpec environment = EnvironmentSpec.from(asMap(data.get("environment"), requestId), requestId);
-        Fixtures fixtures = Fixtures.from(asMap(data.get("fixtures"), requestId), requestId);
+        Fixtures fixtures = Fixtures.from(asMap(data.get("fixtures"), requestId), requestId, roleId);
         LimitsSpec limits = LimitsSpec.from(asMap(data.get("limits"), requestId), config, requestId);
         validateEntityCount(config, fixtures.entityCount(), limits.maxEntities(), requestId);
+        NpcRuntimeFixtureAllowlist.defaults().validate(fixtures.list(), requestId);
         RecordSpec record = RecordSpec.from(asMap(data.get("record"), requestId), requestId);
         List<AssertionSpec> assertions = assertions(data.get("assertions"), requestId);
         if (!assertions.isEmpty()) {
@@ -270,7 +271,7 @@ public record NpcRuntimeRequest(
     }
 
     @Nonnull
-    private static ValidationException invalid(@Nullable String requestId, @Nonnull String message) {
+    static ValidationException invalid(@Nullable String requestId, @Nonnull String message) {
         return new ValidationException("invalid-request", requestId, message, List.of());
     }
 
@@ -279,6 +280,13 @@ public record NpcRuntimeRequest(
                                                    @Nonnull String message,
                                                    @Nonnull List<UnsupportedField> unsupported) {
         return new ValidationException("unsupported-request", requestId, message, unsupported);
+    }
+
+    @Nonnull
+    static ValidationException unsupportedFixture(@Nullable String requestId,
+                                                  @Nonnull String message,
+                                                  @Nonnull List<UnsupportedField> unsupported) {
+        return new ValidationException("unsupported-fixture", requestId, message, unsupported);
     }
 
     public record UnsupportedField(@Nonnull String path, @Nonnull String reason) {
@@ -400,19 +408,42 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record Fixtures(@Nonnull NpcFixture npc, @Nonnull List<TargetFixture> targets) {
+    public record Fixtures(@Nonnull NpcFixture npc,
+                           @Nonnull List<TargetFixture> targets,
+                           @Nonnull List<NpcRuntimeFixtureSpec> list) {
         @Nonnull
-        static Fixtures from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
-            rejectUnsupportedKeys(data, "fixtures", List.of("npc", "targets"), requestId);
+        static Fixtures from(@Nonnull Map<String, Object> data, @Nonnull String requestId, @Nonnull String defaultRoleId) {
+            rejectUnsupportedKeys(data, "fixtures", List.of("npc", "targets", "list"), requestId);
             NpcFixture npc = NpcFixture.from(asMap(data.get("npc"), requestId), requestId);
             List<TargetFixture> targets = objectList(data.get("targets"), requestId).stream()
                     .map(item -> TargetFixture.from(item, requestId))
                     .toList();
-            return new Fixtures(npc, targets);
+            List<NpcRuntimeFixtureSpec> specs = new ArrayList<>();
+            if (data.containsKey("list")) {
+                specs.addAll(objectList(data.get("list"), requestId).stream()
+                        .map(item -> NpcRuntimeFixtureSpec.fromMap(item, requestId, "fixtures.list[]", defaultRoleId))
+                        .toList());
+            } else {
+                specs.add(NpcRuntimeFixtureSpec.npcUnderTest(npc, defaultRoleId));
+                for (TargetFixture target : targets) {
+                    specs.add(NpcRuntimeFixtureSpec.fromLegacyTarget(target, defaultRoleId, requestId));
+                }
+            }
+            NpcRuntimeFixtureSpec npcSpec = npcUnderTestSpec(specs, requestId);
+            NpcFixture resolvedNpc = data.containsKey("list") ? npcSpec.toLegacyNpcFixture() : npc;
+            return new Fixtures(resolvedNpc, targets, List.copyOf(specs));
         }
 
         int entityCount() {
-            return targets.size() + 1;
+            return (int) list.stream().filter(spec -> spec.kind().entityLike()).count();
+        }
+
+        @Nonnull
+        NpcRuntimeFixtureSpec npcUnderTest() {
+            return list.stream()
+                    .filter(spec -> spec.kind() == NpcRuntimeFixtureKind.NPC_UNDER_TEST)
+                    .findFirst()
+                    .orElseThrow();
         }
 
         @Nonnull
@@ -420,7 +451,24 @@ public record NpcRuntimeRequest(
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
             map.put("npc", npc.toMap());
             map.put("targets", targets.stream().map(TargetFixture::toMap).toList());
+            map.put("list", list.stream().map(NpcRuntimeFixtureSpec::toMap).toList());
             return map;
+        }
+
+        @Nonnull
+        private static NpcRuntimeFixtureSpec npcUnderTestSpec(@Nonnull List<NpcRuntimeFixtureSpec> specs,
+                                                              @Nonnull String requestId) {
+            List<NpcRuntimeFixtureSpec> matches = specs.stream()
+                    .filter(spec -> spec.kind() == NpcRuntimeFixtureKind.NPC_UNDER_TEST)
+                    .toList();
+            if (matches.isEmpty()) {
+                throw unsupportedFixture(
+                        requestId,
+                        "request must contain exactly one npcUnderTest fixture",
+                        List.of(new UnsupportedField("fixtures.list", "exactly one npcUnderTest fixture is required"))
+                );
+            }
+            return matches.getFirst();
         }
     }
 

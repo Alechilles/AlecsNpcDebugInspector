@@ -23,6 +23,7 @@ public record NpcRuntimeRequest(
         @Nonnull TimingSpec timing,
         @Nonnull WorldSpec world,
         @Nonnull EnvironmentSpec environment,
+        @Nonnull MultiNpcSpec multiNpc,
         @Nonnull Fixtures fixtures,
         @Nonnull EngineHooksSpec engineHooks,
         @Nonnull RecordSpec record,
@@ -43,7 +44,7 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "timing", "environment", "fixtures", "engineHooks", "record", "assertions", "limits"),
+                        "timing", "environment", "multiNpc", "fixtures", "engineHooks", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -64,7 +65,9 @@ public record NpcRuntimeRequest(
         ScenarioSpec scenario = ScenarioSpec.from(asMap(data.get("scenario"), requestId), requestId);
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
         EnvironmentSpec environment = EnvironmentSpec.from(asMap(data.get("environment"), requestId), requestId);
+        MultiNpcSpec multiNpc = MultiNpcSpec.from(asMap(data.get("multiNpc"), requestId), config, requestId);
         Fixtures fixtures = Fixtures.from(asMap(data.get("fixtures"), requestId), requestId, roleId);
+        multiNpc.validateScenarioWindow(ticks, timing.warmupTicks(), fixtures.list().size(), requestId);
         EngineHooksSpec engineHooks = EngineHooksSpec.from(asMap(data.get("engineHooks"), requestId), requestId);
         LimitsSpec limits = LimitsSpec.from(asMap(data.get("limits"), requestId), config, requestId);
         validateEntityCount(config, fixtures.entityCount(), limits.maxEntities(), requestId);
@@ -83,6 +86,7 @@ public record NpcRuntimeRequest(
                 timing,
                 world,
                 environment,
+                multiNpc,
                 fixtures,
                 engineHooks,
                 record,
@@ -111,6 +115,7 @@ public record NpcRuntimeRequest(
         map.put("timing", timing.toMap());
         map.put("world", world.toMap());
         map.put("environment", environment.toMap());
+        map.put("multiNpc", multiNpc.toMap());
         map.put("fixtures", fixtures.toMap());
         if (engineHooks.anyEnabled()) {
             map.put("engineHooks", engineHooks.toMap());
@@ -431,6 +436,59 @@ public record NpcRuntimeRequest(
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
             map.put("warmupTicks", warmupTicks);
             map.put("stopWhenAssertionsResolved", stopWhenAssertionsResolved);
+            return map;
+        }
+    }
+
+    public record MultiNpcSpec(@Nonnull String mode, int deliveryWindowTicks, int maxFixtureCount) {
+        private static final int DEFAULT_DELIVERY_WINDOW_TICKS = 90;
+
+        @Nonnull
+        static MultiNpcSpec from(@Nonnull Map<String, Object> data,
+                                 @Nonnull NpcRuntimeHarnessConfig config,
+                                 @Nonnull String requestId) {
+            rejectUnsupportedKeys(data, "multiNpc", List.of("mode", "deliveryWindowTicks", "maxFixtureCount"), requestId);
+            String mode = stringOrNull(data.get("mode"));
+            if (mode == null) {
+                mode = "single";
+            }
+            if (!List.of("single", "linked", "swarm").contains(mode)) {
+                throw invalid(requestId, "unsupported multiNpc.mode " + mode);
+            }
+            int deliveryWindowTicks = intValue(data.get("deliveryWindowTicks"), DEFAULT_DELIVERY_WINDOW_TICKS, requestId);
+            if (deliveryWindowTicks <= 0) {
+                throw invalid(requestId, "multiNpc.deliveryWindowTicks must be greater than zero");
+            }
+            int maxFixtureCount = intValue(data.get("maxFixtureCount"), config.maxEntities(), requestId);
+            if (maxFixtureCount <= 0) {
+                throw invalid(requestId, "multiNpc.maxFixtureCount must be greater than zero");
+            }
+            try {
+                config.validateEntityCount(maxFixtureCount);
+            } catch (IllegalArgumentException exception) {
+                throw invalid(requestId, exception.getMessage());
+            }
+            return new MultiNpcSpec(mode, deliveryWindowTicks, maxFixtureCount);
+        }
+
+        void validateScenarioWindow(int ticks,
+                                    int warmupTicks,
+                                    int fixtureCount,
+                                    @Nonnull String requestId) {
+            if (fixtureCount > maxFixtureCount) {
+                throw invalid(requestId, "multiNpc.maxFixtureCount exceeded by fixture list");
+            }
+            if (!"single".equals(mode) && ticks < warmupTicks + deliveryWindowTicks) {
+                throw invalid(requestId, "multiNpc.deliveryWindowTicks requires ticks to be at least warmupTicks + deliveryWindowTicks");
+            }
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("mode", mode);
+            map.put("deliveryWindowTicks", deliveryWindowTicks);
+            map.put("maxFixtureCount", maxFixtureCount);
             return map;
         }
     }

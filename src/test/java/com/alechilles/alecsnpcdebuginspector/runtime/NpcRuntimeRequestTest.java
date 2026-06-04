@@ -294,6 +294,106 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesMultiNpcContractAndPreservesDefaults() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest defaultRequest = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"single_default\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":120}",
+                config
+        );
+        NpcRuntimeRequest linkedRequest = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "linked_family",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 240,
+                  "timing": {"warmupTicks": 30},
+                  "multiNpc": {
+                    "mode": "linked",
+                    "deliveryWindowTicks": 120,
+                    "maxFixtureCount": 6
+                  },
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "family.child", "kind": "familyMember", "roleId": "R", "parentFixtureId": "npcUnderTest"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals("single", defaultRequest.multiNpc().mode());
+        assertEquals(90, defaultRequest.multiNpc().deliveryWindowTicks());
+        assertEquals(64, defaultRequest.multiNpc().maxFixtureCount());
+        assertEquals("linked", linkedRequest.multiNpc().mode());
+        assertEquals(120, linkedRequest.multiNpc().deliveryWindowTicks());
+        assertEquals(6, linkedRequest.multiNpc().maxFixtureCount());
+        assertTrue(linkedRequest.toJson().contains("\"multiNpc\":{\"mode\":\"linked\",\"deliveryWindowTicks\":120,\"maxFixtureCount\":6}"));
+    }
+
+    @Test
+    void rejectsMultiNpcDeliveryWindowLongerThanScenarioWindow() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "too_short_for_delivery",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 80,
+                          "timing": {"warmupTicks": 30},
+                          "multiNpc": {"mode": "linked", "deliveryWindowTicks": 90}
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpc.deliveryWindowTicks requires ticks to be at least warmupTicks + deliveryWindowTicks", exception.getMessage());
+    }
+
+    @Test
+    void rejectsSwarmFixtureCountOverMultiNpcGuard() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "swarm_too_large",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "multiNpc": {"mode": "swarm", "maxFixtureCount": 2},
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "flock.one", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "npcUnderTest"},
+                              {"fixtureId": "flock.two", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "npcUnderTest"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpc.maxFixtureCount exceeded by fixture list", exception.getMessage());
+    }
+
+    @Test
     void serializesDeterministicJsonForCliRoundTrip() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(
@@ -308,6 +408,7 @@ class NpcRuntimeRequestTest {
         assertTrue(json.contains("\"npc\":{\"position\":[0,64,0]}"));
         assertTrue(json.contains("\"scenario\":{\"id\":\"simple\"}"));
         assertTrue(json.contains("\"environment\":{}"));
+        assertTrue(json.contains("\"multiNpc\":{\"mode\":\"single\",\"deliveryWindowTicks\":90,\"maxFixtureCount\":64}"));
         assertTrue(json.contains("\"assertions\":[]"));
         assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":8388608}"));
     }

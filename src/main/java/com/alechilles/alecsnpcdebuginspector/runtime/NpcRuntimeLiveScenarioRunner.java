@@ -200,6 +200,13 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("arena", request.world().arena())
                     .with("mode", "no-block-reset-yet")
                     .with("details", arena.toMap()));
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "multi-npc-setup")
+                    .with("mode", request.multiNpc().mode())
+                    .with("fixtureCount", request.fixtures().list().size())
+                    .with("linkedFixtureCount", linkedFixtureCount(request.fixtures().list()))
+                    .with("deliveryWindowTicks", request.multiNpc().deliveryWindowTicks())
+                    .with("maxFixtureCount", request.multiNpc().maxFixtureCount())
+                    .with("unsupportedRelationshipFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation", "engineMessageBusMutation", "engineBeaconMutation")));
             for (NpcRuntimeFixtureSpec fixture : request.fixtures().list()) {
                 NpcRuntimeFixtureSpawner.SpawnedNpc spawned = fixtureSpawner.spawnFixture(world, fixture);
                 spawnedFixtures.spawnedNpcs.add(spawned);
@@ -401,6 +408,13 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 || "pathing-evidence".equals(kind)
                 || "combat-eligibility-evidence".equals(kind)
                 || "instruction-lifecycle-evidence".equals(kind);
+    }
+
+    private static long linkedFixtureCount(@Nonnull List<NpcRuntimeFixtureSpec> fixtures) {
+        return fixtures.stream()
+                .filter(fixture -> fixture.leaderFixtureId() != null
+                        || fixture.parentFixtureId() != null)
+                .count();
     }
 
     private static boolean shouldStopAfterAssertionsResolve(@Nonnull NpcRuntimeRequest request,

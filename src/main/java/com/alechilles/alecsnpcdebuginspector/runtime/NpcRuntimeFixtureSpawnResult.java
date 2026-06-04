@@ -32,6 +32,19 @@ public record NpcRuntimeFixtureSpawnResult(
     }
 
     @Nonnull
+    static NpcRuntimeFixtureSpawnResult failed(@Nonnull NpcRuntimeFixtureSpec spec, @Nonnull String message) {
+        return new NpcRuntimeFixtureSpawnResult(
+                spec.fixtureId(),
+                spec.kind(),
+                false,
+                null,
+                spec.roleId(),
+                spec.targetSlot(),
+                message
+        );
+    }
+
+    @Nonnull
     Map<String, Object> toMap() {
         LinkedHashMap<String, Object> map = new LinkedHashMap<>();
         map.put("fixtureId", fixtureId);

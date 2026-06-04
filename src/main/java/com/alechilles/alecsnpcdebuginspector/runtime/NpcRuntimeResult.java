@@ -84,6 +84,34 @@ public record NpcRuntimeResult(
     }
 
     @Nonnull
+    public static NpcRuntimeResult fixtureSpawnFailed(@Nonnull NpcRuntimeRequest request,
+                                                      int ticksRun,
+                                                      @Nonnull Path tracePath,
+                                                      @Nonnull NpcRuntimeFixtureSpawnResult spawnResult,
+                                                      @Nonnull NpcRuntimeCleanupReport cleanupReport) {
+        Instant now = Instant.now();
+        String role = spawnResult.roleId() != null ? spawnResult.roleId() : "<none>";
+        String message = "fixture spawn failed: fixtureId=" + spawnResult.fixtureId()
+                + ", roleId=" + role
+                + ", reason=" + spawnResult.message();
+        return new NpcRuntimeResult(
+                "failed",
+                "fixture-spawn-failed",
+                request.requestId(),
+                request.ticks(),
+                ticksRun,
+                tracePath.toString(),
+                new ErrorInfo("fixture-spawn", message, null),
+                now,
+                now,
+                List.of(),
+                Cleanup.fromReport(cleanupReport),
+                Artifacts.withTrace(tracePath),
+                Summary.empty().withFixtureSpawn(spawnResult)
+        );
+    }
+
+    @Nonnull
     public static NpcRuntimeResult assertionFailed(@Nonnull NpcRuntimeRequest request,
                                                    int ticksRun,
                                                    @Nonnull Path tracePath,
@@ -290,6 +318,7 @@ public record NpcRuntimeResult(
         private final List<String> combatAbilitiesSeen = new ArrayList<>();
         private final List<String> timersSeen = new ArrayList<>();
         private final List<String> alarmsSeen = new ArrayList<>();
+        private final List<NpcRuntimeFixtureSpawnResult> fixtureSpawns = new ArrayList<>();
         private final List<NpcRuntimeAssertionResult> assertionResults = new ArrayList<>();
 
         private Summary() {
@@ -313,6 +342,12 @@ public record NpcRuntimeResult(
             return this;
         }
 
+        @Nonnull
+        public Summary withFixtureSpawn(@Nonnull NpcRuntimeFixtureSpawnResult result) {
+            fixtureSpawns.add(result);
+            return this;
+        }
+
         public boolean hasAssertionFailures() {
             return assertionResults.stream().anyMatch(result -> "failed".equals(result.status()));
         }
@@ -329,6 +364,7 @@ public record NpcRuntimeResult(
             map.put("combatAbilitiesSeen", List.copyOf(combatAbilitiesSeen));
             map.put("timersSeen", List.copyOf(timersSeen));
             map.put("alarmsSeen", List.copyOf(alarmsSeen));
+            map.put("fixtureSpawns", fixtureSpawns.stream().map(NpcRuntimeFixtureSpawnResult::toMap).toList());
             map.put("assertions", assertionResults.stream().map(NpcRuntimeAssertionResult::toMap).toList());
             return map;
         }

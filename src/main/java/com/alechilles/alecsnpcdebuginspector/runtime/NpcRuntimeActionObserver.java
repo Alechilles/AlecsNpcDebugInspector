@@ -1,9 +1,11 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -60,7 +62,7 @@ public final class NpcRuntimeActionObserver {
         Map<String, ActionState> currentStates = actionStates(observed);
         addActionTransitions(records, requestId, tick, previousStates, currentStates, tracker);
         addAiActionEvidence(records, requestId, tick, observed.section("AI"), tracker);
-        addCombatEvaluatorEvidence(records, requestId, tick, observed.section("Combat"));
+        addCombatEvaluatorEvidence(records, requestId, tick, observed.section("Combat"), observed.section("Timers / Cooldowns"), tracker);
         return records;
     }
 
@@ -224,21 +226,73 @@ public final class NpcRuntimeActionObserver {
     private void addCombatEvaluatorEvidence(@Nonnull List<NpcRuntimeTraceRecord> records,
                                             @Nonnull String requestId,
                                             int tick,
-                                            @Nonnull Map<String, String> combat) {
+                                            @Nonnull Map<String, String> combat,
+                                            @Nonnull Map<String, String> timers,
+                                            @Nonnull ActionLifecycleTracker tracker) {
         String executing = combat.get("executingAttack");
         if (executing == null) {
             return;
         }
         boolean selected = Boolean.parseBoolean(executing);
-        records.add(NpcRuntimeTraceRecord.of(requestId, tick, "combat-evaluator-evidence")
+        String key = "CombatSupport/combatSupport.executingAttack";
+        Integer startTick = tracker.startTick(key);
+        Integer endTick = null;
+        if (selected) {
+            if (startTick == null) {
+                tracker.start(key, tick);
+                startTick = tick;
+            }
+        } else if (startTick != null) {
+            endTick = tick;
+            tracker.end(key, tick);
+        }
+
+        String cooldown = firstPresent(
+                timers,
+                "attackCooldownRemaining",
+                "attackCooldown",
+                "cooldownRemaining",
+                "attackExecuting"
+        );
+        Set<String> supported = new HashSet<>();
+        supported.add("candidateCombatAction");
+        supported.add("eligibility");
+        if (cooldown != null) {
+            supported.add("cooldown");
+        }
+        if (selected) {
+            supported.add("chosenAction");
+        } else {
+            supported.add("rejectionReason");
+        }
+
+        NpcRuntimeTraceRecord executingRecord = NpcRuntimeTraceRecord.of(requestId, tick, "combat-evaluator-evidence")
                 .with("evaluatorType", "CombatSupport")
                 .with("evaluatorId", "combatSupport.executingAttack")
                 .with("candidateAction", "Attack")
-                .with("lifecycle", selected ? "running" : "not-running")
+                .with("lifecycle", selected ? "running" : "rejected")
                 .with("selected", selected)
-                .with("observedValue", executing)
-                .with("unsupportedFields", COMBAT_UNSUPPORTED_FIELDS));
-        String overrides = combat.get("attackOverrides");
+                .with("eligible", selected)
+                .with("observedValue", executing);
+        if (selected) {
+            executingRecord.with("chosenAction", "Attack");
+        } else {
+            executingRecord.with("rejectionReason", "not-executing-attack");
+        }
+        if (cooldown != null) {
+            executingRecord.with("cooldown", cooldown);
+        }
+        if (startTick != null) {
+            executingRecord.with("startTick", startTick);
+        }
+        if (endTick != null) {
+            executingRecord.with("endTick", endTick)
+                    .with("durationTicks", Math.max(0, endTick - startTick));
+        }
+        executingRecord.with("unsupportedFields", combatUnsupportedFields(supported));
+        records.add(executingRecord);
+
+        String overrides = firstPresent(combat, "attackOverrides", "attackOverrideCount");
         if (overrides != null) {
             records.add(NpcRuntimeTraceRecord.of(requestId, tick, "combat-evaluator-evidence")
                     .with("evaluatorType", "CombatSupport")
@@ -247,8 +301,19 @@ public final class NpcRuntimeActionObserver {
                     .with("lifecycle", "observed")
                     .with("selected", false)
                     .with("observedValue", overrides)
-                    .with("unsupportedFields", COMBAT_UNSUPPORTED_FIELDS));
+                    .with("unsupportedFields", combatUnsupportedFields(Set.of("candidateCombatAction"))));
         }
+    }
+
+    @Nullable
+    private static String firstPresent(@Nonnull Map<String, String> values, @Nonnull String... keys) {
+        for (String key : keys) {
+            String value = values.get(key);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private boolean isNone(@Nonnull String value) {
@@ -262,6 +327,13 @@ public final class NpcRuntimeActionObserver {
         }
         return ACTION_UNSUPPORTED_FIELDS.stream()
                 .filter(field -> !"startTick".equals(field))
+                .toList();
+    }
+
+    @Nonnull
+    private List<String> combatUnsupportedFields(@Nonnull Set<String> supportedFields) {
+        return COMBAT_UNSUPPORTED_FIELDS.stream()
+                .filter(field -> !supportedFields.contains(field))
                 .toList();
     }
 

@@ -5,6 +5,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeActionObserverTest {
@@ -24,6 +25,9 @@ class NpcRuntimeActionObserverTest {
                         === Combat ===
                         - Executing Attack: true
                         - Attack Override Count: 1
+
+                        === Timers / Cooldowns ===
+                        - Attack Cooldown Remaining: 12
                         """
         ));
 
@@ -53,7 +57,78 @@ class NpcRuntimeActionObserverTest {
         assertEquals("CombatSupport", combat.fields().get("evaluatorType"));
         assertEquals("running", combat.fields().get("lifecycle"));
         assertEquals(true, combat.fields().get("selected"));
-        assertTrue(combat.toJson().contains("eligibility"));
+        assertEquals(true, combat.fields().get("eligible"));
+        assertEquals("Attack", combat.fields().get("chosenAction"));
+        assertEquals("12", combat.fields().get("cooldown"));
+        assertFalse(combat.fields().get("unsupportedFields").toString().contains("eligibility"));
+        assertTrue(records.stream().anyMatch(record ->
+                "combat-evaluator-evidence".equals(record.fields().get("kind"))
+                        && "combatSupport.attackOverrides".equals(record.fields().get("evaluatorId"))
+                        && "observed".equals(record.fields().get("lifecycle"))));
+    }
+
+    @Test
+    void emitsRejectedCombatEvaluatorEvidenceWhenAttackIsNotExecuting() {
+        NpcRuntimeObservedNpc observed = NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
+                "NPC Debug Inspector",
+                "UUID: sample | Loaded: true",
+                """
+                        === Combat ===
+                        - Executing Attack: false
+
+                        === Timers / Cooldowns ===
+                        - Attack Cooldown Remaining: 0
+                        """
+        ));
+
+        List<NpcRuntimeTraceRecord> records = new NpcRuntimeActionObserver().traceRecords("request-a", 4, observed);
+
+        NpcRuntimeTraceRecord rejected = records.stream()
+                .filter(record -> "combat-evaluator-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "combatSupport.executingAttack".equals(record.fields().get("evaluatorId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("rejected", rejected.fields().get("lifecycle"));
+        assertEquals(false, rejected.fields().get("selected"));
+        assertEquals(false, rejected.fields().get("eligible"));
+        assertEquals("not-executing-attack", rejected.fields().get("rejectionReason"));
+        assertEquals("0", rejected.fields().get("cooldown"));
+        assertTrue(rejected.fields().get("unsupportedFields").toString().contains("range"));
+    }
+
+    @Test
+    void tracksCombatEvaluatorDurationWhenAttackStopsExecuting() {
+        NpcRuntimeActionObserver observer = new NpcRuntimeActionObserver();
+        NpcRuntimeActionObserver.ActionLifecycleTracker tracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
+        NpcRuntimeObservedNpc running = NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
+                "NPC Debug Inspector",
+                "UUID: sample | Loaded: true",
+                """
+                        === Combat ===
+                        - Executing Attack: true
+                        """
+        ));
+        NpcRuntimeObservedNpc stopped = NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
+                "NPC Debug Inspector",
+                "UUID: sample | Loaded: true",
+                """
+                        === Combat ===
+                        - Executing Attack: false
+                        """
+        ));
+
+        observer.traceRecords("request-a", 20, running, null, tracker);
+        List<NpcRuntimeTraceRecord> stoppedRecords = observer.traceRecords("request-a", 35, stopped, running, tracker);
+
+        NpcRuntimeTraceRecord stoppedEvidence = stoppedRecords.stream()
+                .filter(record -> "combat-evaluator-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "combatSupport.executingAttack".equals(record.fields().get("evaluatorId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("rejected", stoppedEvidence.fields().get("lifecycle"));
+        assertEquals(20, stoppedEvidence.fields().get("startTick"));
+        assertEquals(35, stoppedEvidence.fields().get("endTick"));
+        assertEquals(15, stoppedEvidence.fields().get("durationTicks"));
     }
 
     @Test

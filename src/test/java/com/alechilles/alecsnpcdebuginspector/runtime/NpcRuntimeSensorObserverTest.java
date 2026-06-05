@@ -2,9 +2,11 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeSensorObserverTest {
@@ -37,5 +39,103 @@ class NpcRuntimeSensorObserverTest {
                 && "matched".equals(record.fields().get("matchResult"))));
         assertTrue(records.stream().anyMatch(record -> record.toJson().contains("unsupportedFields")));
         assertTrue(records.stream().anyMatch(record -> "Timer".equals(record.fields().get("sensorType"))));
+    }
+
+    @Test
+    void enrichesTargetSlotEvidenceFromFixtureMetadata() {
+        NpcRuntimeObservedNpc observed = NpcRuntimeObservedNpc.fromSnapshot(
+                null,
+                new NpcDebugSnapshot(
+                        "NPC Debug Inspector",
+                        "",
+                        """
+                                === Targeting / Sensors ===
+                                - Target Enemy: Tamework Example (abc)
+                                """
+                )
+        );
+        List<NpcRuntimeFixtureSpec> fixtures = List.of(
+                fixture("npcUnderTest", "npcUnderTest", List.of(0, 64, 0), null, List.of(), null, null, null),
+                fixture("target.enemy", "targetDummy", List.of(3, 64, 4), "Enemy", List.of("hostile", "close"), "enemyFaction", "aggressive", true)
+        );
+
+        NpcRuntimeTraceRecord record = new NpcRuntimeSensorObserver()
+                .traceRecords("request-a", 2, observed, fixtures)
+                .stream()
+                .filter(item -> "TargetSlot".equals(item.fields().get("sensorType")))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("target.enemy", record.fields().get("targetFixtureId"));
+        assertEquals(5.0, record.fields().get("distance"));
+        assertEquals(true, record.fields().get("visibility"));
+        assertEquals(true, record.fields().get("lineOfSight"));
+        assertEquals(List.of("hostile", "close"), record.fields().get("tags"));
+        assertEquals("enemyFaction", record.fields().get("faction"));
+        assertEquals("aggressive", record.fields().get("attitude"));
+        assertFalse(((List<?>) record.fields().get("unsupportedFields")).contains("distance"));
+        assertFalse(((List<?>) record.fields().get("unsupportedFields")).contains("targetFixtureId"));
+    }
+
+    @Test
+    void emitsTimerAlarmAndFlagEvidenceWithCommonFields() {
+        NpcRuntimeObservedNpc observed = NpcRuntimeObservedNpc.fromSnapshot(
+                null,
+                new NpcDebugSnapshot(
+                        "NPC Debug Inspector",
+                        "",
+                        """
+                                === Timers / Cooldowns ===
+                                - Attack Cooldown Active: true
+
+                                === Alarms ===
+                                - Protect Baby: false
+
+                                === Flags ===
+                                - Can Forage: true
+                                """
+                )
+        );
+
+        List<NpcRuntimeTraceRecord> records = new NpcRuntimeSensorObserver().traceRecords("request-a", 2, observed);
+
+        assertTrue(records.stream().anyMatch(record -> "Timer".equals(record.fields().get("sensorType"))
+                && "attackCooldownActive".equals(record.fields().get("sourceField"))
+                && "matched".equals(record.fields().get("matchResult"))));
+        assertTrue(records.stream().anyMatch(record -> "Alarm".equals(record.fields().get("sensorType"))
+                && "protectBaby".equals(record.fields().get("sourceField"))
+                && "not-matched".equals(record.fields().get("matchResult"))));
+        assertTrue(records.stream().anyMatch(record -> "Flag".equals(record.fields().get("sensorType"))
+                && "canForage".equals(record.fields().get("sourceField"))
+                && "matched".equals(record.fields().get("matchResult"))));
+        assertTrue(records.stream().allMatch(record -> record.fields().containsKey("observedValue")
+                && record.fields().containsKey("sourceSection")
+                && record.fields().containsKey("sourceField")));
+    }
+
+    private static NpcRuntimeFixtureSpec fixture(String fixtureId,
+                                                 String kind,
+                                                 List<Object> position,
+                                                 String targetSlot,
+                                                 List<Object> tags,
+                                                 String faction,
+                                                 String attitude,
+                                                 Boolean visible) {
+        return NpcRuntimeFixtureSpec.fromMap(
+                Map.ofEntries(
+                        Map.entry("fixtureId", fixtureId),
+                        Map.entry("kind", kind),
+                        Map.entry("position", position),
+                        Map.entry("tags", tags),
+                        Map.entry("roleId", "Role"),
+                        Map.entry("targetSlot", targetSlot != null ? targetSlot : ""),
+                        Map.entry("faction", faction != null ? faction : ""),
+                        Map.entry("attitude", attitude != null ? attitude : ""),
+                        Map.entry("visible", visible != null ? visible : true)
+                ),
+                "request-a",
+                "fixtures.list[]",
+                "Role"
+        );
     }
 }

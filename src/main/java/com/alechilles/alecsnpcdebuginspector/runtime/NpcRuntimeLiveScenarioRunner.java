@@ -300,7 +300,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     spawnedFixtures.previousObserved,
                     request.engineHooks(),
                     npcUnderTest.fixtureId(),
-                    spawnedFixtures.actionLifecycleTracker
+                    spawnedFixtures.actionLifecycleTracker,
+                    request.fixtures().list()
             )) {
                 writeEventIfEnabled(writer, cadence, record);
                 if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {

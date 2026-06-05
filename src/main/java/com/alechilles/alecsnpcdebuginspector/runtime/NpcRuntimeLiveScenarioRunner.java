@@ -8,6 +8,7 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -287,23 +288,34 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
         NpcRuntimeFixtureSpawner.SpawnedNpc npcUnderTest = spawnedFixtures.npcUnderTest();
         if (cadence.shouldRecordSnapshot(tick) && npcUnderTest != null) {
-            NpcDebugSnapshot snapshot = snapshotService.capture(npcUnderTest.uuid(), npcUnderTest.ref(), store);
-            writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "npc-snapshot")
-                    .with("npcUuid", npcUnderTest.uuid() != null ? npcUnderTest.uuid().toString() : null)
-                    .with("title", snapshot.title())
-                    .with("subtitle", snapshot.subtitle())
-                    .with("details", snapshot.details()));
-            NpcRuntimeObservedNpc observed = observer.observe(npcUnderTest.uuid(), snapshot);
+            LinkedHashMap<String, NpcRuntimeObservedNpc> observedByFixture = new LinkedHashMap<>();
+            for (NpcRuntimeFixtureSpawner.SpawnedNpc spawnedNpc : spawnedFixtures.spawnedNpcs) {
+                NpcDebugSnapshot snapshot = snapshotService.capture(spawnedNpc.uuid(), spawnedNpc.ref(), store);
+                writer.write(NpcRuntimeTraceRecord.of(request.requestId(), tick, "npc-snapshot")
+                        .with("fixtureId", spawnedNpc.fixtureId())
+                        .with("roleId", spawnedNpc.roleId())
+                        .with("npcUuid", spawnedNpc.uuid() != null ? spawnedNpc.uuid().toString() : null)
+                        .with("title", snapshot.title())
+                        .with("subtitle", snapshot.subtitle())
+                        .with("details", snapshot.details()));
+                observedByFixture.put(spawnedNpc.fixtureId(), observer.observe(spawnedNpc.uuid(), snapshot));
+            }
+            NpcRuntimeObservedNpc observed = observedByFixture.get(npcUnderTest.fixtureId());
+            if (observed == null) {
+                throw new IllegalStateException("npcUnderTest snapshot missing");
+            }
             for (NpcRuntimeTraceRecord record : observer.traceRecords(
                     request.requestId(),
                     tick,
                     observed,
-                    spawnedFixtures.previousObserved,
+                    spawnedFixtures.previousObservedByFixture.get(npcUnderTest.fixtureId()),
                     request.engineHooks(),
                     npcUnderTest.fixtureId(),
                     spawnedFixtures.actionLifecycleTracker,
                     request.fixtures().list(),
-                    fixtureRegistry
+                    fixtureRegistry,
+                    observedByFixture,
+                    spawnedFixtures.previousObservedByFixture
             )) {
                 writeEventIfEnabled(writer, cadence, record);
                 if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {
@@ -311,6 +323,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 }
             }
             spawnedFixtures.previousObserved = observed;
+            spawnedFixtures.previousObservedByFixture.clear();
+            spawnedFixtures.previousObservedByFixture.putAll(observedByFixture);
         }
 
         if (shouldStopAfterAssertionsResolve(request, assertions, spawnedFixtures.evidenceRecords, tick)) {
@@ -719,6 +733,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
         private final List<Map<String, Object>> evidenceRecords = new ArrayList<>();
         private final NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
+        private final LinkedHashMap<String, NpcRuntimeObservedNpc> previousObservedByFixture = new LinkedHashMap<>();
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

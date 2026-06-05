@@ -52,6 +52,31 @@ public record NpcRuntimeObservedNpc(
         return sections.getOrDefault(sectionName, Map.of());
     }
 
+    @Nullable
+    String aiState() {
+        return section("AI").get("state");
+    }
+
+    @Nullable
+    String aiSubstate() {
+        return section("AI").get("subState");
+    }
+
+    @Nullable
+    String currentInstruction() {
+        Map<String, String> ai = section("AI");
+        String currentInstruction = ai.get("currentInstruction");
+        if (currentInstruction != null) {
+            return currentInstruction;
+        }
+        String treeStep = ai.get("currentTreeStep");
+        String bodyStep = ai.get("currentBodyStep");
+        if (treeStep != null && bodyStep != null) {
+            return treeStep + " / " + bodyStep;
+        }
+        return treeStep != null ? treeStep : bodyStep;
+    }
+
     @Nonnull
     private static Map<String, Map<String, String>> parseSections(@Nonnull String details) {
         LinkedHashMap<String, Map<String, String>> parsed = new LinkedHashMap<>();

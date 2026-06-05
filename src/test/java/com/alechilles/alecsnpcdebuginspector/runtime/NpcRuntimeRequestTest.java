@@ -540,6 +540,67 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesRequestLevelMultiNpcContractAliases() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "root_level_multi_npc",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 180,
+                  "timing": {"warmupTicks": 30},
+                  "multiNpcMode": "linked",
+                  "deliveryWindowTicks": 120,
+                  "maxFixtureCount": 6,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "message.threat", "kind": "message", "senderFixtureId": "npcUnderTest", "receiverFixtureId": "npcUnderTest"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals("linked", request.multiNpc().mode());
+        assertEquals(120, request.multiNpc().deliveryWindowTicks());
+        assertEquals(6, request.multiNpc().maxFixtureCount());
+        assertTrue(request.toJson().contains("\"multiNpcMode\":\"linked\""));
+        assertTrue(request.toJson().contains("\"deliveryWindowTicks\":120"));
+        assertTrue(request.toJson().contains("\"maxFixtureCount\":6"));
+    }
+
+    @Test
+    void rejectsConflictingRequestLevelAndNestedMultiNpcContract() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "conflicting_multi_npc",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 180,
+                          "multiNpcMode": "linked",
+                          "multiNpc": {"mode": "single"}
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpcMode conflicts with multiNpc.mode", exception.getMessage());
+    }
+
+    @Test
     void rejectsMultiNpcDeliveryWindowLongerThanScenarioWindow() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

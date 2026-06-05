@@ -46,8 +46,9 @@ public record NpcRuntimeRequest(
                 data,
                 "",
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
-                        "requiresPlayer", "timing", "environment", "multiNpc", "fixtures", "preseedTargetSlots",
-                        "engineHooks", "record", "assertions", "limits"),
+                        "requiresPlayer", "timing", "environment", "multiNpc", "multiNpcMode",
+                        "deliveryWindowTicks", "maxFixtureCount", "fixtures", "preseedTargetSlots", "engineHooks",
+                        "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -86,7 +87,7 @@ public record NpcRuntimeRequest(
         ScenarioSpec scenario = ScenarioSpec.from(asMap(data.get("scenario"), requestId), requestId);
         WorldSpec world = WorldSpec.from(asMap(data.get("world"), requestId), config, requestId);
         EnvironmentSpec environment = EnvironmentSpec.from(asMap(data.get("environment"), requestId), requestId);
-        MultiNpcSpec multiNpc = MultiNpcSpec.from(asMap(data.get("multiNpc"), requestId), config, requestId);
+        MultiNpcSpec multiNpc = MultiNpcSpec.fromRequest(data, config, requestId);
         Fixtures fixtures = Fixtures.from(asMap(data.get("fixtures"), requestId), requestId, roleId);
         multiNpc.validateScenarioWindow(ticks, timing.warmupTicks(), fixtures.list().size(), requestId);
         EngineHooksSpec engineHooks = EngineHooksSpec.from(asMap(data.get("engineHooks"), requestId), requestId);
@@ -140,6 +141,9 @@ public record NpcRuntimeRequest(
         map.put("timing", timing.toMap());
         map.put("world", world.toMap());
         map.put("environment", environment.toMap());
+        map.put("multiNpcMode", multiNpc.mode());
+        map.put("deliveryWindowTicks", multiNpc.deliveryWindowTicks());
+        map.put("maxFixtureCount", multiNpc.maxFixtureCount());
         map.put("multiNpc", multiNpc.toMap());
         map.put("fixtures", fixtures.toMap());
         if (engineHooks.anyEnabled()) {
@@ -495,9 +499,21 @@ public record NpcRuntimeRequest(
         private static final int DEFAULT_DELIVERY_WINDOW_TICKS = 90;
 
         @Nonnull
-        static MultiNpcSpec from(@Nonnull Map<String, Object> data,
-                                 @Nonnull NpcRuntimeHarnessConfig config,
-                                 @Nonnull String requestId) {
+        static MultiNpcSpec fromRequest(@Nonnull Map<String, Object> request,
+                                        @Nonnull NpcRuntimeHarnessConfig config,
+                                        @Nonnull String requestId) {
+            Map<String, Object> nested = asMap(request.get("multiNpc"), requestId);
+            LinkedHashMap<String, Object> data = new LinkedHashMap<>(nested);
+            copyRootAlias(request, data, "multiNpcMode", "mode", requestId);
+            copyRootAlias(request, data, "deliveryWindowTicks", "deliveryWindowTicks", requestId);
+            copyRootAlias(request, data, "maxFixtureCount", "maxFixtureCount", requestId);
+            return from(data, config, requestId);
+        }
+
+        @Nonnull
+        private static MultiNpcSpec from(@Nonnull Map<String, Object> data,
+                                         @Nonnull NpcRuntimeHarnessConfig config,
+                                         @Nonnull String requestId) {
             rejectUnsupportedKeys(data, "multiNpc", List.of("mode", "deliveryWindowTicks", "maxFixtureCount"), requestId);
             String mode = stringOrNull(data.get("mode"));
             if (mode == null) {
@@ -520,6 +536,21 @@ public record NpcRuntimeRequest(
                 throw invalid(requestId, exception.getMessage());
             }
             return new MultiNpcSpec(mode, deliveryWindowTicks, maxFixtureCount);
+        }
+
+        private static void copyRootAlias(@Nonnull Map<String, Object> request,
+                                          @Nonnull Map<String, Object> target,
+                                          @Nonnull String rootKey,
+                                          @Nonnull String nestedKey,
+                                          @Nonnull String requestId) {
+            if (!request.containsKey(rootKey)) {
+                return;
+            }
+            Object rootValue = request.get(rootKey);
+            if (target.containsKey(nestedKey) && !String.valueOf(target.get(nestedKey)).equals(String.valueOf(rootValue))) {
+                throw invalid(requestId, rootKey + " conflicts with multiNpc." + nestedKey);
+            }
+            target.put(nestedKey, rootValue);
         }
 
         void validateScenarioWindow(int ticks,

@@ -226,6 +226,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("fixtureCount", request.fixtures().list().size())
                     .with("linkedFixtureCount", linkedFixtureCount(request.fixtures().list()))
                     .with("deliveryWindowTicks", request.multiNpc().deliveryWindowTicks())
+                    .with("requestedDeliveryWindowTicks", request.multiNpc().deliveryWindowTicks())
                     .with("maxFixtureCount", request.multiNpc().maxFixtureCount())
                     .with("unsupportedRelationshipFields", List.of("engineFlockMembershipMutation", "engineFamilyBindingMutation", "engineMessageBusMutation", "engineBeaconMutation")));
             writeEventIfEnabled(writer, cadence, targetInductionRecord(request, tick));

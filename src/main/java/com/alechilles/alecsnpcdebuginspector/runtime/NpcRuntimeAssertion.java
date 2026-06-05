@@ -34,6 +34,9 @@ public record NpcRuntimeAssertion(
         @Nullable Boolean expectedEligible,
         @Nullable String expectedAbility,
         @Nullable List<Object> expectedDistanceBand,
+        @Nullable List<Object> allFixtures,
+        @Nullable List<Object> anyFixture,
+        @Nullable Integer withinDeliveryWindowTicks,
         @Nullable String expectedLeaderFixtureId,
         @Nullable String expectedParentFixtureId,
         @Nullable Integer expectedMemberCount,
@@ -90,6 +93,9 @@ public record NpcRuntimeAssertion(
                 boolOrNull(fields.containsKey("expectedEligible") ? fields.get("expectedEligible") : fields.get("eligible")),
                 string(fields, "expectedAbility", "ability"),
                 listOrNull(fields.get("expectedDistanceBand")),
+                listOrNull(fields.get("allFixtures")),
+                listOrNull(fields.containsKey("anyFixture") ? fields.get("anyFixture") : fields.get("anyFixtures")),
+                intOrNull(fields.get("withinDeliveryWindowTicks")),
                 string(fields, "expectedLeaderFixtureId", "leaderFixtureId"),
                 string(fields, "expectedParentFixtureId", "parentFixtureId"),
                 intOrNull(fields.get("expectedMemberCount")),
@@ -244,6 +250,14 @@ public record NpcRuntimeAssertion(
                 failures.add("expected childCount=" + expectedChildCount + " but observed " + observedChildCount);
             }
         }
+        Double observedDistance = null;
+        if (expectedDistanceBand != null) {
+            observedDistance = observedFlockDistance(flockEvidence);
+            if (!distanceInBand(observedDistance, expectedDistanceBand)) {
+                failures.add("expected distance band=" + expectedDistanceBand + " but observed " + observedDistance);
+            }
+        }
+        addFixtureSelectorFailures(failures, candidates);
         if (expectUnsupported != null) {
             boolean observedUnsupported = candidates.stream().anyMatch(candidate -> candidate.get("unsupportedFields") instanceof List<?> list && !list.isEmpty());
             if (expectUnsupported != observedUnsupported) {
@@ -268,6 +282,10 @@ public record NpcRuntimeAssertion(
         if (observedChildCount != null) {
             evidence.put("observedChildCount", observedChildCount);
         }
+        if (observedDistance != null) {
+            evidence.put("observedDistance", observedDistance);
+        }
+        addFixtureSelectorEvidence(evidence, candidates);
         List<Object> unsupportedFields = candidates.stream()
                 .flatMap(candidate -> candidate.get("unsupportedFields") instanceof List<?> list ? list.stream() : java.util.stream.Stream.empty())
                 .map(item -> (Object) item)
@@ -328,6 +346,7 @@ public record NpcRuntimeAssertion(
                 failures.add("expected receiverCount=" + expectedReceiverCount + " but observed " + observedReceiverCount);
             }
         }
+        addFixtureSelectorFailures(failures, matching);
         if (expectUnsupported != null) {
             boolean observedUnsupported = matching.stream().anyMatch(candidate -> candidate.get("unsupportedFields") instanceof List<?> list && !list.isEmpty());
             if (expectUnsupported != observedUnsupported) {
@@ -351,6 +370,7 @@ public record NpcRuntimeAssertion(
         if (observedReceiverCount != null) {
             evidence.put("observedReceiverCount", observedReceiverCount);
         }
+        addFixtureSelectorEvidence(evidence, matching);
         return signalEvaluation(failures, evidence, matching);
     }
 
@@ -399,6 +419,7 @@ public record NpcRuntimeAssertion(
                 failures.add("expected consumerCount=" + expectedConsumerCount + " but observed " + observedConsumerCount);
             }
         }
+        addFixtureSelectorFailures(failures, matching);
         if (expectUnsupported != null) {
             boolean observedUnsupported = matching.stream().anyMatch(candidate -> candidate.get("unsupportedFields") instanceof List<?> list && !list.isEmpty());
             if (expectUnsupported != observedUnsupported) {
@@ -419,6 +440,7 @@ public record NpcRuntimeAssertion(
         if (observedConsumerCount != null) {
             evidence.put("observedConsumerCount", observedConsumerCount);
         }
+        addFixtureSelectorEvidence(evidence, matching);
         return signalEvaluation(failures, evidence, matching);
     }
 
@@ -496,6 +518,97 @@ public record NpcRuntimeAssertion(
             }
             return matchesText(expectedParentFixtureId, link.get("targetFixtureId"));
         });
+    }
+
+    @Nullable
+    private Double observedFlockDistance(@Nonnull List<Map<String, Object>> flockEvidence) {
+        return flockEvidence.stream()
+                .filter(evidence -> fixtureId == null || matchesText(fixtureId, evidenceFixtureId(evidence)))
+                .map(evidence -> {
+                    Object distance = expectedParentFixtureId != null
+                            ? evidence.get("distanceToParent")
+                            : evidence.get("distanceToLeader");
+                    if (!(distance instanceof Number)) {
+                        distance = evidence.get("distance");
+                    }
+                    return distance instanceof Number number ? number.doubleValue() : null;
+                })
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static boolean distanceInBand(@Nullable Double observedDistance, @Nonnull List<Object> band) {
+        if (observedDistance == null || band.isEmpty()) {
+            return false;
+        }
+        Double min = null;
+        Double max = null;
+        if (band.size() == 1 && band.getFirst() instanceof Number number) {
+            max = number.doubleValue();
+        } else {
+            if (band.get(0) instanceof Number number) {
+                min = number.doubleValue();
+            }
+            if (band.size() > 1 && band.get(1) instanceof Number number) {
+                max = number.doubleValue();
+            }
+        }
+        if (min != null && observedDistance < min) {
+            return false;
+        }
+        return max == null || observedDistance <= max;
+    }
+
+    private void addFixtureSelectorFailures(@Nonnull List<String> failures,
+                                            @Nonnull List<Map<String, Object>> candidates) {
+        List<String> observedFixtureIds = observedFixtureIds(candidates);
+        List<String> required = stringList(allFixtures);
+        if (!required.isEmpty() && !observedFixtureIds.containsAll(required)) {
+            ArrayList<String> missing = new ArrayList<>(required);
+            missing.removeAll(observedFixtureIds);
+            failures.add("missing required fixture evidence " + missing);
+        }
+        List<String> alternatives = stringList(anyFixture);
+        if (!alternatives.isEmpty() && alternatives.stream().noneMatch(observedFixtureIds::contains)) {
+            failures.add("none of anyFixture alternatives were observed " + alternatives);
+        }
+    }
+
+    private void addFixtureSelectorEvidence(@Nonnull Map<String, Object> evidence,
+                                            @Nonnull List<Map<String, Object>> candidates) {
+        List<String> observedFixtureIds = observedFixtureIds(candidates);
+        if (!observedFixtureIds.isEmpty()) {
+            evidence.put("observedFixtureIds", observedFixtureIds);
+        }
+        List<String> required = stringList(allFixtures);
+        if (!required.isEmpty()) {
+            evidence.put("allFixtures", required);
+        }
+        List<String> alternatives = stringList(anyFixture);
+        if (!alternatives.isEmpty()) {
+            evidence.put("anyFixture", alternatives);
+        }
+    }
+
+    @Nonnull
+    private static List<String> observedFixtureIds(@Nonnull List<Map<String, Object>> candidates) {
+        ArrayList<String> ids = new ArrayList<>();
+        for (Map<String, Object> candidate : candidates) {
+            addObservedFixtureId(ids, evidenceFixtureId(candidate));
+            addObservedFixtureId(ids, stringValue(candidate.get("receiverFixtureId")));
+            addObservedFixtureId(ids, stringValue(candidate.get("consumerFixtureId")));
+            addObservedFixtureId(ids, stringValue(candidate.get("targetFixtureId")));
+            addObservedFixtureId(ids, stringValue(candidate.get("sourceFixtureId")));
+            addObservedFixtureId(ids, stringValue(candidate.get("senderFixtureId")));
+        }
+        return List.copyOf(ids);
+    }
+
+    private static void addObservedFixtureId(@Nonnull List<String> ids, @Nullable String fixtureId) {
+        if (fixtureId != null && !fixtureId.isBlank() && !ids.contains(fixtureId)) {
+            ids.add(fixtureId);
+        }
     }
 
     @Nullable
@@ -719,7 +832,10 @@ public record NpcRuntimeAssertion(
 
     private boolean withinWindow(@Nonnull Map<String, Object> evidence) {
         Integer tick = tickOrNull(evidence);
-        return tick == null || (tick >= window.startTick() && tick <= window.endTick());
+        if (tick == null || tick < window.startTick() || tick > window.endTick()) {
+            return tick == null;
+        }
+        return withinDeliveryWindowTicks == null || tick <= window.startTick() + withinDeliveryWindowTicks;
     }
 
     private boolean supportedKind() {
@@ -797,6 +913,25 @@ public record NpcRuntimeAssertion(
     @Nullable
     private static Integer intOrNull(@Nullable Object value) {
         return value instanceof Number number ? number.intValue() : null;
+    }
+
+    @Nonnull
+    private static List<String> stringList(@Nullable List<Object> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<String> out = new ArrayList<>();
+        for (Object value : values) {
+            if (value instanceof String text && !text.isBlank()) {
+                out.add(text);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    @Nullable
+    private static String stringValue(@Nullable Object value) {
+        return value instanceof String text && !text.isBlank() ? text : null;
     }
 
     @Nullable

@@ -348,6 +348,7 @@ class NpcRuntimeAssertionTest {
                 "fixtureId", "flock.follower_one",
                 "expectedLeaderFixtureId", "npcUnderTest",
                 "expectedMemberCount", 3,
+                "expectedDistanceBand", List.of(0, 6),
                 "expectUnsupported", true,
                 "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
         ));
@@ -358,6 +359,7 @@ class NpcRuntimeAssertionTest {
                         "fixtureId", "flock.follower_one",
                         "leaderFixtureId", "npcUnderTest",
                         "memberCount", 3,
+                        "distanceToLeader", 4.5,
                         "unsupportedFields", List.of("engineFlockMembershipMutation"))
         ));
 
@@ -365,6 +367,7 @@ class NpcRuntimeAssertionTest {
         assertEquals(0, result.firstMatchedTick());
         assertEquals(1, result.matchedEvidenceCount());
         assertEquals(3, result.evidence().get("observedMemberCount"));
+        assertEquals(4.5, result.evidence().get("observedDistance"));
     }
 
     @Test
@@ -417,6 +420,138 @@ class NpcRuntimeAssertionTest {
     }
 
     @Test
+    void passesMessageAssertionForAllExpectedReceivers() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "broadcast-message",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "expectedReceiverCount", 2,
+                "allFixtures", List.of("flock.follower_one", "flock.follower_two"),
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(18, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "receiverFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of()),
+                evidence(25, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "receiverFixtureId", "flock.follower_two",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(2, result.evidence().get("observedReceiverCount"));
+        assertEquals(List.of("flock.follower_one", "flock.follower_two"), result.evidence().get("allFixtures"));
+    }
+
+    @Test
+    void failsMessageAssertionWhenAllFixtureSelectorMissesReceiver() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "broadcast-message",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "allFixtures", List.of("flock.follower_one", "flock.follower_two"),
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(18, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "receiverFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("missing required fixture evidence"));
+    }
+
+    @Test
+    void passesMessageAssertionWhenAnyFixtureSelectorMatchesReceiver() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "any-message",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "anyFixture", List.of("flock.follower_one", "flock.follower_two"),
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(18, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "receiverFixtureId", "flock.follower_two",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(List.of("flock.follower_one", "flock.follower_two"), result.evidence().get("anyFixture"));
+    }
+
+    @Test
+    void returnsUnknownForMissingMessageEvidence() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "message-missing",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "expectedReceiverFixtureId", "flock.follower_one",
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of());
+
+        assertEquals("unknown", result.status());
+        assertTrue(result.message().contains("no matching message evidence"));
+    }
+
+    @Test
+    void neverMessageAssertionFailsWhenForbiddenMessageAppears() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "no-message",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "window", Map.of("mode", "never", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(18, "message-evidence",
+                        "messageType", "threat.broadcast",
+                        "receiverFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("failed", result.status());
+        assertTrue(result.message().contains("forbidden evidence observed"));
+    }
+
+    @Test
+    void withinDeliveryWindowTicksAcceptsOnTimeAndRejectsLateMessageEvidence() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "message-window",
+                "kind", "message",
+                "expectedMessageType", "threat.broadcast",
+                "withinDeliveryWindowTicks", 90,
+                "window", Map.of("mode", "eventually", "startTick", 30, "endTick", 240)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult onTime = assertion.evaluate(List.of(
+                evidence(120, "message-evidence", "messageType", "threat.broadcast", "unsupportedFields", List.of())
+        ));
+        NpcRuntimeAssertionResult late = assertion.evaluate(List.of(
+                evidence(121, "message-evidence", "messageType", "threat.broadcast", "unsupportedFields", List.of())
+        ));
+
+        assertEquals("passed", onTime.status());
+        assertEquals("unknown", late.status());
+    }
+
+    @Test
     void passesBeaconAssertionFromBeaconEvidence() {
         NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
                 "assertionId", "beacon-consumed",
@@ -442,6 +577,33 @@ class NpcRuntimeAssertionTest {
         assertEquals("passed", result.status());
         assertEquals(20, result.firstMatchedTick());
         assertEquals(1, result.evidence().get("observedConsumerCount"));
+    }
+
+    @Test
+    void passesBeaconAssertionForAllExpectedConsumers() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "beacon-fanout",
+                "kind", "beacon",
+                "expectedBeaconType", "threat",
+                "expectedConsumerCount", 2,
+                "allFixtures", List.of("flock.follower_one", "flock.follower_two"),
+                "window", Map.of("mode", "eventually", "startTick", 0, "endTick", 120)
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(20, "beacon-evidence",
+                        "beaconType", "threat",
+                        "consumerFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of()),
+                evidence(30, "beacon-evidence",
+                        "beaconType", "threat",
+                        "consumerFixtureId", "flock.follower_two",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals(2, result.evidence().get("observedConsumerCount"));
     }
 
     @Test

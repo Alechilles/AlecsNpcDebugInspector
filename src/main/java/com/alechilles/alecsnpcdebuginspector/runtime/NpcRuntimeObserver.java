@@ -4,6 +4,7 @@ import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import javax.annotation.Nonnull;
@@ -121,7 +122,10 @@ public final class NpcRuntimeObserver {
         addSection(records, requestId, tick, "flags", current.section("Flags"));
         addSection(records, requestId, tick, "components", current.section("Components"));
         addSection(records, requestId, tick, "flock", current.section("Flock"));
+        addSection(records, requestId, tick, "recent-events", current.section("Recent Events"));
+        records.add(signalSurfaceRecord(requestId, tick, current));
         records.addAll(flockEvidenceRecords(requestId, tick, current, previous, fixtures, currentByFixture, previousByFixture));
+        records.addAll(signalEvidenceRecords(requestId, tick, current, previous, fixtures, currentByFixture, previousByFixture));
         records.addAll(sensorObserver.traceRecords(requestId, tick, current, fixtures));
         records.addAll(actionObserver.traceRecords(requestId, tick, current, previous, actionLifecycleTracker));
         Map<String, Object> tamework = current.tameworkMap();
@@ -138,6 +142,309 @@ public final class NpcRuntimeObserver {
                     .with("changes", diff.changes().stream().map(NpcRuntimeObserver::changeMap).toList()));
         }
         return records;
+    }
+
+    @Nonnull
+    private static NpcRuntimeTraceRecord signalSurfaceRecord(@Nonnull String requestId,
+                                                             int tick,
+                                                             @Nonnull NpcRuntimeObservedNpc current) {
+        LinkedHashMap<String, Object> exposed = new LinkedHashMap<>();
+        for (String section : signalSectionNames()) {
+            Map<String, String> fields = current.section(section);
+            exposed.put(section, fields.isEmpty() ? "absent" : fields.keySet());
+        }
+        return NpcRuntimeTraceRecord.of(requestId, tick, "signal-surface")
+                .with("messageSourceSections", List.of("Targeting / Sensors", "Timers / Cooldowns", "Flock", "Recent Events"))
+                .with("beaconSourceSections", List.of("Targeting / Sensors", "Timers / Cooldowns", "Flock", "Recent Events"))
+                .with("sharedTargetSlotSourceSections", List.of("Targeting / Sensors"))
+                .with("flockAlertSourceSections", List.of("Flock", "Recent Events"))
+                .with("relatedTimerSourceSections", List.of("Timers / Cooldowns"))
+                .with("exposedSections", exposed)
+                .with("unsupportedFields", List.of(
+                        "enginePrivateMessageQueue",
+                        "enginePrivateBeaconBus",
+                        "enginePrivateDeliveryOrdering",
+                        "directMessageMutation",
+                        "directBeaconMutation"
+                ));
+    }
+
+    @Nonnull
+    private static List<NpcRuntimeTraceRecord> signalEvidenceRecords(@Nonnull String requestId,
+                                                                     int tick,
+                                                                     @Nonnull NpcRuntimeObservedNpc current,
+                                                                     @Nullable NpcRuntimeObservedNpc previous,
+                                                                     @Nonnull List<NpcRuntimeFixtureSpec> fixtures,
+                                                                     @Nonnull Map<String, NpcRuntimeObservedNpc> currentByFixture,
+                                                                     @Nonnull Map<String, NpcRuntimeObservedNpc> previousByFixture) {
+        ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
+        Map<String, NpcRuntimeFixtureSpec> fixtureById = new LinkedHashMap<>();
+        for (NpcRuntimeFixtureSpec fixture : fixtures) {
+            fixtureById.put(fixture.fixtureId(), fixture);
+        }
+        for (NpcRuntimeFixtureSpec fixture : fixtures) {
+            if (fixture.kind() == NpcRuntimeFixtureKind.MESSAGE) {
+                addMessageEvidence(records, requestId, tick, current, previous, fixture, currentByFixture, previousByFixture);
+            } else if (fixture.kind() == NpcRuntimeFixtureKind.BEACON) {
+                addBeaconEvidence(records, requestId, tick, current, previous, fixture, currentByFixture, previousByFixture, fixtureById);
+            }
+        }
+        return records;
+    }
+
+    private static void addMessageEvidence(@Nonnull List<NpcRuntimeTraceRecord> records,
+                                           @Nonnull String requestId,
+                                           int tick,
+                                           @Nonnull NpcRuntimeObservedNpc current,
+                                           @Nullable NpcRuntimeObservedNpc previous,
+                                           @Nonnull NpcRuntimeFixtureSpec fixture,
+                                           @Nonnull Map<String, NpcRuntimeObservedNpc> currentByFixture,
+                                           @Nonnull Map<String, NpcRuntimeObservedNpc> previousByFixture) {
+        SignalSnapshot signal = messageSnapshot(current, fixture, currentByFixture);
+        if (signal.observed()) {
+            records.add(NpcRuntimeTraceRecord.of(requestId, tick, "message-evidence")
+                    .with("fixtureId", fixture.fixtureId())
+                    .with("messageId", fixture.messageId())
+                    .with("messageType", fixture.messageType())
+                    .with("senderFixtureId", fixture.senderFixtureId())
+                    .with("receiverFixtureId", fixture.receiverFixtureId())
+                    .with("targetFixtureId", fixture.targetFixtureId())
+                    .with("targetSlot", fixture.targetSlot())
+                    .with("payloadKeys", fixture.payloadKeys())
+                    .with("observedValue", signal.observedValue())
+                    .with("sourceSections", signal.sourceSections())
+                    .with("observedFields", signal.fields())
+                    .with("unsupportedFields", List.of()));
+        }
+
+        SignalSnapshot previousSignal = messageSnapshot(previousForSignal(previous, fixture, previousByFixture), fixture, previousByFixture);
+        addSignalTransition(records, requestId, tick, "message-transition", fixture, previousSignal, signal);
+    }
+
+    private static void addBeaconEvidence(@Nonnull List<NpcRuntimeTraceRecord> records,
+                                          @Nonnull String requestId,
+                                          int tick,
+                                          @Nonnull NpcRuntimeObservedNpc current,
+                                          @Nullable NpcRuntimeObservedNpc previous,
+                                          @Nonnull NpcRuntimeFixtureSpec fixture,
+                                          @Nonnull Map<String, NpcRuntimeObservedNpc> currentByFixture,
+                                          @Nonnull Map<String, NpcRuntimeObservedNpc> previousByFixture,
+                                          @Nonnull Map<String, NpcRuntimeFixtureSpec> fixtureById) {
+        SignalSnapshot signal = beaconSnapshot(current, fixture, currentByFixture);
+        if (signal.observed()) {
+            List<Object> consumers = fixture.requiredConsumerFixtureIds().isEmpty()
+                    ? List.of((Object) null)
+                    : fixture.requiredConsumerFixtureIds();
+            for (Object consumer : consumers) {
+                records.add(NpcRuntimeTraceRecord.of(requestId, tick, "beacon-evidence")
+                        .with("fixtureId", fixture.fixtureId())
+                        .with("beaconId", fixture.beaconId())
+                        .with("beaconType", fixture.beaconType())
+                        .with("sourceFixtureId", fixture.sourceFixtureId())
+                        .with("targetFixtureId", fixture.targetFixtureId())
+                        .with("consumerFixtureId", consumer instanceof String text ? text : null)
+                        .with("position", fixture.position())
+                        .with("radius", fixture.radius())
+                        .with("ttlTicks", fixture.ttlTicks())
+                        .with("lifecycle", beaconLifecycle(signal))
+                        .with("observedValue", signal.observedValue())
+                        .with("sourceSections", signal.sourceSections())
+                        .with("observedFields", signal.fields())
+                        .with("distanceToTarget", distanceToFixture(fixture, fixture.targetFixtureId(), fixtureById))
+                        .with("unsupportedFields", List.of()));
+            }
+        }
+
+        SignalSnapshot previousSignal = beaconSnapshot(previousForSignal(previous, fixture, previousByFixture), fixture, previousByFixture);
+        addSignalTransition(records, requestId, tick, "beacon-transition", fixture, previousSignal, signal);
+    }
+
+    @Nullable
+    private static NpcRuntimeObservedNpc previousForSignal(@Nullable NpcRuntimeObservedNpc previous,
+                                                           @Nonnull NpcRuntimeFixtureSpec fixture,
+                                                           @Nonnull Map<String, NpcRuntimeObservedNpc> previousByFixture) {
+        if (fixture.receiverFixtureId() != null && previousByFixture.containsKey(fixture.receiverFixtureId())) {
+            return previousByFixture.get(fixture.receiverFixtureId());
+        }
+        if (fixture.sourceFixtureId() != null && previousByFixture.containsKey(fixture.sourceFixtureId())) {
+            return previousByFixture.get(fixture.sourceFixtureId());
+        }
+        if (fixture.senderFixtureId() != null && previousByFixture.containsKey(fixture.senderFixtureId())) {
+            return previousByFixture.get(fixture.senderFixtureId());
+        }
+        return previous;
+    }
+
+    @Nonnull
+    private static SignalSnapshot messageSnapshot(@Nullable NpcRuntimeObservedNpc fallback,
+                                                  @Nonnull NpcRuntimeFixtureSpec fixture,
+                                                  @Nonnull Map<String, NpcRuntimeObservedNpc> observedByFixture) {
+        NpcRuntimeObservedNpc sender = fixture.senderFixtureId() != null
+                ? observedByFixture.get(fixture.senderFixtureId())
+                : null;
+        NpcRuntimeObservedNpc receiver = fixture.receiverFixtureId() != null
+                ? observedByFixture.get(fixture.receiverFixtureId())
+                : null;
+        ArrayList<String> tokens = new ArrayList<>(List.of("message", "broadcast", "alert", "signal"));
+        addToken(tokens, fixture.messageId());
+        addToken(tokens, fixture.messageType());
+        LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+        collectSignalFields(fields, sender != null ? sender : fallback, "sender", tokens);
+        collectSignalFields(fields, receiver != null ? receiver : fallback, "receiver", tokens);
+        boolean targetSlotObserved = fixture.targetSlot() != null
+                && receiver != null
+                && hasVisibleTargetSlot(receiver, fixture.targetSlot());
+        if (targetSlotObserved) {
+            fields.put("receiver.Targeting / Sensors.targetSlot." + fixture.targetSlot(), receiver.section("Targeting / Sensors").toString());
+        }
+        return SignalSnapshot.fromFields(fields, targetSlotObserved ? "target-slot-observed" : null);
+    }
+
+    @Nonnull
+    private static SignalSnapshot beaconSnapshot(@Nullable NpcRuntimeObservedNpc fallback,
+                                                 @Nonnull NpcRuntimeFixtureSpec fixture,
+                                                 @Nonnull Map<String, NpcRuntimeObservedNpc> observedByFixture) {
+        NpcRuntimeObservedNpc source = fixture.sourceFixtureId() != null
+                ? observedByFixture.get(fixture.sourceFixtureId())
+                : null;
+        ArrayList<String> tokens = new ArrayList<>(List.of("beacon"));
+        addToken(tokens, fixture.beaconId());
+        LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+        collectSignalFields(fields, source != null ? source : fallback, "source", tokens);
+        for (Object consumer : fixture.requiredConsumerFixtureIds()) {
+            if (consumer instanceof String consumerFixtureId) {
+                collectSignalFields(fields, observedByFixture.get(consumerFixtureId), "consumer." + consumerFixtureId, tokens);
+            }
+        }
+        return SignalSnapshot.fromFields(fields, null);
+    }
+
+    private static void collectSignalFields(@Nonnull Map<String, String> fields,
+                                            @Nullable NpcRuntimeObservedNpc observed,
+                                            @Nonnull String prefix,
+                                            @Nonnull List<String> tokens) {
+        if (observed == null) {
+            return;
+        }
+        for (String section : signalSectionNames()) {
+            for (Map.Entry<String, String> entry : observed.section(section).entrySet()) {
+                if (matchesAnySignalToken(entry.getKey(), entry.getValue(), tokens)) {
+                    fields.put(prefix + "." + section + "." + entry.getKey(), entry.getValue());
+                }
+            }
+        }
+    }
+
+    private static boolean hasVisibleTargetSlot(@Nonnull NpcRuntimeObservedNpc observed, @Nonnull String targetSlot) {
+        String expectedKey = NpcRuntimeObservedNpc.normalizeFieldName("Target " + targetSlot);
+        String value = observed.section("Targeting / Sensors").get(expectedKey);
+        return value != null && !value.isBlank() && !"<none>".equalsIgnoreCase(value);
+    }
+
+    private static boolean matchesAnySignalToken(@Nonnull String key,
+                                                 @Nonnull String value,
+                                                 @Nonnull List<String> tokens) {
+        String searchable = (key + " " + value).toLowerCase(Locale.ROOT);
+        String compactSearchable = compactToken(searchable);
+        for (String token : tokens) {
+            if (token == null || token.isBlank()) {
+                continue;
+            }
+            String normalized = token.toLowerCase(Locale.ROOT);
+            if (searchable.contains(normalized) || compactSearchable.contains(compactToken(normalized))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Nonnull
+    private static String compactToken(@Nonnull String value) {
+        return value.replaceAll("[^a-z0-9]+", "");
+    }
+
+    private static void addToken(@Nonnull List<String> tokens, @Nullable String token) {
+        if (token != null && !token.isBlank()) {
+            tokens.add(token);
+        }
+    }
+
+    @Nonnull
+    private static List<String> signalSectionNames() {
+        return List.of("Targeting / Sensors", "Timers / Cooldowns", "Flock", "Recent Events");
+    }
+
+    private static void addSignalTransition(@Nonnull List<NpcRuntimeTraceRecord> records,
+                                            @Nonnull String requestId,
+                                            int tick,
+                                            @Nonnull String kind,
+                                            @Nonnull NpcRuntimeFixtureSpec fixture,
+                                            @Nonnull SignalSnapshot previous,
+                                            @Nonnull SignalSnapshot current) {
+        List<Map<String, Object>> changes = signalChanges(previous.fields(), current.fields());
+        if (changes.isEmpty()) {
+            return;
+        }
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(requestId, tick, kind)
+                .with("fixtureId", fixture.fixtureId())
+                .with("messageId", fixture.messageId())
+                .with("messageType", fixture.messageType())
+                .with("senderFixtureId", fixture.senderFixtureId())
+                .with("receiverFixtureId", fixture.receiverFixtureId())
+                .with("beaconId", fixture.beaconId())
+                .with("beaconType", fixture.beaconType())
+                .with("sourceFixtureId", fixture.sourceFixtureId())
+                .with("targetFixtureId", fixture.targetFixtureId())
+                .with("targetSlot", fixture.targetSlot())
+                .with("lifecycle", signalLifecycle(previous, current))
+                .with("changeCount", changes.size())
+                .with("changes", changes)
+                .with("unsupportedFields", List.of());
+        records.add(record);
+    }
+
+    @Nonnull
+    private static String signalLifecycle(@Nonnull SignalSnapshot previous, @Nonnull SignalSnapshot current) {
+        if (!previous.observed() && current.observed()) {
+            return "appeared";
+        }
+        if (previous.observed() && !current.observed()) {
+            return "disappeared";
+        }
+        return "changed";
+    }
+
+    @Nonnull
+    private static String beaconLifecycle(@Nonnull SignalSnapshot signal) {
+        String text = signal.observedValue().toLowerCase(Locale.ROOT);
+        if (text.contains("consume")) {
+            return "consumed";
+        }
+        if (text.contains("expire")) {
+            return "expired";
+        }
+        if (text.contains("move")) {
+            return "moved";
+        }
+        return "observed";
+    }
+
+    @Nonnull
+    private static List<Map<String, Object>> signalChanges(@Nonnull Map<String, String> before,
+                                                           @Nonnull Map<String, String> after) {
+        ArrayList<Map<String, Object>> changes = new ArrayList<>();
+        for (String field : unionKeys(before, after)) {
+            Object beforeValue = before.get(field);
+            Object afterValue = after.get(field);
+            if (!java.util.Objects.equals(beforeValue, afterValue)) {
+                LinkedHashMap<String, Object> change = new LinkedHashMap<>();
+                change.put("field", field);
+                change.put("before", beforeValue);
+                change.put("after", afterValue);
+                changes.add(change);
+            }
+        }
+        return List.copyOf(changes);
     }
 
     @Nonnull
@@ -392,5 +699,39 @@ public final class NpcRuntimeObserver {
         NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of(requestId, tick, eventKind);
         values.forEach(record::with);
         return record;
+    }
+
+    private record SignalSnapshot(@Nonnull Map<String, String> fields, @Nonnull String observedValue) {
+        @Nonnull
+        static SignalSnapshot fromFields(@Nonnull Map<String, String> fields, @Nullable String overrideObservedValue) {
+            if (fields.isEmpty()) {
+                return new SignalSnapshot(Map.of(), "");
+            }
+            String observedValue = overrideObservedValue;
+            if (observedValue == null) {
+                observedValue = fields.entrySet().stream()
+                        .findFirst()
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .orElse("observed");
+            }
+            return new SignalSnapshot(Map.copyOf(fields), observedValue);
+        }
+
+        boolean observed() {
+            return !fields.isEmpty();
+        }
+
+        @Nonnull
+        List<String> sourceSections() {
+            ArrayList<String> sections = new ArrayList<>();
+            for (String key : fields.keySet()) {
+                for (String section : signalSectionNames()) {
+                    if (key.contains(section) && !sections.contains(section)) {
+                        sections.add(section);
+                    }
+                }
+            }
+            return List.copyOf(sections);
+        }
     }
 }

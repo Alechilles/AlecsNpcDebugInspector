@@ -21,7 +21,8 @@ class NpcRuntimeFixtureSpecTest {
                 Map.entry("playerAnchor", NpcRuntimeFixtureKind.PLAYER_ANCHOR),
                 Map.entry("item", NpcRuntimeFixtureKind.ITEM),
                 Map.entry("block", NpcRuntimeFixtureKind.BLOCK),
-                Map.entry("beacon", NpcRuntimeFixtureKind.BEACON)
+                Map.entry("beacon", NpcRuntimeFixtureKind.BEACON),
+                Map.entry("message", NpcRuntimeFixtureKind.MESSAGE)
         );
 
         for (Map.Entry<String, NpcRuntimeFixtureKind> entry : cases.entrySet()) {

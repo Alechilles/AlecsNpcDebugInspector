@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
@@ -16,6 +18,9 @@ public final class NpcRuntimeEngineHookObserver {
     private static final Pattern VECTOR = Pattern.compile(
             "\\((-?\\d+(?:\\.\\d+)?),\\s*(-?\\d+(?:\\.\\d+)?),\\s*(-?\\d+(?:\\.\\d+)?)\\)"
     );
+    private static final Pattern UUID_TEXT = Pattern.compile(
+            "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    );
 
     @Nonnull
     public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
@@ -24,9 +29,21 @@ public final class NpcRuntimeEngineHookObserver {
                                                     @Nonnull NpcRuntimeObservedNpc current,
                                                     @Nullable NpcRuntimeObservedNpc previous,
                                                     @Nonnull NpcRuntimeRequest.EngineHooksSpec hooks) {
+        return traceRecords(requestId, tick, npcId, current, previous, hooks, new NpcRuntimeFixtureRegistry(), List.of());
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull String npcId,
+                                                    @Nonnull NpcRuntimeObservedNpc current,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull NpcRuntimeRequest.EngineHooksSpec hooks,
+                                                    @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                                    @Nonnull List<NpcRuntimeFixtureSpec> fixtures) {
         ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
         if (hooks.targetSelection()) {
-            records.add(targetSelection(requestId, tick, npcId, current.section("Targeting / Sensors")));
+            records.add(targetSelection(requestId, tick, npcId, current.section("Targeting / Sensors"), fixtureRegistry, fixtures));
         }
         if (hooks.pathing()) {
             records.add(pathing(requestId, tick, npcId, current.section("Pathing")));
@@ -44,23 +61,77 @@ public final class NpcRuntimeEngineHookObserver {
     private NpcRuntimeTraceRecord targetSelection(@Nonnull String requestId,
                                                  int tick,
                                                  @Nonnull String npcId,
-                                                 @Nonnull Map<String, String> targeting) {
+                                                 @Nonnull Map<String, String> targeting,
+                                                 @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                                 @Nonnull List<NpcRuntimeFixtureSpec> fixtures) {
         if (targeting.isEmpty() || unavailable(targeting.get("status"))) {
             return NpcRuntimeTraceRecord.targetSelectionEvidence(requestId, tick, npcId, null, null, false, "unavailable: no targeting snapshot data");
         }
         String selectedSlot = null;
+        String selectedValue = null;
         for (Map.Entry<String, String> entry : targeting.entrySet()) {
             if (!entry.getKey().startsWith("target") || isNone(entry.getValue())) {
                 continue;
             }
             selectedSlot = entry.getKey();
+            selectedValue = entry.getValue();
             break;
         }
         Integer candidateCount = parseInteger(firstPresent(targeting, "markedTargetSlots", "targetSlots", "slotCount"));
         if (selectedSlot == null) {
-            return NpcRuntimeTraceRecord.targetSelectionEvidence(requestId, tick, npcId, null, candidateCount, false, "snapshot-target-slot");
+            return NpcRuntimeTraceRecord.targetSelectionEvidence(requestId, tick, npcId, null, candidateCount, false, "snapshot-target-slot: empty")
+                    .with("selectedFixtureId", null);
         }
-        return NpcRuntimeTraceRecord.targetSelectionEvidence(requestId, tick, npcId, selectedSlot, candidateCount, true, "snapshot-target-slot");
+        TargetCorrelation correlation = correlateTarget(selectedSlot, selectedValue, fixtureRegistry, fixtures);
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.targetSelectionEvidence(
+                requestId,
+                tick,
+                npcId,
+                selectedSlot,
+                candidateCount,
+                true,
+                correlation.reason()
+        );
+        correlation.apply(record);
+        return record;
+    }
+
+    @Nonnull
+    private TargetCorrelation correlateTarget(@Nonnull String selectedSlot,
+                                              @Nullable String selectedValue,
+                                              @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
+                                              @Nonnull List<NpcRuntimeFixtureSpec> fixtures) {
+        UUID selectedUuid = parseUuid(selectedValue);
+        boolean hasFixtureContext = !fixtureRegistry.fixtures().isEmpty() || !fixtures.isEmpty();
+        Optional<String> selectedFixtureId = selectedUuid != null
+                ? fixtureRegistry.fixtureIdForUuid(selectedUuid)
+                : Optional.empty();
+        if (selectedFixtureId.isEmpty()) {
+            String targetSlot = selectedSlot.startsWith("target") ? selectedSlot.substring("target".length()) : selectedSlot;
+            selectedFixtureId = fixtures.stream()
+                    .filter(fixture -> targetSlot.equals(fixture.targetSlot()))
+                    .map(NpcRuntimeFixtureSpec::fixtureId)
+                    .findFirst();
+        }
+        NpcRuntimeFixtureSpec npcFixture = fixtureById(fixtures, "npcUnderTest");
+        NpcRuntimeFixtureSpec targetFixture = selectedFixtureId.flatMap(id -> Optional.ofNullable(fixtureById(fixtures, id))).orElse(null);
+        Double distance = distance(npcFixture, targetFixture);
+        String reason;
+        if (!hasFixtureContext) {
+            reason = "snapshot-target-slot";
+        } else if (selectedFixtureId.isPresent()) {
+            reason = "snapshot-target-slot: fixture-correlated";
+        } else {
+            reason = selectedUuid != null ? "snapshot-target-slot: unknown-target-uuid" : "snapshot-target-slot: uncorrelated";
+        }
+        return new TargetCorrelation(
+                selectedUuid != null ? selectedUuid.toString() : null,
+                selectedFixtureId.orElse(null),
+                position(npcFixture),
+                position(targetFixture),
+                distance,
+                reason
+        );
     }
 
     @Nonnull
@@ -138,6 +209,79 @@ public final class NpcRuntimeEngineHookObserver {
                 "selected",
                 previous != null && !isNone(previous) ? previous : null
         );
+    }
+
+    @Nullable
+    private static NpcRuntimeFixtureSpec fixtureById(@Nonnull List<NpcRuntimeFixtureSpec> fixtures, @Nonnull String fixtureId) {
+        return fixtures.stream()
+                .filter(fixture -> fixtureId.equals(fixture.fixtureId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Nullable
+    private static UUID parseUuid(@Nullable String value) {
+        if (value == null) {
+            return null;
+        }
+        Matcher matcher = UUID_TEXT.matcher(value);
+        if (!matcher.find()) {
+            return null;
+        }
+        return UUID.fromString(matcher.group(1));
+    }
+
+    @Nullable
+    private static List<Double> position(@Nullable NpcRuntimeFixtureSpec fixture) {
+        if (fixture == null || fixture.position().size() != 3) {
+            return null;
+        }
+        Double x = number(fixture.position().get(0));
+        Double y = number(fixture.position().get(1));
+        Double z = number(fixture.position().get(2));
+        if (x == null || y == null || z == null) {
+            return null;
+        }
+        return List.of(x, y, z);
+    }
+
+    @Nullable
+    private static Double distance(@Nullable NpcRuntimeFixtureSpec from, @Nullable NpcRuntimeFixtureSpec to) {
+        List<Double> fromPosition = position(from);
+        List<Double> toPosition = position(to);
+        if (fromPosition == null || toPosition == null) {
+            return null;
+        }
+        double x = toPosition.get(0) - fromPosition.get(0);
+        double y = toPosition.get(1) - fromPosition.get(1);
+        double z = toPosition.get(2) - fromPosition.get(2);
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    @Nullable
+    private static Double number(@Nonnull Object value) {
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private record TargetCorrelation(@Nullable String selectedTargetUuid,
+                                     @Nullable String selectedFixtureId,
+                                     @Nullable List<Double> npcPosition,
+                                     @Nullable List<Double> targetPosition,
+                                     @Nullable Double distance,
+                                     @Nonnull String reason) {
+        void apply(@Nonnull NpcRuntimeTraceRecord record) {
+            record.with("selectedTargetUuid", selectedTargetUuid);
+            record.with("selectedFixtureId", selectedFixtureId);
+            if (npcPosition != null) {
+                record.with("npcPosition", npcPosition);
+            }
+            if (targetPosition != null) {
+                record.with("targetPosition", targetPosition);
+            }
+            if (distance != null) {
+                record.with("distance", distance);
+            }
+        }
     }
 
     @Nullable

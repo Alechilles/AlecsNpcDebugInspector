@@ -68,6 +68,19 @@ public final class NpcRuntimeObserver {
                                                     @Nonnull String npcId,
                                                     @Nonnull NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker,
                                                     @Nonnull List<NpcRuntimeFixtureSpec> fixtures) {
+        return traceRecords(requestId, tick, current, previous, engineHooks, npcId, actionLifecycleTracker, fixtures, new NpcRuntimeFixtureRegistry());
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull NpcRuntimeObservedNpc current,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull NpcRuntimeRequest.EngineHooksSpec engineHooks,
+                                                    @Nonnull String npcId,
+                                                    @Nonnull NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker,
+                                                    @Nonnull List<NpcRuntimeFixtureSpec> fixtures,
+                                                    @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry) {
         ArrayList<NpcRuntimeTraceRecord> records = new ArrayList<>();
         records.add(record(requestId, tick, "npc-state", current.stateMap()));
         addSection(records, requestId, tick, "targeting", current.section("Targeting / Sensors"));
@@ -86,7 +99,7 @@ public final class NpcRuntimeObserver {
             records.add(record(requestId, tick, "tamework", tamework));
             records.addAll(tameworkObserver.traceRecords(requestId, tick, tamework));
         }
-        records.addAll(engineHookObserver.traceRecords(requestId, tick, npcId, current, previous, engineHooks));
+        records.addAll(engineHookObserver.traceRecords(requestId, tick, npcId, current, previous, engineHooks, fixtureRegistry, fixtures));
 
         NpcRuntimeObservationDiff diff = NpcRuntimeObservationDiff.between(previous, current);
         if (diff.changed()) {

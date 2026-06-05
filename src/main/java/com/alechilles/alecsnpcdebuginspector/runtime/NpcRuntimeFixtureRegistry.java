@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -57,6 +58,16 @@ public final class NpcRuntimeFixtureRegistry {
 
     public boolean contains(@Nonnull String fixtureId) {
         return fixtures.containsKey(fixtureId) || blockMutations.containsKey(fixtureId);
+    }
+
+    @Nonnull
+    public Optional<String> fixtureIdForUuid(@Nonnull UUID uuid) {
+        for (FixtureRecord fixture : fixtures.values()) {
+            if (uuid.equals(fixture.uuid())) {
+                return Optional.of(fixture.fixtureId());
+            }
+        }
+        return Optional.empty();
     }
 
     private void rejectDuplicate(@Nonnull String fixtureId) {

@@ -21,6 +21,14 @@ class NpcRuntimeFixtureRegistryTest {
         Map<String, Object> json = registry.fixtures().getFirst().toMap();
         assertEquals("npcUnderTest", json.get("fixtureId"));
         assertEquals(uuid.toString(), json.get("uuid"));
+        assertEquals("npcUnderTest", registry.fixtureIdForUuid(uuid).orElseThrow());
+    }
+
+    @Test
+    void returnsEmptyFixtureIdForUnknownUuid() {
+        NpcRuntimeFixtureRegistry registry = new NpcRuntimeFixtureRegistry();
+
+        assertTrue(registry.fixtureIdForUuid(UUID.fromString("00000000-0000-0000-0000-000000000099")).isEmpty());
     }
 
     @Test

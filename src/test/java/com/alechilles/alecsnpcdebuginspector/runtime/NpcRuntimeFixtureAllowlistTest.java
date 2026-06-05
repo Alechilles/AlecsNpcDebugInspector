@@ -1,6 +1,7 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -135,6 +136,94 @@ class NpcRuntimeFixtureAllowlistTest {
     }
 
     @Test
+    void acceptsFlockFixtureWithLeaderAndTwoFollowers() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "three_member_flock",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 180,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                              {"fixtureId": "flock.follower_one", "kind": "flockMember", "position": [-2, 64, 1], "roleId": "Mob_Tamework_Example_Simple", "flockId": "generated.flock", "flockRole": "follower", "leaderFixtureId": "npcUnderTest"},
+                              {"fixtureId": "flock.follower_two", "kind": "flockMember", "position": [-4, 64, -1], "roleId": "Mob_Tamework_Example_Simple", "flockId": "generated.flock", "flockRole": "follower", "leaderFixtureId": "npcUnderTest"}
+                            ]
+                          },
+                          "limits": {"maxEntities": 4}
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(3, request.fixtures().list().size());
+        assertEquals("npcUnderTest", request.fixtures().list().get(1).leaderFixtureId());
+        assertEquals("npcUnderTest", request.fixtures().list().get(2).leaderFixtureId());
+    }
+
+    @Test
+    void acceptsSplitDistanceFlockFixtureSetup() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "split_distance_flock",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 600,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                              {"fixtureId": "flock.near", "kind": "flockMember", "position": [-2, 64, 1], "roleId": "Mob_Tamework_Example_Simple", "flockId": "generated.flock", "flockRole": "follower", "leaderFixtureId": "npcUnderTest"},
+                              {"fixtureId": "flock.distant", "kind": "flockMember", "position": [-16, 64, -1], "roleId": "Mob_Tamework_Example_Simple", "flockId": "generated.flock", "flockRole": "follower", "leaderFixtureId": "npcUnderTest"}
+                            ]
+                          },
+                          "limits": {"maxEntities": 4}
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(List.of(-2.0, 64.0, 1.0), request.fixtures().list().get(1).position());
+        assertEquals(List.of(-16.0, 64.0, -1.0), request.fixtures().list().get(2).position());
+    }
+
+    @Test
+    void acceptsFamilyFixtureWithParentAndChild() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "adult_child_family",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 180,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "familyId": "generated.family", "familyRole": "adult"},
+                              {"fixtureId": "family.child", "kind": "familyMember", "position": [-2, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "familyId": "generated.family", "familyRole": "child", "parentFixtureId": "npcUnderTest"}
+                            ]
+                          },
+                          "limits": {"maxEntities": 3}
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(2, request.fixtures().list().size());
+        assertEquals("npcUnderTest", request.fixtures().list().get(1).parentFixtureId());
+        assertEquals("child", request.fixtures().list().get(1).familyRole());
+    }
+
+    @Test
     void acceptsPlayerAnchorAsHeadlessDeclarativeFixture() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
@@ -193,6 +282,42 @@ class NpcRuntimeFixtureAllowlistTest {
         assertEquals("unsupported-fixture", exception.classification());
         assertTrue(exception.unsupported().toString().contains("fixtures.list[1].receiverFixtureId"));
         assertTrue(exception.unsupported().toString().contains("fixtures.list[2].requiredConsumerFixtureIds[0]"));
+    }
+
+    @Test
+    void rejectsForwardFlockAndFamilyRelationshipReferences() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                                {
+                                  "version": 1,
+                                  "requestId": "forward_refs",
+                                  "assetId": "Mob_Tamework_Example_Simple",
+                                  "roleId": "Mob_Tamework_Example_Simple",
+                                  "ticks": 120,
+                                  "fixtures": {
+                                    "list": [
+                                      {"fixtureId": "flock.follower", "kind": "flockMember", "position": [-2, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "leaderFixtureId": "npcUnderTest"},
+                                      {"fixtureId": "family.child", "kind": "familyMember", "position": [-3, 64, 0], "roleId": "Mob_Tamework_Example_Simple", "parentFixtureId": "npcUnderTest"},
+                                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"}
+                                    ]
+                                  }
+                                }
+                                """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[0].leaderFixtureId", exception.unsupported().getFirst().path());
+        assertEquals(
+                "referenced fixture id must be declared before this fixture: npcUnderTest",
+                exception.unsupported().getFirst().reason()
+        );
+        assertEquals("fixtures.list[1].parentFixtureId", exception.unsupported().get(1).path());
     }
 
     @Test

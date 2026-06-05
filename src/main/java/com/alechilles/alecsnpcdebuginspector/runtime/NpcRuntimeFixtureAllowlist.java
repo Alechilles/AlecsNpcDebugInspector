@@ -41,8 +41,8 @@ public final class NpcRuntimeFixtureAllowlist {
             if (spec.kind().entityLike() && (spec.roleId() == null || spec.roleId().isBlank())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".roleId", "entity-like fixtures require a roleId"));
             }
-            validateReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, unsupported);
-            validateReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, unsupported);
+            validatePriorReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, i, unsupported);
+            validatePriorReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, i, unsupported);
             validateReference(spec.senderFixtureId(), path + ".senderFixtureId", specs, unsupported);
             validateReference(spec.receiverFixtureId(), path + ".receiverFixtureId", specs, unsupported);
             validateReference(spec.sourceFixtureId(), path + ".sourceFixtureId", specs, unsupported);
@@ -110,5 +110,24 @@ public final class NpcRuntimeFixtureAllowlist {
         if (!exists) {
             unsupported.add(new NpcRuntimeRequest.UnsupportedField(path, "referenced fixture id does not exist: " + referencedFixtureId));
         }
+    }
+
+    private void validatePriorReference(String referencedFixtureId,
+                                        String path,
+                                        List<NpcRuntimeFixtureSpec> specs,
+                                        int currentIndex,
+                                        List<NpcRuntimeRequest.UnsupportedField> unsupported) {
+        if (referencedFixtureId == null || referencedFixtureId.isBlank()) {
+            return;
+        }
+        for (int i = 0; i < specs.size(); i++) {
+            if (referencedFixtureId.equals(specs.get(i).fixtureId())) {
+                if (i >= currentIndex) {
+                    unsupported.add(new NpcRuntimeRequest.UnsupportedField(path, "referenced fixture id must be declared before this fixture: " + referencedFixtureId));
+                }
+                return;
+            }
+        }
+        unsupported.add(new NpcRuntimeRequest.UnsupportedField(path, "referenced fixture id does not exist: " + referencedFixtureId));
     }
 }

@@ -142,6 +142,54 @@ class NpcRuntimeHarnessServiceTest {
     }
 
     @Test
+    void linkedChildFixtureSpawnFailureKeepsFixtureAndRoleContext() throws Exception {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
+        NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {
+            NpcRuntimeFixtureSpec child = request.fixtures().list().stream()
+                    .filter(fixture -> "family.child".equals(fixture.fixtureId()))
+                    .findFirst()
+                    .orElseThrow();
+            return NpcRuntimeResult.fixtureSpawnFailed(
+                    request,
+                    0,
+                    config.paths().traces().resolve(request.requestId() + ".trace.jsonl"),
+                    NpcRuntimeFixtureSpawnResult.failed(child, "Unknown NPC role: MissingChildRole"),
+                    NpcRuntimeCleanupReport.builder().build()
+            );
+        });
+        service.initializeDirectories();
+        Files.writeString(
+                config.paths().requests().resolve("missing_child_role.request.json"),
+                """
+                        {
+                          "version": 1,
+                          "requestId": "missing_child_role",
+                          "assetId": "AdultRole",
+                          "roleId": "AdultRole",
+                          "ticks": 120,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "AdultRole"},
+                              {"fixtureId": "family.child", "kind": "familyMember", "position": [-2, 64, 0], "roleId": "MissingChildRole", "familyId": "generated.family", "familyRole": "child", "parentFixtureId": "npcUnderTest"}
+                            ]
+                          }
+                        }
+                        """
+        );
+
+        NpcRuntimeHarnessService.ProcessOutcome outcome = service.processNextQueuedRequest();
+
+        assertTrue(outcome.processed());
+        Map<String, Object> result = NpcRuntimeJson.parseObject(Files.readString(config.paths().results().resolve("missing_child_role.result.json")));
+        assertEquals("failed", result.get("status"));
+        assertEquals("fixture-spawn-failed", result.get("classification"));
+        assertTrue(result.get("error").toString().contains("fixtureId=family.child"));
+        assertTrue(result.get("error").toString().contains("roleId=MissingChildRole"));
+        assertTrue(result.get("summary").toString().contains("family.child"));
+        assertTrue(Files.exists(config.paths().archive().resolve("missing_child_role.request.json")));
+    }
+
+    @Test
     void runnerTimeoutWritesHarnessTimeoutResult() throws Exception {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(tempDir);
         NpcRuntimeHarnessService service = new NpcRuntimeHarnessService(config, request -> {

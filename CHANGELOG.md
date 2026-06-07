@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- Added a 256x256 in-game icon for the NPC Inspector asset pack.
+
 ## 1.4.1 - Update 5 Compatibility - 2026-05-28
 ### Changed
 - Updated Hytale compatibility metadata for the Update 5 `0.5.x` patchline.

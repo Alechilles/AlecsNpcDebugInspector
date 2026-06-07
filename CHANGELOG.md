@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 1.4.2 - Asset Pack Icon - 2026-06-07
 
 ### Added
 - Added a 256x256 in-game icon for the NPC Inspector asset pack.

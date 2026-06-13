@@ -702,10 +702,22 @@ public record NpcRuntimeRequest(
         }
     }
 
-    public record RecordSpec(@Nonnull String profile, int everyTicks, boolean includeSnapshots, boolean includeEvents) {
+    public record RecordSpec(
+            @Nonnull String profile,
+            int everyTicks,
+            boolean includeSnapshots,
+            boolean includeEvents,
+            @Nonnull String fixtureScope,
+            @Nonnull List<String> fixtureIds
+    ) {
         @Nonnull
         static RecordSpec from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
-            rejectUnsupportedKeys(data, "record", List.of("profile", "everyTicks", "includeSnapshots", "includeEvents"), requestId);
+            rejectUnsupportedKeys(
+                    data,
+                    "record",
+                    List.of("profile", "everyTicks", "includeSnapshots", "includeEvents", "fixtureScope", "fixtureIds"),
+                    requestId
+            );
             String profile = stringOrNull(data.get("profile"));
             if (profile == null) {
                 profile = "full";
@@ -713,12 +725,39 @@ public record NpcRuntimeRequest(
             if (!List.of("full", "standard", "minimal").contains(profile)) {
                 throw invalid(requestId, "unsupported record profile " + profile);
             }
+            String fixtureScope = stringOrNull(data.get("fixtureScope"));
+            if (fixtureScope == null) {
+                fixtureScope = "npcUnderTest";
+            }
+            if (!List.of("npcUnderTest", "allFixtures").contains(fixtureScope)) {
+                throw invalid(requestId, "unsupported record fixtureScope " + fixtureScope);
+            }
             return new RecordSpec(
                     profile,
                     Math.max(1, intValue(data.get("everyTicks"), 1, requestId)),
                     boolValue(data.get("includeSnapshots"), true, requestId),
-                    boolValue(data.get("includeEvents"), true, requestId)
+                    boolValue(data.get("includeEvents"), true, requestId),
+                    fixtureScope,
+                    fixtureIds(data.get("fixtureIds"), requestId)
             );
+        }
+
+        @Nonnull
+        private static List<String> fixtureIds(@Nullable Object value, @Nonnull String requestId) {
+            if (value == null) {
+                return List.of();
+            }
+            if (!(value instanceof List<?> list)) {
+                throw invalid(requestId, "record.fixtureIds must be an array of safe fixture ids");
+            }
+            List<String> ids = new ArrayList<>();
+            for (Object item : list) {
+                if (!(item instanceof String id) || id.isBlank() || !SAFE_ID.matcher(id).matches()) {
+                    throw invalid(requestId, "record.fixtureIds must be an array of safe fixture ids");
+                }
+                ids.add(id);
+            }
+            return List.copyOf(ids);
         }
 
         @Nonnull
@@ -728,6 +767,12 @@ public record NpcRuntimeRequest(
             map.put("everyTicks", everyTicks);
             map.put("includeSnapshots", includeSnapshots);
             map.put("includeEvents", includeEvents);
+            if (!"npcUnderTest".equals(fixtureScope)) {
+                map.put("fixtureScope", fixtureScope);
+            }
+            if (!fixtureIds.isEmpty()) {
+                map.put("fixtureIds", fixtureIds);
+            }
             return map;
         }
     }

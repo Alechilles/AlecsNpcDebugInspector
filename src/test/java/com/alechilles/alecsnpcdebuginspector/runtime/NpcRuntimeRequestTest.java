@@ -143,6 +143,68 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesRecordFixtureCorrelationFields() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "record_fixture_ids",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 120,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "targetSlot": "Enemy"}
+                    ]
+                  },
+                  "record": {
+                    "profile": "minimal",
+                    "everyTicks": 5,
+                    "includeSnapshots": true,
+                    "includeEvents": false,
+                    "fixtureScope": "allFixtures",
+                    "fixtureIds": ["npcUnderTest", "target.Enemy"]
+                  }
+                }
+                """, config);
+
+        assertEquals("minimal", request.record().profile());
+        assertEquals(5, request.record().everyTicks());
+        assertEquals("allFixtures", request.record().fixtureScope());
+        assertEquals("target.Enemy", request.record().fixtureIds().get(1));
+        assertTrue(request.toJson().contains("\"fixtureScope\":\"allFixtures\""));
+        assertTrue(request.toJson().contains("\"fixtureIds\":[\"npcUnderTest\",\"target.Enemy\"]"));
+    }
+
+    @Test
+    void rejectsMalformedRecordFixtureCorrelationFields() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException scopeException = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_scope\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"record\":{\"fixtureScope\":\"nearbyOnly\"}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", scopeException.classification());
+        assertEquals("unsupported record fixtureScope nearbyOnly", scopeException.getMessage());
+
+        NpcRuntimeRequest.ValidationException idsException = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_fixture_ids\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"record\":{\"fixtureIds\":[\"npcUnderTest\",\"bad id\"]}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", idsException.classification());
+        assertEquals("record.fixtureIds must be an array of safe fixture ids", idsException.getMessage());
+    }
+    @Test
     void parsesTameworkFixtureMutationsAndEngineHooks() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

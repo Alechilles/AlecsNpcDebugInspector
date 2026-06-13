@@ -127,7 +127,7 @@ public final class NpcRuntimeObserver {
         records.addAll(flockEvidenceRecords(requestId, tick, current, previous, fixtures, currentByFixture, previousByFixture));
         records.addAll(signalEvidenceRecords(requestId, tick, current, previous, fixtures, currentByFixture, previousByFixture));
         records.addAll(sensorObserver.traceRecords(requestId, tick, current, fixtures));
-        records.addAll(actionObserver.traceRecords(requestId, tick, current, previous, actionLifecycleTracker));
+        records.addAll(actionObserver.traceRecords(requestId, tick, current, previous, actionLifecycleTracker, fixtures, fixtureRegistry));
         Map<String, Object> tamework = current.tameworkMap();
         if (!tamework.isEmpty()) {
             records.add(record(requestId, tick, "tamework", tamework));

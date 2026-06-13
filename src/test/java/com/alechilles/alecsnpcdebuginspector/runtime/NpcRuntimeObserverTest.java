@@ -308,6 +308,79 @@ class NpcRuntimeObserverTest {
         assertTrue(surface.fields().get("unsupportedFields").toString().contains("enginePrivateBeaconBus"));
     }
 
+
+
+    @Test
+    void annotatesActionAndCombatEvidenceWithCorrelatedTargetFixture() {
+        NpcRuntimeObserver observer = new NpcRuntimeObserver();
+        NpcRuntimeObservedNpc observed = observer.observe(null, new NpcDebugSnapshot(
+                "NPC Debug Inspector",
+                "UUID: sample | Loaded: true",
+                """
+                        === AI ===
+                        - Current Tree Step: Sequence[Attack]
+                        - Current Body Step: MoveToTarget
+
+                        === Targeting / Sensors ===
+                        - Target Enemy: Target Dummy
+
+                        === Combat ===
+                        - Executing Attack: true
+                        """
+        ));
+        List<NpcRuntimeFixtureSpec> fixtures = List.of(
+                fixture(Map.of(
+                        "fixtureId", "npcUnderTest",
+                        "kind", "npcUnderTest",
+                        "roleId", "AttackerRole",
+                        "position", List.of(0, 64, 0)
+                )),
+                fixture(Map.of(
+                        "fixtureId", "target.Enemy",
+                        "kind", "targetDummy",
+                        "roleId", "TargetRole",
+                        "position", List.of(3, 64, 4),
+                        "targetSlot", "Enemy"
+                ))
+        );
+
+        List<NpcRuntimeTraceRecord> records = observer.traceRecords(
+                "request-a",
+                15,
+                observed,
+                null,
+                new NpcRuntimeRequest.EngineHooksSpec(false, false, false, false),
+                "npcUnderTest",
+                new NpcRuntimeActionObserver.ActionLifecycleTracker(),
+                fixtures
+        );
+
+        NpcRuntimeTraceRecord action = records.stream()
+                .filter(record -> "action-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("target.Enemy", action.fields().get("targetFixtureId"));
+        assertTrue(!action.fields().get("unsupportedFields").toString().contains("targetFixtureId"));
+
+        NpcRuntimeTraceRecord actionStart = records.stream()
+                .filter(record -> "action-start".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("target.Enemy", actionStart.fields().get("targetFixtureId"));
+
+        NpcRuntimeTraceRecord combat = records.stream()
+                .filter(record -> "combat-evaluator-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "combatSupport.executingAttack".equals(record.fields().get("evaluatorId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("target.Enemy", combat.fields().get("targetFixtureId"));
+        assertEquals(5.0, combat.fields().get("range"));
+        assertTrue(!combat.fields().get("unsupportedFields").toString().contains("targetFixtureId"));
+        assertTrue(!combat.fields().get("unsupportedFields").toString().contains("range"));
+    }
+
     private static NpcDebugSnapshot sampleSnapshot(String state) {
         return sampleSnapshot(state, "none");
     }

@@ -5,7 +5,11 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -13,6 +17,9 @@ import javax.annotation.Nullable;
  * Emits action and combat evidence from the inspector fields the runtime can currently observe.
  */
 public final class NpcRuntimeActionObserver {
+    private static final Pattern UUID_TEXT = Pattern.compile(
+            "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    );
     private static final List<String> ACTION_UNSUPPORTED_FIELDS = List.of(
             "preconditions",
             "startTick",
@@ -49,6 +56,19 @@ public final class NpcRuntimeActionObserver {
                                                     @Nonnull NpcRuntimeObservedNpc observed,
                                                     @Nullable NpcRuntimeObservedNpc previous) {
         return traceRecords(requestId, tick, observed, previous, new ActionLifecycleTracker());
+    }
+
+    @Nonnull
+    public List<NpcRuntimeTraceRecord> traceRecords(@Nonnull String requestId,
+                                                    int tick,
+                                                    @Nonnull NpcRuntimeObservedNpc observed,
+                                                    @Nullable NpcRuntimeObservedNpc previous,
+                                                    @Nonnull ActionLifecycleTracker tracker,
+                                                    @Nonnull List<NpcRuntimeFixtureSpec> fixtures,
+                                                    @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry) {
+        List<NpcRuntimeTraceRecord> records = traceRecords(requestId, tick, observed, previous, tracker);
+        ActionTargetContext.fromObservedTarget(observed, fixtures, fixtureRegistry).apply(records);
+        return records;
     }
 
     @Nonnull
@@ -361,6 +381,135 @@ public final class NpcRuntimeActionObserver {
         int end(@Nonnull String key, int defaultTick) {
             Integer startTick = startTicks.remove(key);
             return startTick != null ? startTick : defaultTick;
+        }
+    }
+
+    private record ActionTargetContext(@Nullable String targetFixtureId, @Nullable Double range) {
+        @Nonnull
+        static ActionTargetContext unavailable() {
+            return new ActionTargetContext(null, null);
+        }
+
+        @Nonnull
+        static ActionTargetContext fromObservedTarget(@Nonnull NpcRuntimeObservedNpc observed,
+                                                      @Nonnull List<NpcRuntimeFixtureSpec> fixtures,
+                                                      @Nonnull NpcRuntimeFixtureRegistry registry) {
+            Map<String, String> targeting = observed.section("Targeting / Sensors");
+            if (targeting.isEmpty() || fixtures.isEmpty()) {
+                return unavailable();
+            }
+            String selectedSlot = null;
+            String selectedValue = null;
+            for (Map.Entry<String, String> entry : targeting.entrySet()) {
+                if (!entry.getKey().startsWith("target") || isNoneValue(entry.getValue())) {
+                    continue;
+                }
+                selectedSlot = entry.getKey();
+                selectedValue = entry.getValue();
+                break;
+            }
+            if (selectedSlot == null) {
+                return unavailable();
+            }
+            UUID selectedUuid = parseUuid(selectedValue);
+            Optional<String> fixtureId = selectedUuid != null
+                    ? registry.fixtureIdForUuid(selectedUuid)
+                    : Optional.empty();
+            if (fixtureId.isEmpty()) {
+                String targetSlot = normalizeSlot(selectedSlot.startsWith("target") ? selectedSlot.substring("target".length()) : selectedSlot);
+                fixtureId = fixtures.stream()
+                        .filter(fixture -> targetSlot.equals(normalizeSlot(fixture.targetSlot())))
+                        .map(NpcRuntimeFixtureSpec::fixtureId)
+                        .findFirst();
+            }
+            if (fixtureId.isEmpty()) {
+                return unavailable();
+            }
+            NpcRuntimeFixtureSpec npcFixture = fixtureById(fixtures, "npcUnderTest");
+            NpcRuntimeFixtureSpec targetFixture = fixtureById(fixtures, fixtureId.get());
+            return new ActionTargetContext(fixtureId.get(), distance(npcFixture, targetFixture));
+        }
+
+        void apply(@Nonnull List<NpcRuntimeTraceRecord> records) {
+            if (targetFixtureId == null || targetFixtureId.isBlank()) {
+                return;
+            }
+            for (NpcRuntimeTraceRecord record : records) {
+                Object kind = record.fields().get("kind");
+                if (isActionEvidenceKind(kind)) {
+                    record.with("targetFixtureId", targetFixtureId);
+                    removeUnsupported(record, "targetFixtureId");
+                }
+                if ("combat-evaluator-evidence".equals(kind) && range != null) {
+                    record.with("range", range);
+                    removeUnsupported(record, "range");
+                }
+            }
+        }
+
+        private static boolean isActionEvidenceKind(@Nullable Object kind) {
+            return "action-evidence".equals(kind)
+                    || "action-start".equals(kind)
+                    || "action-change".equals(kind)
+                    || "action-end".equals(kind)
+                    || "combat-evaluator-evidence".equals(kind);
+        }
+
+        private static void removeUnsupported(@Nonnull NpcRuntimeTraceRecord record, @Nonnull String field) {
+            Object unsupported = record.fields().get("unsupportedFields");
+            if (!(unsupported instanceof List<?> fields)) {
+                return;
+            }
+            List<?> filtered = fields.stream()
+                    .filter(item -> !field.equals(item))
+                    .toList();
+            record.with("unsupportedFields", filtered);
+        }
+
+        @Nullable
+        private static NpcRuntimeFixtureSpec fixtureById(@Nonnull List<NpcRuntimeFixtureSpec> fixtures, @Nonnull String fixtureId) {
+            return fixtures.stream()
+                    .filter(fixture -> fixtureId.equals(fixture.fixtureId()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        @Nullable
+        private static UUID parseUuid(@Nullable String value) {
+            if (value == null) {
+                return null;
+            }
+            Matcher matcher = UUID_TEXT.matcher(value);
+            if (!matcher.find()) {
+                return null;
+            }
+            return UUID.fromString(matcher.group(1));
+        }
+
+        @Nullable
+        private static Double distance(@Nullable NpcRuntimeFixtureSpec from, @Nullable NpcRuntimeFixtureSpec to) {
+            if (from == null || to == null || from.position().size() != 3 || to.position().size() != 3) {
+                return null;
+            }
+            double sum = 0;
+            for (int index = 0; index < 3; index++) {
+                if (!(from.position().get(index) instanceof Number fromNumber)
+                        || !(to.position().get(index) instanceof Number toNumber)) {
+                    return null;
+                }
+                double delta = toNumber.doubleValue() - fromNumber.doubleValue();
+                sum += delta * delta;
+            }
+            return Math.sqrt(sum);
+        }
+
+        @Nonnull
+        private static String normalizeSlot(@Nullable String value) {
+            return value == null ? "" : value.replaceAll("[^A-Za-z0-9]+", "").toLowerCase(java.util.Locale.ROOT);
+        }
+
+        private static boolean isNoneValue(@Nullable String value) {
+            return value == null || value.isBlank() || "<none>".equalsIgnoreCase(value) || "none".equalsIgnoreCase(value);
         }
     }
 

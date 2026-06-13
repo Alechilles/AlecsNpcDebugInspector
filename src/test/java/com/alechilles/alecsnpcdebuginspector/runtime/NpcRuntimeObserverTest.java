@@ -340,7 +340,8 @@ class NpcRuntimeObserverTest {
                         "kind", "targetDummy",
                         "roleId", "TargetRole",
                         "position", List.of(3, 64, 4),
-                        "targetSlot", "Enemy"
+                        "targetSlot", "Enemy",
+                        "visible", false
                 ))
         );
 
@@ -377,8 +378,10 @@ class NpcRuntimeObserverTest {
                 .orElseThrow();
         assertEquals("target.Enemy", combat.fields().get("targetFixtureId"));
         assertEquals(5.0, combat.fields().get("range"));
+        assertEquals(false, combat.fields().get("lineOfSight"));
         assertTrue(!combat.fields().get("unsupportedFields").toString().contains("targetFixtureId"));
         assertTrue(!combat.fields().get("unsupportedFields").toString().contains("range"));
+        assertTrue(!combat.fields().get("unsupportedFields").toString().contains("lineOfSight"));
     }
 
     private static NpcDebugSnapshot sampleSnapshot(String state) {
@@ -491,7 +494,8 @@ class NpcRuntimeObserverTest {
                         "kind", "targetDummy",
                         "roleId", "TargetRole",
                         "position", List.of(3, 64, 4),
-                        "targetSlot", "Enemy"
+                        "targetSlot", "Enemy",
+                        "visible", false
                 )),
                 fixture(Map.of(
                         "fixtureId", "flock.follower_one",

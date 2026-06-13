@@ -435,10 +435,10 @@ public final class NpcRuntimeActionObserver {
         }
     }
 
-    private record ActionTargetContext(@Nullable String targetFixtureId, @Nullable Double range) {
+    private record ActionTargetContext(@Nullable String targetFixtureId, @Nullable Double range, @Nullable Boolean lineOfSight) {
         @Nonnull
         static ActionTargetContext unavailable() {
-            return new ActionTargetContext(null, null);
+            return new ActionTargetContext(null, null, null);
         }
 
         @Nonnull
@@ -478,7 +478,7 @@ public final class NpcRuntimeActionObserver {
             }
             NpcRuntimeFixtureSpec npcFixture = fixtureById(fixtures, "npcUnderTest");
             NpcRuntimeFixtureSpec targetFixture = fixtureById(fixtures, fixtureId.get());
-            return new ActionTargetContext(fixtureId.get(), distance(npcFixture, targetFixture));
+            return new ActionTargetContext(fixtureId.get(), distance(npcFixture, targetFixture), targetFixture != null ? targetFixture.visible() : null);
         }
 
         void apply(@Nonnull List<NpcRuntimeTraceRecord> records) {
@@ -494,6 +494,10 @@ public final class NpcRuntimeActionObserver {
                 if ("combat-evaluator-evidence".equals(kind) && range != null) {
                     record.with("range", range);
                     removeUnsupported(record, "range");
+                }
+                if ("combat-evaluator-evidence".equals(kind) && lineOfSight != null) {
+                    record.with("lineOfSight", lineOfSight);
+                    removeUnsupported(record, "lineOfSight");
                 }
             }
         }

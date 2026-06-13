@@ -37,7 +37,37 @@ class NpcRuntimeFixtureAllowlistTest {
     }
 
     @Test
-    void rejectsUnsafeBlockMutationAsUnsupportedFixtureWithExactPath() {
+    void acceptsBlockFixtureWhenBlockIdIsPresent() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "block_fixture",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 3,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                              {"fixtureId": "block.cover", "kind": "block", "position": [1, 64, 0], "blockId": "Stone", "state": {"variant": "solid"}}
+                            ]
+                          }
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(2, request.fixtures().list().size());
+        assertEquals(1, request.fixtures().entityCount());
+        assertEquals(NpcRuntimeFixtureKind.BLOCK, request.fixtures().list().get(1).kind());
+        assertEquals("Stone", request.fixtures().list().get(1).blockId());
+        assertTrue(request.toJson().contains("\"state\""));
+    }
+
+    @Test
+    void rejectsBlockFixtureWithoutBlockIdWithExactPath() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
         NpcRuntimeRequest.ValidationException exception = assertThrows(
@@ -46,14 +76,14 @@ class NpcRuntimeFixtureAllowlistTest {
                         """
                                 {
                                   "version": 1,
-                                  "requestId": "block_fixture",
+                                  "requestId": "block_fixture_missing_id",
                                   "assetId": "Mob_Tamework_Example_Simple",
                                   "roleId": "Mob_Tamework_Example_Simple",
                                   "ticks": 3,
                                   "fixtures": {
                                     "list": [
                                       {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
-                                      {"fixtureId": "block.cover", "kind": "block", "position": [1, 64, 0], "blockId": "Stone"}
+                                      {"fixtureId": "block.cover", "kind": "block", "position": [1, 64, 0]}
                                     ]
                                   }
                                 }
@@ -63,11 +93,8 @@ class NpcRuntimeFixtureAllowlistTest {
         );
 
         assertEquals("unsupported-fixture", exception.classification());
-        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
-        assertEquals(
-                "block fixture placement is not implemented; safe block placement/reset API is unconfirmed",
-                exception.unsupported().getFirst().reason()
-        );
+        assertEquals("fixtures.list[1].blockId", exception.unsupported().getFirst().path());
+        assertEquals("block fixtures require blockId", exception.unsupported().getFirst().reason());
     }
 
     @Test

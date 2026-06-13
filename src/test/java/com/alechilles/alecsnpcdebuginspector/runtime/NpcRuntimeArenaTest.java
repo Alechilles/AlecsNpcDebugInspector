@@ -49,7 +49,7 @@ class NpcRuntimeArenaTest {
         assertEquals("before-fixture-setup", before.fields().get("phase"));
         assertEquals("after-fixture-setup", after.fields().get("phase"));
         assertEquals(2, before.fields().get("fixtureCount"));
-        assertTrue(before.fields().get("details").toString().contains("blockResetMode=no-block-mutations-yet"));
+        assertTrue(before.fields().get("details").toString().contains("blockResetMode=fixture-block-mutations-reset-during-cleanup"));
     }
 
     @Test

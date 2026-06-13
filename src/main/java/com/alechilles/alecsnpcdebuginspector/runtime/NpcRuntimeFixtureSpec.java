@@ -21,6 +21,7 @@ public record NpcRuntimeFixtureSpec(
         @Nullable String asset,
         @Nullable String entityId,
         @Nullable String blockId,
+        @Nullable Object state,
         @Nullable String itemId,
         @Nullable String targetSlot,
         boolean visible,
@@ -59,6 +60,7 @@ public record NpcRuntimeFixtureSpec(
                 List.of(),
                 List.of(),
                 defaultRoleId,
+                null,
                 null,
                 null,
                 null,
@@ -106,6 +108,7 @@ public record NpcRuntimeFixtureSpec(
                 null,
                 null,
                 null,
+                null,
                 slot,
                 target.visible(),
                 null,
@@ -142,7 +145,7 @@ public record NpcRuntimeFixtureSpec(
                 data,
                 path,
                 List.of("id", "fixtureId", "kind", "type", "position", "rotation", "tags", "roleId",
-                        "asset", "entityId", "blockId", "itemId", "slot", "targetSlot", "visible", "faction", "attitude",
+                        "asset", "entityId", "blockId", "state", "itemId", "slot", "targetSlot", "visible", "faction", "attitude",
                         "health", "flockId", "flockRole", "familyId", "familyRole", "leaderFixtureId", "parentFixtureId",
                         "messageId", "messageType", "senderFixtureId", "receiverFixtureId", "targetFixtureId", "payloadKeys",
                         "beaconId", "beaconType", "sourceFixtureId", "radius", "ttlTicks", "requiredConsumerFixtureIds",
@@ -177,6 +180,7 @@ public record NpcRuntimeFixtureSpec(
                 stringOrNull(data.get("asset")),
                 stringOrNull(data.get("entityId")),
                 stringOrNull(data.get("blockId")),
+                data.get("state"),
                 stringOrNull(data.get("itemId")),
                 firstPresentString(data, "targetSlot", "slot"),
                 boolValue(data.get("visible"), true, requestId, path + ".visible"),
@@ -233,6 +237,9 @@ public record NpcRuntimeFixtureSpec(
         }
         if (blockId != null) {
             map.put("blockId", blockId);
+        }
+        if (state != null) {
+            map.put("state", state);
         }
         if (itemId != null) {
             map.put("itemId", itemId);

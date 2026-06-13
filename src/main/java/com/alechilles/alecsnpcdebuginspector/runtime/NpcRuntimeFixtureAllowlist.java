@@ -32,7 +32,7 @@ public final class NpcRuntimeFixtureAllowlist {
             if (!allowsId(spec)) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".fixtureId", "fixture id is not allowlisted for kind " + spec.kind().jsonName()));
             }
-            if (!spec.kind().entityLike() && !isDeclarativeFixture(spec.kind())) {
+            if (!spec.kind().entityLike() && !isSupportedNonEntityFixture(spec.kind())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".kind", unsupportedMutationReason(spec.kind())));
             }
             if (spec.entityId() != null) {
@@ -40,6 +40,9 @@ public final class NpcRuntimeFixtureAllowlist {
             }
             if (spec.kind().entityLike() && (spec.roleId() == null || spec.roleId().isBlank())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".roleId", "entity-like fixtures require a roleId"));
+            }
+            if (spec.kind() == NpcRuntimeFixtureKind.BLOCK && (spec.blockId() == null || spec.blockId().isBlank())) {
+                unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".blockId", "block fixtures require blockId"));
             }
             validatePriorReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, i, unsupported);
             validatePriorReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, i, unsupported);
@@ -84,8 +87,9 @@ public final class NpcRuntimeFixtureAllowlist {
         };
     }
 
-    private boolean isDeclarativeFixture(@Nonnull NpcRuntimeFixtureKind kind) {
-        return kind == NpcRuntimeFixtureKind.MESSAGE
+    private boolean isSupportedNonEntityFixture(@Nonnull NpcRuntimeFixtureKind kind) {
+        return kind == NpcRuntimeFixtureKind.BLOCK
+                || kind == NpcRuntimeFixtureKind.MESSAGE
                 || kind == NpcRuntimeFixtureKind.BEACON
                 || kind == NpcRuntimeFixtureKind.PLAYER_ANCHOR;
     }
@@ -93,7 +97,7 @@ public final class NpcRuntimeFixtureAllowlist {
     @Nonnull
     private String unsupportedMutationReason(@Nonnull NpcRuntimeFixtureKind kind) {
         return switch (kind) {
-            case BLOCK -> "block fixture placement is not implemented; safe block placement/reset API is unconfirmed";
+            case BLOCK -> "block fixture placement is implemented through harness-owned set/reset mutation";
             case ITEM -> "item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed";
             default -> "fixture kind parses but safe world mutation is not implemented yet";
         };

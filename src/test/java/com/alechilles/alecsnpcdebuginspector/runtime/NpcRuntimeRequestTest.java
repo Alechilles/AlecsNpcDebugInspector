@@ -402,7 +402,7 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
-    void rejectsItemAndBlockFixtureWorldMutationsWithExactPaths() {
+    void rejectsItemFixtureWorldMutationButAcceptsBlockFixtures() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
         NpcRuntimeRequest.ValidationException exception = assertThrows(
@@ -411,7 +411,7 @@ class NpcRuntimeRequestTest {
                         """
                         {
                           "version": 1,
-                          "requestId": "unsupported_item_block",
+                          "requestId": "unsupported_item",
                           "assetId": "A",
                           "roleId": "R",
                           "ticks": 1,
@@ -429,10 +429,29 @@ class NpcRuntimeRequestTest {
         );
 
         assertEquals("unsupported-fixture", exception.classification());
+        assertEquals(1, exception.unsupported().size());
         assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
         assertEquals("item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed", exception.unsupported().getFirst().reason());
-        assertEquals("fixtures.list[2].kind", exception.unsupported().get(1).path());
-        assertEquals("block fixture placement is not implemented; safe block placement/reset API is unconfirmed", exception.unsupported().get(1).reason());
+
+        NpcRuntimeRequest blockRequest = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "supported_block",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 1,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "block.wall", "kind": "block", "blockId": "hytale:stone"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+        assertEquals(NpcRuntimeFixtureKind.BLOCK, blockRequest.fixtures().list().get(1).kind());
     }
 
     @Test

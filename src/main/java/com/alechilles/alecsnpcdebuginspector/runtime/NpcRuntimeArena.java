@@ -30,7 +30,7 @@ public record NpcRuntimeArena(
         map.put("arenaId", arenaId);
         map.put("spawnChunkIndex", spawnChunkIndex);
         map.put("residencyMode", residencyMode);
-        map.put("blockResetMode", "no-block-mutations-yet");
+        map.put("blockResetMode", "fixture-block-mutations-reset-during-cleanup");
         return map;
     }
 }

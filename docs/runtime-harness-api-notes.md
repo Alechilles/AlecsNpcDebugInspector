@@ -169,7 +169,7 @@ Main endgame Phase 3 adds first-class arena and cleanup evidence for the default
 
 Cleanup evidence is embedded under `result.cleanup.report` while preserving the older `cleanup.attempted`, `cleanup.succeeded`, and `cleanup.message` fields. If behavior completes but cleanup fails, the harness returns a failed result with classification `cleanup-failed` instead of a generic runtime error.
 
-Current block reset status: the default smoke arena does not mutate blocks yet, so block reset counts are expected to remain zero. Future fixture phases should register every block mutation before applying it and increment the same cleanup report during reset.
+Current block reset status: block fixtures are harness-owned world mutations. The runner records each `block-fixture-mutation` before applying it, applies the requested `blockId` through the resident chunk, stores the previous numeric block id, and resets mutations in reverse order during cleanup while incrementing the cleanup report block reset counters. Optional `state` is accepted and preserved in traces, but direct engine state mutation is still surfaced as `blockStateMutation` until a safe state API is confirmed.
 
 ### Fixture Schema and Spawn Support
 
@@ -187,7 +187,7 @@ Main endgame Phase 4 adds a canonical `fixtures.list` schema while preserving th
 
 NPC-backed fixture kinds (`npcUnderTest`, `targetDummy`, `npc`, `mob`, `familyMember`, and `flockMember`) can currently spawn through `NPCPlugin.spawnNPC(...)` when a `roleId` is present. Spawned fixtures are emitted as `fixture-spawn` trace records with deterministic fixture ids, kind, role id, target slot, NPC UUID, and a structured spawn result. The cleanup report counts each spawned NPC fixture removal.
 
-The schema accepts item, block, and player-anchor fixture declarations, but the harness rejects them before world mutation with classification `unsupported-fixture` until safe item, block, and player-anchor engine APIs are implemented. Direct `entityId` spawning is also rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
+The schema accepts item, block, and player-anchor fixture declarations. Block fixtures now require `blockId`, accept optional `state`, mutate the resident arena chunk at setup time, and reset the previous block id during cleanup. Item fixtures still fail before world mutation with classification `unsupported-fixture` until a safe item spawn/drop API is confirmed. Player anchors remain declarative headless fixtures. Direct `entityId` spawning is also rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
 
 ### Structured Observation Records
 
@@ -330,7 +330,7 @@ Implication: direct block mutation is possible, but the safe harness API still n
 - Exact chunk coordinate packing for `World.getChunkAsync(long)` and related chunk APIs.
 - Whether `WorldConfig.setCanUnloadChunks(false)` is sufficient to keep the runtime arena loaded without players.
 - Whether a long-lived chunk ticket or force-load owner API exists outside the inspected public surface.
-- The safest direct block set/reset primitive for arena cleanup.
+- Safe direct block id set/reset is implemented for block fixtures; optional block state mutation remains open until a concrete state API is confirmed.
 - The best dummy target entity type for sensors that require real combat, attitude, player, or visibility components.
 - Whether target slots should be induced through sensors/actions or can be pre-seeded through role support safely.
 - Whether synchronous scenario loops can run on `World.execute(...)` without blocking the world thread, or whether the runner needs a tick-driven state machine.
@@ -338,5 +338,5 @@ Implication: direct block mutation is possible, but the safe harness API still n
 ## Next Implementation Slice
 
 1. Confirm whether `WorldConfig.setCanUnloadChunks(false)` keeps the runtime arena resident without players, or find the internal force-load/ticket API.
-2. Add a direct block placement/reset wrapper for repeatable arena layouts.
+2. Add direct block state mutation once the engine API for stateful block variants is confirmed.
 3. Add explicit request-level time/weather overrides on top of the headless world defaults.

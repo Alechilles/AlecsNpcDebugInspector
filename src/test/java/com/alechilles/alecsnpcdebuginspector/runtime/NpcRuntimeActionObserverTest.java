@@ -269,6 +269,31 @@ class NpcRuntimeActionObserverTest {
         assertEquals(12, currentEvidence.fields().get("startTick"));
     }
 
+    @Test
+    void includesActionOutcomeFieldsWhenSnapshotExposesThem() {
+        NpcRuntimeObservedNpc observed = observedWithAi("""
+                === AI ===
+                - Current Tree Step: Sequence[Attack]
+                - Action Success: false
+                - Action Failure Reason: path-obstructed
+                - Action Cancel Reason: scenario-canceled
+                """);
+
+        List<NpcRuntimeTraceRecord> records = new NpcRuntimeActionObserver().traceRecords("request-a", 6, observed);
+
+        NpcRuntimeTraceRecord action = records.stream()
+                .filter(record -> "action-evidence".equals(record.fields().get("kind")))
+                .filter(record -> "currentTreeStep".equals(record.fields().get("actionId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(false, action.fields().get("success"));
+        assertEquals("path-obstructed", action.fields().get("failureReason"));
+        assertEquals("scenario-canceled", action.fields().get("cancelReason"));
+        assertFalse(action.fields().get("unsupportedFields").toString().contains("success"));
+        assertFalse(action.fields().get("unsupportedFields").toString().contains("failureReason"));
+        assertFalse(action.fields().get("unsupportedFields").toString().contains("cancelReason"));
+    }
+
     private static NpcRuntimeObservedNpc observedWithAi(String details) {
         return NpcRuntimeObservedNpc.fromSnapshot(null, new NpcDebugSnapshot(
                 "NPC Debug Inspector",

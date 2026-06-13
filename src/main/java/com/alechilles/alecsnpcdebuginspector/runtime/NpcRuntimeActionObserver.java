@@ -26,6 +26,7 @@ public final class NpcRuntimeActionObserver {
             "endTick",
             "success",
             "failureReason",
+            "cancelReason",
             "cooldown",
             "targetFixtureId",
             "pathingSideEffects"
@@ -112,7 +113,12 @@ public final class NpcRuntimeActionObserver {
             if (startTick != null && Boolean.parseBoolean(value)) {
                 record.with("startTick", startTick);
             }
-            record.with("unsupportedFields", actionUnsupportedFields(startTick != null && Boolean.parseBoolean(value)));
+            HashSet<String> supportedFields = new HashSet<>();
+            if (startTick != null && Boolean.parseBoolean(value)) {
+                supportedFields.add("startTick");
+            }
+            applyActionOutcome(record, ai, "transitionActionsRunning", supportedFields);
+            record.with("unsupportedFields", actionUnsupportedFields(supportedFields));
             records.add(record);
         }
     }
@@ -239,7 +245,12 @@ public final class NpcRuntimeActionObserver {
         if (startTick != null) {
             record.with("startTick", startTick);
         }
-        record.with("unsupportedFields", actionUnsupportedFields(startTick != null));
+        HashSet<String> supportedFields = new HashSet<>();
+        if (startTick != null) {
+            supportedFields.add("startTick");
+        }
+        applyActionOutcome(record, ai, field, supportedFields);
+        record.with("unsupportedFields", actionUnsupportedFields(supportedFields));
         records.add(record);
     }
 
@@ -341,13 +352,53 @@ public final class NpcRuntimeActionObserver {
     }
 
     @Nonnull
-    private List<String> actionUnsupportedFields(boolean hasStartTick) {
-        if (!hasStartTick) {
-            return ACTION_UNSUPPORTED_FIELDS;
-        }
+    private List<String> actionUnsupportedFields(@Nonnull Set<String> supportedFields) {
         return ACTION_UNSUPPORTED_FIELDS.stream()
-                .filter(field -> !"startTick".equals(field))
+                .filter(field -> !supportedFields.contains(field))
                 .toList();
+    }
+
+    private void applyActionOutcome(@Nonnull NpcRuntimeTraceRecord record,
+                                    @Nonnull Map<String, String> ai,
+                                    @Nonnull String sourceField,
+                                    @Nonnull Set<String> supportedFields) {
+        Boolean success = booleanValue(firstPresent(ai, sourceField + "Success", "actionSuccess"));
+        if (success != null) {
+            record.with("success", success);
+            supportedFields.add("success");
+        }
+        String failureReason = reasonValue(firstPresent(ai, sourceField + "FailureReason", "actionFailureReason"));
+        if (failureReason != null) {
+            record.with("failureReason", failureReason);
+            supportedFields.add("failureReason");
+        }
+        String cancelReason = reasonValue(firstPresent(ai, sourceField + "CancelReason", "actionCancelReason"));
+        if (cancelReason != null) {
+            record.with("cancelReason", cancelReason);
+            supportedFields.add("cancelReason");
+        }
+    }
+
+    @Nullable
+    private Boolean booleanValue(@Nullable String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(value)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(value)) {
+            return false;
+        }
+        return null;
+    }
+
+    @Nullable
+    private String reasonValue(@Nullable String value) {
+        if (value == null || isNone(value)) {
+            return null;
+        }
+        return value;
     }
 
     @Nonnull

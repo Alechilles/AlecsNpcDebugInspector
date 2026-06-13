@@ -48,6 +48,7 @@ public record NpcRuntimeAssertion(
         @Nullable String expectedBeaconType,
         @Nullable String expectedSourceFixtureId,
         @Nullable Integer expectedConsumerCount,
+        @Nullable List<Object> causalLinks,
         @Nullable Boolean expectUnsupported,
         @Nonnull NpcRuntimeRequest.AssertionWindowSpec window
 ) {
@@ -107,6 +108,7 @@ public record NpcRuntimeAssertion(
                 string(fields, "expectedBeaconType", "beaconType"),
                 string(fields, "expectedSourceFixtureId", "sourceFixtureId"),
                 intOrNull(fields.get("expectedConsumerCount")),
+                listOrNull(fields.get("links")),
                 boolOrNull(fields.get("expectUnsupported")),
                 spec.window()
         );
@@ -116,6 +118,9 @@ public record NpcRuntimeAssertion(
     NpcRuntimeAssertionResult evaluate(@Nonnull List<Map<String, Object>> evidenceRecords) {
         if (!supportedKind()) {
             return NpcRuntimeAssertionResult.unknown(assertionId, kind, "unsupported assertion kind: " + kind);
+        }
+        if (isCausalChainKind()) {
+            return evaluateCausalChain(evidenceRecords);
         }
         if (isFlockKind()) {
             return evaluateFlock(evidenceRecords);
@@ -189,6 +194,144 @@ public record NpcRuntimeAssertion(
             );
         }
         return NpcRuntimeAssertionResult.unknown(assertionId, kind, "no matching " + kind + " evidence was observed");
+    }
+
+    @Nonnull
+    private NpcRuntimeAssertionResult evaluateCausalChain(@Nonnull List<Map<String, Object>> evidenceRecords) {
+        List<Map<String, Object>> links = causalLinkMaps();
+        if (links.isEmpty()) {
+            return NpcRuntimeAssertionResult.unknown(assertionId, kind, "causal-chain assertion requires at least one link");
+        }
+        ArrayList<Map<String, Object>> observedLinks = new ArrayList<>();
+        Map<String, Object> firstBroken = null;
+        for (int i = 0; i < links.size(); i++) {
+            Map<String, Object> link = links.get(i);
+            Map<String, Object> status = causalLinkStatus(i, link, evidenceRecords);
+            observedLinks.add(status);
+            if (firstBroken == null && !"matched".equals(status.get("classification"))) {
+                firstBroken = status;
+            }
+        }
+
+        LinkedHashMap<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("kind", "causal-chain");
+        evidence.put("causalChainId", assertionId);
+        evidence.put("firstBrokenLink", firstBroken);
+        evidence.put("links", observedLinks);
+        if (firstBroken == null) {
+            return NpcRuntimeAssertionResult.passed(
+                    assertionId,
+                    kind,
+                    "causal-chain assertion passed",
+                    evidence,
+                    firstTick(observedLinks),
+                    lastTick(observedLinks),
+                    observedLinks.size()
+            );
+        }
+        return NpcRuntimeAssertionResult.failed(
+                assertionId,
+                kind,
+                "First broken causal-chain link: " + firstBroken.get("classification"),
+                evidence,
+                firstTick(observedLinks),
+                lastTick(observedLinks),
+                observedLinks.size()
+        );
+    }
+
+    @Nonnull
+    private List<Map<String, Object>> causalLinkMaps() {
+        if (causalLinks == null) {
+            return List.of();
+        }
+        ArrayList<Map<String, Object>> links = new ArrayList<>();
+        for (Object link : causalLinks) {
+            if (link instanceof Map<?, ?> raw) {
+                LinkedHashMap<String, Object> cast = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> entry : raw.entrySet()) {
+                    cast.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+                links.add(cast);
+            }
+        }
+        return List.copyOf(links);
+    }
+
+    @Nonnull
+    private Map<String, Object> causalLinkStatus(int index,
+                                                 @Nonnull Map<String, Object> link,
+                                                 @Nonnull List<Map<String, Object>> evidenceRecords) {
+        String linkKind = string(link, "kind", "type");
+        if (linkKind == null) {
+            linkKind = "unknown";
+        }
+        String evidenceKind = string(link, "evidenceKind", "expectedEvidenceKind");
+        if (evidenceKind == null) {
+            evidenceKind = defaultCausalEvidenceKind(linkKind);
+        }
+        String resolvedLinkKind = linkKind;
+        String resolvedEvidenceKind = evidenceKind;
+        List<Map<String, Object>> matching = evidenceRecords.stream()
+                .filter(evidence -> matchesText(resolvedEvidenceKind, evidence.get("kind")))
+                .filter(evidence -> causalSourceMatches(resolvedLinkKind, link, evidence))
+                .filter(evidence -> causalTargetMatches(resolvedLinkKind, link, evidence))
+                .toList();
+
+        LinkedHashMap<String, Object> status = new LinkedHashMap<>();
+        status.put("index", index);
+        status.put("kind", linkKind);
+        status.put("evidenceKind", evidenceKind);
+        copyIfPresent(status, link, "sourceFixtureId");
+        copyIfPresent(status, link, "targetFixtureId");
+        Integer withinTicks = intOrNull(link.get("withinTicks"));
+        if (withinTicks != null) {
+            status.put("withinTicks", withinTicks);
+            status.put("allowedLatencyTicks", withinTicks);
+        }
+        if (matching.isEmpty()) {
+            status.put("status", "missing");
+            status.put("classification", causalClassification(link, linkKind));
+            status.put("observedLatencyTicks", null);
+            return status;
+        }
+
+        Map<String, Object> earliest = matching.stream()
+                .min(java.util.Comparator.comparingInt(item -> tickOrNull(item) != null ? tickOrNull(item) : 0))
+                .orElse(matching.getFirst());
+        Integer tick = tickOrNull(earliest);
+        if (tick != null) {
+            status.put("observedLatencyTicks", tick);
+            status.put("evidenceId", causalEvidenceId(earliest));
+        }
+        List<Object> unsupportedFields = unsupportedFields(matching);
+        Boolean linkExpectUnsupported = boolOrNull(link.get("expectUnsupported"));
+        if (!unsupportedFields.isEmpty() && Boolean.FALSE.equals(linkExpectUnsupported)) {
+            status.put("status", "unsupported");
+            status.put("classification", "unsupported-runtime-field");
+            status.put("unsupportedFields", unsupportedFields);
+            return status;
+        }
+        if (withinTicks != null && tick != null && tick > withinTicks) {
+            status.put("status", "late");
+            status.put("classification", causalClassification(link, linkKind));
+            status.put("lateByTicks", tick - withinTicks);
+            return status;
+        }
+        String countFailure = causalCountFailure(link, matching);
+        if (countFailure != null) {
+            status.put("status", "missing");
+            status.put("classification", countFailure);
+            addObservedSignalCounts(status, matching);
+            return status;
+        }
+        status.put("status", "passed");
+        status.put("classification", "matched");
+        addObservedSignalCounts(status, matching);
+        if (!unsupportedFields.isEmpty()) {
+            status.put("unsupportedFields", unsupportedFields);
+        }
+        return status;
     }
 
     boolean canResolveBeforeEnd() {
@@ -482,6 +625,17 @@ public record NpcRuntimeAssertion(
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .count());
+    }
+
+    @Nonnull
+    private static List<String> distinctStrings(@Nonnull List<Map<String, Object>> candidates, @Nonnull String field) {
+        return candidates.stream()
+                .map(candidate -> candidate.get(field))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
     }
 
     private boolean leaderMatches(@Nonnull List<Map<String, Object>> flockLinks,
@@ -844,9 +998,14 @@ public record NpcRuntimeAssertion(
                 || "combat".equalsIgnoreCase(kind)
                 || "combat-evaluator".equalsIgnoreCase(kind)
                 || "tamework".equalsIgnoreCase(kind)
+                || isCausalChainKind()
                 || isFlockKind()
                 || isMessageKind()
                 || isBeaconKind();
+    }
+
+    private boolean isCausalChainKind() {
+        return "causal-chain".equalsIgnoreCase(kind) || "causalChain".equalsIgnoreCase(kind);
     }
 
     private boolean isFlockKind() {
@@ -884,6 +1043,190 @@ public record NpcRuntimeAssertion(
                     || matchesText("action-end", observedKind);
         }
         return matchesText(evidenceKind(), observedKind);
+    }
+
+    @Nonnull
+    private static String defaultCausalEvidenceKind(@Nonnull String linkKind) {
+        if ("sensor".equalsIgnoreCase(linkKind)) {
+            return "sensor-evidence";
+        }
+        if ("action".equalsIgnoreCase(linkKind)) {
+            return "action-evidence";
+        }
+        return linkKind + "-evidence";
+    }
+
+    private static boolean causalSourceMatches(@Nonnull String linkKind,
+                                               @Nonnull Map<String, Object> link,
+                                               @Nonnull Map<String, Object> evidence) {
+        String expected = string(link, "sourceFixtureId", "sourceFixture");
+        if (expected == null) {
+            return true;
+        }
+        if ("message".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("senderFixtureId"));
+        }
+        if ("beacon".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("sourceFixtureId"));
+        }
+        if ("flock".equalsIgnoreCase(linkKind) || "family".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("leaderFixtureId"))
+                    || matchesText(expected, evidence.get("parentFixtureId"));
+        }
+        return matchesText(expected, evidenceFixtureId(evidence));
+    }
+
+    private static boolean causalTargetMatches(@Nonnull String linkKind,
+                                               @Nonnull Map<String, Object> link,
+                                               @Nonnull Map<String, Object> evidence) {
+        String expected = string(link, "targetFixtureId", "targetFixture");
+        if (expected == null) {
+            return true;
+        }
+        if ("message".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("receiverFixtureId"))
+                    || matchesText(expected, evidence.get("targetFixtureId"));
+        }
+        if ("beacon".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("consumerFixtureId"))
+                    || matchesText(expected, evidence.get("targetFixtureId"));
+        }
+        if ("flock".equalsIgnoreCase(linkKind) || "family".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidenceFixtureId(evidence))
+                    || matchesText(expected, evidence.get("targetFixtureId"));
+        }
+        if ("sensor".equalsIgnoreCase(linkKind) || "action".equalsIgnoreCase(linkKind)) {
+            return matchesText(expected, evidence.get("targetFixtureId"));
+        }
+        return true;
+    }
+
+    @Nonnull
+    private static String causalClassification(@Nonnull Map<String, Object> link, @Nonnull String linkKind) {
+        String explicit = string(link, "classification", "failureClassification");
+        if (explicit != null) {
+            return normalizeCausalClassification(explicit);
+        }
+        if ("sensor".equalsIgnoreCase(linkKind)) {
+            return "leader-target-missing";
+        }
+        if ("action".equalsIgnoreCase(linkKind)) {
+            return "follower-reaction-missing";
+        }
+        if ("message".equalsIgnoreCase(linkKind)) {
+            return link.containsKey("targetFixtureId") || link.containsKey("expectedReceiverCount")
+                    ? "message-receive-missing"
+                    : "message-send-missing";
+        }
+        if ("beacon".equalsIgnoreCase(linkKind)) {
+            return link.containsKey("targetFixtureId") || link.containsKey("expectedConsumerCount")
+                    ? "beacon-consume-missing"
+                    : "beacon-create-missing";
+        }
+        if ("flock".equalsIgnoreCase(linkKind) || "family".equalsIgnoreCase(linkKind)) {
+            return "follower-reaction-missing";
+        }
+        return "unsupported-causal-link";
+    }
+
+    @Nonnull
+    private static String normalizeCausalClassification(@Nonnull String classification) {
+        return switch (classification) {
+            case "leader-never-detected-target" -> "leader-target-missing";
+            case "message-not-sent" -> "message-send-missing";
+            case "message-not-received" -> "message-receive-missing";
+            case "beacon-not-created" -> "beacon-create-missing";
+            case "beacon-not-consumed" -> "beacon-consume-missing";
+            case "follower-did-not-react" -> "follower-reaction-missing";
+            default -> classification;
+        };
+    }
+
+    @Nullable
+    private static String causalCountFailure(@Nonnull Map<String, Object> link,
+                                             @Nonnull List<Map<String, Object>> matching) {
+        Integer expectedReceiverCount = intOrNull(link.get("expectedReceiverCount"));
+        if (expectedReceiverCount != null) {
+            int observed = distinctStringCount(matching, "receiverFixtureId");
+            if (observed != expectedReceiverCount) {
+                return observed > 0 ? "partial-broadcast-delivery" : "message-receive-missing";
+            }
+        }
+        Integer expectedConsumerCount = intOrNull(link.get("expectedConsumerCount"));
+        if (expectedConsumerCount != null) {
+            int observed = distinctStringCount(matching, "consumerFixtureId");
+            if (observed != expectedConsumerCount) {
+                return observed > 0 ? "partial-broadcast-delivery" : "consumer-reaction-missing";
+            }
+        }
+        return null;
+    }
+
+    private static void addObservedSignalCounts(@Nonnull Map<String, Object> status,
+                                                @Nonnull List<Map<String, Object>> matching) {
+        List<String> receivers = distinctStrings(matching, "receiverFixtureId");
+        if (!receivers.isEmpty()) {
+            status.put("observedReceiverCount", receivers.size());
+            status.put("observedReceiverFixtureIds", receivers);
+        }
+        List<String> consumers = distinctStrings(matching, "consumerFixtureId");
+        if (!consumers.isEmpty()) {
+            status.put("observedConsumerCount", consumers.size());
+            status.put("observedConsumerFixtureIds", consumers);
+        }
+    }
+
+    @Nonnull
+    private static List<Object> unsupportedFields(@Nonnull List<Map<String, Object>> matching) {
+        ArrayList<Object> fields = new ArrayList<>();
+        for (Map<String, Object> item : matching) {
+            Object unsupported = item.get("unsupportedFields");
+            if (unsupported instanceof List<?> list) {
+                for (Object value : list) {
+                    if (!fields.contains(value)) {
+                        fields.add(value);
+                    }
+                }
+            }
+        }
+        return List.copyOf(fields);
+    }
+
+    @Nonnull
+    private static String causalEvidenceId(@Nonnull Map<String, Object> evidence) {
+        for (String key : List.of("fixtureId", "receiverFixtureId", "consumerFixtureId", "targetFixtureId", "senderFixtureId", "sourceFixtureId", "beaconId", "messageId")) {
+            String value = stringValue(evidence.get(key));
+            if (value != null) {
+                return value;
+            }
+        }
+        return "unknown";
+    }
+
+    @Nullable
+    private static Integer firstTick(@Nonnull List<Map<String, Object>> links) {
+        return links.stream()
+                .map(item -> intOrNull(item.get("observedLatencyTicks")))
+                .filter(java.util.Objects::nonNull)
+                .min(Integer::compareTo)
+                .orElse(null);
+    }
+
+    @Nullable
+    private static Integer lastTick(@Nonnull List<Map<String, Object>> links) {
+        return links.stream()
+                .map(item -> intOrNull(item.get("observedLatencyTicks")))
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(null);
+    }
+
+    private static void copyIfPresent(@Nonnull Map<String, Object> target,
+                                      @Nonnull Map<String, Object> source,
+                                      @Nonnull String key) {
+        if (source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
     }
 
     private static boolean matchesText(@Nonnull String expected, @Nullable Object observed) {

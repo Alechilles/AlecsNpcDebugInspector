@@ -607,6 +607,115 @@ class NpcRuntimeAssertionTest {
     }
 
     @Test
+    void passesCausalChainAssertionForOrderedSensorAndActionLinks() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "leader-follower-chain",
+                "kind", "causal-chain",
+                "links", List.of(
+                        Map.of(
+                                "kind", "sensor",
+                                "sourceFixtureId", "npcUnderTest",
+                                "targetFixtureId", "target.Enemy",
+                                "withinTicks", 90,
+                                "classification", "leader-target-missing"
+                        ),
+                        Map.of(
+                                "kind", "action",
+                                "evidenceKind", "action-start",
+                                "sourceFixtureId", "flock.follower_one",
+                                "targetFixtureId", "target.Enemy",
+                                "withinTicks", 180,
+                                "classification", "follower-reaction-missing"
+                        )
+                )
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(30, "sensor-evidence",
+                        "fixtureId", "npcUnderTest",
+                        "targetFixtureId", "target.Enemy",
+                        "unsupportedFields", List.of()),
+                evidence(120, "action-start",
+                        "fixtureId", "flock.follower_one",
+                        "targetFixtureId", "target.Enemy",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("passed", result.status());
+        assertEquals("causal-chain", result.evidence().get("kind"));
+        List<?> links = (List<?>) result.evidence().get("links");
+        assertEquals("passed", ((Map<?, ?>) links.get(0)).get("status"));
+        assertEquals("passed", ((Map<?, ?>) links.get(1)).get("status"));
+    }
+
+    @Test
+    void lateCausalChainAssertionUsesSemanticClassificationAndTimingDiagnostics() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "late-message-chain",
+                "kind", "causal-chain",
+                "links", List.of(
+                        Map.of(
+                                "kind", "message",
+                                "sourceFixtureId", "npcUnderTest",
+                                "targetFixtureId", "flock.follower_one",
+                                "withinTicks", 90,
+                                "classification", "message-not-received"
+                        )
+                )
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(180, "message-evidence",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("failed", result.status());
+        Map<?, ?> firstBroken = (Map<?, ?>) result.evidence().get("firstBrokenLink");
+        assertEquals("late", firstBroken.get("status"));
+        assertEquals("message-receive-missing", firstBroken.get("classification"));
+        assertEquals(180, firstBroken.get("observedLatencyTicks"));
+        assertEquals(90, firstBroken.get("lateByTicks"));
+    }
+    @Test
+    void failsCausalChainAssertionWithFirstBrokenFanoutLink() {
+        NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
+                "assertionId", "broadcast-chain",
+                "kind", "causal-chain",
+                "links", List.of(
+                        Map.of(
+                                "kind", "message",
+                                "sourceFixtureId", "npcUnderTest",
+                                "expectedReceiverCount", 3,
+                                "withinTicks", 150,
+                                "classification", "message-receive-missing"
+                        )
+                )
+        ));
+        NpcRuntimeAssertion assertion = NpcRuntimeAssertion.fromSpecs(List.of(spec)).getFirst();
+
+        NpcRuntimeAssertionResult result = assertion.evaluate(List.of(
+                evidence(42, "message-evidence",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_one",
+                        "unsupportedFields", List.of()),
+                evidence(45, "message-evidence",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_two",
+                        "unsupportedFields", List.of())
+        ));
+
+        assertEquals("failed", result.status());
+        Map<?, ?> firstBroken = (Map<?, ?>) result.evidence().get("firstBrokenLink");
+        assertEquals("partial-broadcast-delivery", firstBroken.get("classification"));
+        assertEquals("missing", firstBroken.get("status"));
+        assertEquals(2, firstBroken.get("observedReceiverCount"));
+    }
+
+    @Test
     void failsFamilyAssertionWhenParentLinkDiffers() {
         NpcRuntimeRequest.AssertionSpec spec = assertionSpec(Map.of(
                 "assertionId", "family-link",

@@ -14,6 +14,8 @@ public final class NpcRuntimeSensorObserver {
             "targetFixtureId",
             "distance",
             "distanceBand",
+            "configuredRange",
+            "rangeThresholdMet",
             "visibility",
             "lineOfSight",
             "tags",
@@ -123,7 +125,15 @@ public final class NpcRuntimeSensorObserver {
         Double distance = distance(npcUnderTest, target);
         if (distance != null) {
             record.with("distance", distance);
+            record.with("distanceBand", distanceBand(distance));
             unsupportedFields.remove("distance");
+            unsupportedFields.remove("distanceBand");
+            if (target.radius() != null) {
+                record.with("configuredRange", target.radius());
+                record.with("rangeThresholdMet", distance <= target.radius());
+                unsupportedFields.remove("configuredRange");
+                unsupportedFields.remove("rangeThresholdMet");
+            }
         }
         record.with("visibility", target.visible());
         record.with("lineOfSight", target.visible());
@@ -166,6 +176,17 @@ public final class NpcRuntimeSensorObserver {
     @Nullable
     private Double number(@Nonnull Object value) {
         return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    @Nonnull
+    private String distanceBand(double distance) {
+        if (distance <= 4) {
+            return "near";
+        }
+        if (distance <= 12) {
+            return "medium";
+        }
+        return "far";
     }
 
     private boolean isNone(@Nonnull String value) {

@@ -26,6 +26,8 @@
     "destinationMode": "hosted"
   },
   "hosted": {
+    "endpoint": "https://telemetry-dev.alecsmods.com/ingest/event",
+    "eventEndpoint": "https://telemetry-dev.alecsmods.com/ingest/event",
     "projectKey": "proj_Kvt_1S0NTpcfPggm_K9ZOUW2"
   }
 }

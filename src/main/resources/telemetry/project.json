@@ -18,6 +18,9 @@
   "usage": { "enabled": false },
   "stats": { "enabled": true },
   "reports": { "enabled": false },
+  "ui": {
+    "iconTexturePath": "AlecsNpcDebugInspector/Telemetry/ConsentIcon.png"
+  },
   "defaults": {
     "enabled": true,
     "destinationMode": "hosted"

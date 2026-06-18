@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "projectId": "alecs-npc-debug-inspector",
+  "displayName": "Alec's NPC Inspector!",
+  "runtimeMode": "dependency",
+  "capture": {
+    "uncaughtExceptions": false,
+    "setupFailures": false,
+    "startFailures": false,
+    "exceptionalWorldRemovals": false
+  },
+  "events": {
+    "errors": { "enabled": false },
+    "lifecycle": { "enabled": false },
+    "breadcrumbs": { "enabled": false, "automatic": false }
+  },
+  "performance": { "enabled": false },
+  "usage": { "enabled": false },
+  "stats": { "enabled": true },
+  "reports": { "enabled": false },
+  "defaults": {
+    "enabled": true,
+    "destinationMode": "hosted"
+  },
+  "hosted": {
+    "projectKey": "proj_Kvt_1S0NTpcfPggm_K9ZOUW2"
+  }
+}

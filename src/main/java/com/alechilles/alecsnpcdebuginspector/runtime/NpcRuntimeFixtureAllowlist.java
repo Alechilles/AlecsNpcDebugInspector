@@ -44,6 +44,9 @@ public final class NpcRuntimeFixtureAllowlist {
             if (spec.kind() == NpcRuntimeFixtureKind.BLOCK && (spec.blockId() == null || spec.blockId().isBlank())) {
                 unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".blockId", "block fixtures require blockId"));
             }
+            if (spec.kind() == NpcRuntimeFixtureKind.ITEM && (spec.itemId() == null || spec.itemId().isBlank())) {
+                unsupported.add(new NpcRuntimeRequest.UnsupportedField(path + ".itemId", "item fixtures require itemId"));
+            }
             validatePriorReference(spec.leaderFixtureId(), path + ".leaderFixtureId", specs, i, unsupported);
             validatePriorReference(spec.parentFixtureId(), path + ".parentFixtureId", specs, i, unsupported);
             validateReference(spec.senderFixtureId(), path + ".senderFixtureId", specs, unsupported);
@@ -89,6 +92,7 @@ public final class NpcRuntimeFixtureAllowlist {
 
     private boolean isSupportedNonEntityFixture(@Nonnull NpcRuntimeFixtureKind kind) {
         return kind == NpcRuntimeFixtureKind.BLOCK
+                || kind == NpcRuntimeFixtureKind.ITEM
                 || kind == NpcRuntimeFixtureKind.MESSAGE
                 || kind == NpcRuntimeFixtureKind.BEACON
                 || kind == NpcRuntimeFixtureKind.PLAYER_ANCHOR;
@@ -98,7 +102,7 @@ public final class NpcRuntimeFixtureAllowlist {
     private String unsupportedMutationReason(@Nonnull NpcRuntimeFixtureKind kind) {
         return switch (kind) {
             case BLOCK -> "block fixture placement is implemented through harness-owned set/reset mutation";
-            case ITEM -> "item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed";
+            case ITEM -> "item fixture spawning is implemented through harness-owned item-drop entities";
             default -> "fixture kind parses but safe world mutation is not implemented yet";
         };
     }

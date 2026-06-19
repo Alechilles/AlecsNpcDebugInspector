@@ -464,48 +464,21 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
-    void rejectsItemFixtureWorldMutationButAcceptsBlockFixtures() {
+    void acceptsItemAndBlockFixturesWhenRequiredIdsArePresent() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
-        NpcRuntimeRequest.ValidationException exception = assertThrows(
-                NpcRuntimeRequest.ValidationException.class,
-                () -> NpcRuntimeRequest.parse(
-                        """
-                        {
-                          "version": 1,
-                          "requestId": "unsupported_item",
-                          "assetId": "A",
-                          "roleId": "R",
-                          "ticks": 1,
-                          "fixtures": {
-                            "list": [
-                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
-                              {"fixtureId": "item.food", "kind": "item", "itemId": "hytale:apple"},
-                              {"fixtureId": "block.wall", "kind": "block", "blockId": "hytale:stone"}
-                            ]
-                          }
-                        }
-                        """,
-                        config
-                )
-        );
-
-        assertEquals("unsupported-fixture", exception.classification());
-        assertEquals(1, exception.unsupported().size());
-        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
-        assertEquals("item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed", exception.unsupported().getFirst().reason());
-
-        NpcRuntimeRequest blockRequest = NpcRuntimeRequest.parse(
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
                 """
                 {
                   "version": 1,
-                  "requestId": "supported_block",
+                  "requestId": "supported_item_and_block",
                   "assetId": "A",
                   "roleId": "R",
                   "ticks": 1,
                   "fixtures": {
                     "list": [
                       {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "item.food", "kind": "item", "itemId": "hytale:apple"},
                       {"fixtureId": "block.wall", "kind": "block", "blockId": "hytale:stone"}
                     ]
                   }
@@ -513,7 +486,9 @@ class NpcRuntimeRequestTest {
                 """,
                 config
         );
-        assertEquals(NpcRuntimeFixtureKind.BLOCK, blockRequest.fixtures().list().get(1).kind());
+        assertEquals(NpcRuntimeFixtureKind.ITEM, request.fixtures().list().get(1).kind());
+        assertEquals("hytale:apple", request.fixtures().list().get(1).itemId());
+        assertEquals(NpcRuntimeFixtureKind.BLOCK, request.fixtures().list().get(2).kind());
     }
 
     @Test

@@ -98,7 +98,35 @@ class NpcRuntimeFixtureAllowlistTest {
     }
 
     @Test
-    void rejectsUnsafeItemMutationAsUnsupportedFixtureWithExactPath() {
+    void acceptsItemFixtureWhenItemIdIsPresent() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                        {
+                          "version": 1,
+                          "requestId": "item_fixture",
+                          "assetId": "Mob_Tamework_Example_Simple",
+                          "roleId": "Mob_Tamework_Example_Simple",
+                          "ticks": 3,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
+                              {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "hytale:apple"}
+                            ]
+                          }
+                        }
+                        """,
+                config
+        );
+
+        assertEquals(2, request.fixtures().list().size());
+        assertEquals(NpcRuntimeFixtureKind.ITEM, request.fixtures().list().get(1).kind());
+        assertEquals("hytale:apple", request.fixtures().list().get(1).itemId());
+    }
+
+    @Test
+    void rejectsItemFixtureWithoutItemIdWithExactPath() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
         NpcRuntimeRequest.ValidationException exception = assertThrows(
@@ -107,14 +135,14 @@ class NpcRuntimeFixtureAllowlistTest {
                         """
                                 {
                                   "version": 1,
-                                  "requestId": "item_fixture",
+                                  "requestId": "item_fixture_missing_id",
                                   "assetId": "Mob_Tamework_Example_Simple",
                                   "roleId": "Mob_Tamework_Example_Simple",
                                   "ticks": 3,
                                   "fixtures": {
                                     "list": [
                                       {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "position": [0, 64, 0], "roleId": "Mob_Tamework_Example_Simple"},
-                                      {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0], "itemId": "hytale:apple"}
+                                      {"fixtureId": "item.food", "kind": "item", "position": [1, 64, 0]}
                                     ]
                                   }
                                 }
@@ -124,11 +152,8 @@ class NpcRuntimeFixtureAllowlistTest {
         );
 
         assertEquals("unsupported-fixture", exception.classification());
-        assertEquals("fixtures.list[1].kind", exception.unsupported().getFirst().path());
-        assertEquals(
-                "item fixture spawning is not implemented; safe item spawn/drop API is unconfirmed",
-                exception.unsupported().getFirst().reason()
-        );
+        assertEquals("fixtures.list[1].itemId", exception.unsupported().getFirst().path());
+        assertEquals("item fixtures require itemId", exception.unsupported().getFirst().reason());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import com.hypixel.hytale.math.util.ChunkUtil;
+import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +30,8 @@ final class NpcRuntimeBlockFixtureMutator {
         int localX = localBlockCoordinate(worldX);
         int localZ = localBlockCoordinate(worldZ);
         long chunkIndex = ChunkUtil.indexChunkFromBlock(worldX, worldZ);
+        String stateKey = stateKey(fixture.state());
+        String appliedBlockId = appliedBlockId(fixture.blockId(), stateKey);
 
         var chunk = world.getChunkIfLoaded(chunkIndex);
         if (chunk == null) {
@@ -52,7 +55,9 @@ final class NpcRuntimeBlockFixtureMutator {
                 localX,
                 localZ,
                 chunkIndex,
-                previousBlockId
+                previousBlockId,
+                appliedBlockId,
+                stateKey
         );
     }
 
@@ -91,7 +96,9 @@ final class NpcRuntimeBlockFixtureMutator {
                             int localX,
                             int localZ,
                             long chunkIndex,
-                            int previousBlockId) {
+                            int previousBlockId,
+                            @Nonnull String appliedBlockId,
+                            @Nullable String stateKey) {
         @Nonnull
         NpcRuntimeTraceRecord beforeApplyRecord() {
             return baseRecord("before-apply", "pending", null)
@@ -110,7 +117,7 @@ final class NpcRuntimeBlockFixtureMutator {
             if (chunk == null) {
                 throw new IllegalStateException("block fixture chunk became unavailable: " + chunkIndex);
             }
-            boolean applied = chunk.setBlock(localX, worldY, localZ, fixture.blockId());
+            boolean applied = chunk.setBlock(localX, worldY, localZ, appliedBlockId);
             if (!applied) {
                 throw new IllegalStateException("block fixture setBlock returned false");
             }
@@ -119,7 +126,9 @@ final class NpcRuntimeBlockFixtureMutator {
                     tick,
                     fixture.fixtureId(),
                     fixture.blockId(),
+                    appliedBlockId,
                     fixture.state(),
+                    stateKey,
                     worldX,
                     worldY,
                     worldZ,
@@ -139,12 +148,14 @@ final class NpcRuntimeBlockFixtureMutator {
                     .with("phase", phase)
                     .with("status", status)
                     .with("blockId", fixture.blockId())
+                    .with("appliedBlockId", appliedBlockId)
                     .with("state", fixture.state())
+                    .with("stateKey", stateKey)
                     .with("position", fixture.position())
                     .with("worldPosition", List.of(worldX, worldY, worldZ))
                     .with("localPosition", List.of(localX, worldY, localZ))
                     .with("chunkIndex", chunkIndex)
-                    .with("unsupportedFields", fixture.state() == null ? List.of() : List.of("blockStateMutation"));
+                    .with("unsupportedFields", List.of());
             if (error != null) {
                 record.with("error", error);
             }
@@ -156,7 +167,9 @@ final class NpcRuntimeBlockFixtureMutator {
                            int tick,
                            @Nonnull String fixtureId,
                            @Nonnull String blockId,
+                           @Nonnull String appliedBlockId,
                            @Nullable Object state,
+                           @Nullable String stateKey,
                            int worldX,
                            int worldY,
                            int worldZ,
@@ -171,12 +184,14 @@ final class NpcRuntimeBlockFixtureMutator {
                     .with("phase", "after-apply")
                     .with("status", "applied")
                     .with("blockId", blockId)
+                    .with("appliedBlockId", appliedBlockId)
                     .with("state", state)
+                    .with("stateKey", stateKey)
                     .with("worldPosition", List.of(worldX, worldY, worldZ))
                     .with("localPosition", List.of(localX, worldY, localZ))
                     .with("chunkIndex", chunkIndex)
                     .with("previousBlockId", previousBlockId)
-                    .with("unsupportedFields", state == null ? List.of() : List.of("blockStateMutation"));
+                    .with("unsupportedFields", List.of());
         }
 
         @Nonnull
@@ -184,8 +199,12 @@ final class NpcRuntimeBlockFixtureMutator {
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
             map.put("fixtureId", fixtureId);
             map.put("blockId", blockId);
+            map.put("appliedBlockId", appliedBlockId);
             if (state != null) {
                 map.put("state", state);
+            }
+            if (stateKey != null) {
+                map.put("stateKey", stateKey);
             }
             map.put("worldPosition", List.of(worldX, worldY, worldZ));
             map.put("localPosition", List.of(localX, worldY, localZ));
@@ -193,5 +212,47 @@ final class NpcRuntimeBlockFixtureMutator {
             map.put("previousBlockId", previousBlockId);
             return map;
         }
+    }
+
+    @Nullable
+    private static String stateKey(@Nullable Object state) {
+        if (state == null) {
+            return null;
+        }
+        if (state instanceof String text) {
+            if (text.isBlank()) {
+                throw new IllegalArgumentException("block fixture state must not be blank");
+            }
+            return text;
+        }
+        if (state instanceof Map<?, ?> map) {
+            for (String key : List.of("stateKey", "key", "state", "id")) {
+                Object value = map.get(key);
+                if (value instanceof String text && !text.isBlank()) {
+                    return text;
+                }
+            }
+            if (map.size() == 1) {
+                Object value = map.values().iterator().next();
+                if (value instanceof String text && !text.isBlank()) {
+                    return text;
+                }
+            }
+            throw new IllegalArgumentException("block fixture state object must provide stateKey, key, state, id, or one string value");
+        }
+        throw new IllegalArgumentException("block fixture state must be a string or object");
+    }
+
+    @Nonnull
+    private static String appliedBlockId(@Nonnull String blockId, @Nullable String stateKey) {
+        if (stateKey == null) {
+            return blockId;
+        }
+        BlockType blockType = BlockType.fromString(blockId);
+        String resolved = blockType.getBlockKeyForState(stateKey);
+        if (resolved == null || resolved.isBlank()) {
+            throw new IllegalArgumentException("block fixture state key is not valid for blockId " + blockId + ": " + stateKey);
+        }
+        return resolved;
     }
 }

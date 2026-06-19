@@ -111,8 +111,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             } catch (FixtureSpawnFailure failure) {
                 int ticksRun = Math.max(0, failure.tick() + 1);
-                NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.blockMutations);
+                NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.spawnedItems, spawnedFixtures.blockMutations);
                 spawnedFixtures.spawnedNpcs.clear();
+                spawnedFixtures.spawnedItems.clear();
                 spawnedFixtures.blockMutations.clear();
                 run.markCleanup(cleanupReport.succeeded(), cleanupReport.message());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), ticksRun, "cleanup")
@@ -132,8 +133,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 return NpcRuntimeResult.fixtureSpawnFailed(request, ticksRun, tracePath, failure.spawnResult(), cleanupReport);
             }
 
-            NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.blockMutations);
+            NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.spawnedItems, spawnedFixtures.blockMutations);
             spawnedFixtures.spawnedNpcs.clear();
+            spawnedFixtures.spawnedItems.clear();
             spawnedFixtures.blockMutations.clear();
             run.markCleanup(cleanupReport.succeeded(), cleanupReport.message());
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "cleanup")
@@ -210,7 +212,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     NpcRuntimeResult.Cleanup.fromReport(cleanupReport)
             );
         } finally {
-            cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.blockMutations);
+            cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.spawnedItems, spawnedFixtures.blockMutations);
         }
     }
 
@@ -248,10 +250,13 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             writeEventIfEnabled(writer, cadence, targetInductionRecord(request, tick));
             for (NpcRuntimeFixtureSpec fixture : request.fixtures().list()) {
                 NpcRuntimeFixtureSpawner.SpawnedNpc spawned = null;
+                NpcRuntimeFixtureSpawner.SpawnedItem spawnedItem = null;
                 NpcRuntimeBlockFixtureMutator.AppliedMutation blockMutation = null;
                 try {
                     if (fixture.kind().entityLike()) {
                         spawned = fixtureSpawner.spawnFixture(world, fixture);
+                    } else if (fixture.kind() == NpcRuntimeFixtureKind.ITEM) {
+                        spawnedItem = fixtureSpawner.spawnItemFixture(world, fixture);
                     } else if (fixture.kind() == NpcRuntimeFixtureKind.BLOCK) {
                         NpcRuntimeBlockFixtureMutator.PreparedMutation prepared = blockFixtureMutator.prepare(world, request.requestId(), tick, fixture);
                         writer.write(prepared.beforeApplyRecord());
@@ -284,6 +289,9 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 if (spawned != null) {
                     spawnedFixtures.spawnedNpcs.add(spawned);
                 }
+                if (spawnedItem != null) {
+                    spawnedFixtures.spawnedItems.add(spawnedItem);
+                }
                 if (spawned != null && spawned.uuid() != null) {
                     run.addNpc(fixture.fixtureId(), spawned.uuid());
                 }
@@ -293,6 +301,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 run.addFixture(fixture.fixtureId());
                 NpcRuntimeFixtureSpawnResult spawnResult = spawned != null
                         ? spawned.toSpawnResult()
+                        : spawnedItem != null
+                        ? spawnedItem.toSpawnResult()
                         : blockMutation != null
                         ? blockFixtureResult(fixture)
                         : declarativeFixtureResult(fixture);
@@ -551,6 +561,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
     @Nonnull
     private static List<String> declarativeFixtureUnsupportedFields(@Nonnull NpcRuntimeFixtureKind kind) {
         return switch (kind) {
+            case ITEM -> List.of();
             case BLOCK -> List.of();
             case MESSAGE -> List.of("engineMessageBusMutation");
             case BEACON -> List.of("engineBeaconMutation");
@@ -632,6 +643,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                                          @Nonnull NpcRuntimeRequest request,
                                                          @Nonnull NpcRuntimeFixtureRegistry fixtureRegistry,
                                                          @Nonnull List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs,
+                                                         @Nonnull List<NpcRuntimeFixtureSpawner.SpawnedItem> spawnedItems,
                                                          @Nonnull List<NpcRuntimeBlockFixtureMutator.AppliedMutation> blockMutations) {
         NpcRuntimeCleanupReport.Builder report = NpcRuntimeCleanupReport.builder();
         recordEnvironmentCleanup(request, report);
@@ -664,6 +676,21 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             } catch (Exception exception) {
                 report.entityRemoval(false);
                 report.unresolvedFixture(spawnedNpc.fixtureId());
+            }
+        }
+        for (NpcRuntimeFixtureSpawner.SpawnedItem spawnedItem : spawnedItems) {
+            try {
+                executeWorldStep(world, () -> {
+                    boolean removed = fixtureSpawner.cleanup(world.getEntityStore().getStore(), spawnedItem);
+                    if (!removed) {
+                        throw new IllegalStateException("item fixture cleanup returned false");
+                    }
+                    return NpcRuntimeTickScheduler.TickOutcome.continueRunning();
+                });
+                report.entityRemoval(true);
+            } catch (Exception exception) {
+                report.entityRemoval(false);
+                report.unresolvedFixture(spawnedItem.fixtureId());
             }
         }
         return report.build();
@@ -791,6 +818,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
 
     private static final class SpawnedFixtureHolder {
         private final List<NpcRuntimeFixtureSpawner.SpawnedNpc> spawnedNpcs = new ArrayList<>();
+        private final List<NpcRuntimeFixtureSpawner.SpawnedItem> spawnedItems = new ArrayList<>();
         private final List<NpcRuntimeBlockFixtureMutator.AppliedMutation> blockMutations = new ArrayList<>();
         private final List<Map<String, Object>> evidenceRecords = new ArrayList<>();
         private final NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();

@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.5.0 - Runtime Harness Evidence and Telemetry Stats - 2026-06-18
+
+### Added
+- Added richer NPC runtime harness evidence, including causal-chain assertions, correlated action and sensor observers, fixture-derived combat line-of-sight checks, explicit action outcome evidence, and sensor distance-band assertions.
+- Added runtime block fixture reset mutations and related allowlist updates for more complete fixture-driven scenario coverage.
+- Added a telemetry consent icon and stats descriptor so Alec's NPC Inspector can opt into hosted usage summaries through the shared telemetry consent flow.
+
+### Changed
+- Updated release metadata for Hytale `0.5.x`, Modtale `0.5.3`, and project version `1.5.0`.
+
+### Fixed
+- Updated hosted telemetry stats routing to the current Alec telemetry ingest endpoint used by the shared rollout.
+
 ## 1.4.2 - Asset Pack Icon - 2026-06-07
 
 ### Added

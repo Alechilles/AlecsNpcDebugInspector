@@ -40,7 +40,8 @@ public record NpcRuntimeObservationCadence(
 
     private static boolean isMinimalEvent(@Nonnull String kind) {
         return switch (kind) {
-            case "run-start", "run-end", "assertions", "assertions-resolved", "cleanup" -> true;
+            case "run-start", "run-end", "assertions", "assertions-resolved", "cleanup",
+                 "npc-work-metrics", "npc-work-metrics-summary" -> true;
             default -> false;
         };
     }

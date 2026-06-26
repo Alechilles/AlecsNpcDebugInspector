@@ -2,6 +2,10 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshotService;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSample;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricWeights;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricsCollector;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
@@ -102,8 +106,11 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     .with("ticksRequested", request.ticks())
                     .with("profile", cadence.profile()));
 
-            NpcRuntimeTickScheduler.RunSummary summary;
+        NpcRuntimeTickScheduler.RunSummary summary;
             try {
+                spawnedFixtures.workMetricsCollector = request.profile().npcWorkMetrics()
+                        ? new NpcWorkMetricsCollector(request.profile().windowTicks(), NpcWorkMetricWeights.defaults())
+                        : null;
                 summary = tickScheduler.run(
                         run,
                         step -> executeWorldStep(world, step),
@@ -155,6 +162,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
 
             if (summary.canceled()) {
+                writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "canceled")
                         .with("reason", summary.cancelReason())
@@ -180,6 +188,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
             if (resultSummary.hasAssertionFailures() || resultSummary.hasAssertionUnknowns()) {
                 String classification = resultSummary.hasAssertionFailures() ? "assertion-failed" : "assertion-unknown";
+                writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "failed")
                         .with("classification", classification)
@@ -197,6 +206,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             }
 
+            writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())
@@ -348,7 +358,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             if (observed == null) {
                 throw new IllegalStateException("npcUnderTest snapshot missing");
             }
-            for (NpcRuntimeTraceRecord record : observer.traceRecords(
+            List<NpcRuntimeTraceRecord> records = observer.traceRecords(
                     request.requestId(),
                     tick,
                     observed,
@@ -360,12 +370,14 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     fixtureRegistry,
                     observedByFixture,
                     spawnedFixtures.previousObservedByFixture
-            )) {
+            );
+            for (NpcRuntimeTraceRecord record : records) {
                 writeEventIfEnabled(writer, cadence, record);
                 if (isAssertionEvidence(record) && tick >= request.timing().warmupTicks()) {
                     spawnedFixtures.evidenceRecords.add(record.fields());
                 }
             }
+            recordWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, npcUnderTest.fixtureId(), tick, records);
             spawnedFixtures.previousObserved = observed;
             spawnedFixtures.previousObservedByFixture.clear();
             spawnedFixtures.previousObservedByFixture.putAll(observedByFixture);
@@ -385,6 +397,51 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         return run.canceled()
                 ? NpcRuntimeTickScheduler.TickOutcome.canceled(run.cancelReason() != null ? run.cancelReason() : "canceled")
                 : NpcRuntimeTickScheduler.TickOutcome.continueRunning();
+    }
+
+    private void recordWorkMetricsIfEnabled(@Nonnull NpcRuntimeRequest request,
+                                            @Nonnull NpcRuntimeTraceWriter writer,
+                                            @Nonnull NpcRuntimeObservationCadence cadence,
+                                            @Nonnull SpawnedFixtureHolder spawnedFixtures,
+                                            @Nonnull String npcId,
+                                            int tick,
+                                            @Nonnull List<NpcRuntimeTraceRecord> records) throws java.io.IOException {
+        NpcWorkMetricsCollector collector = spawnedFixtures.workMetricsCollector;
+        if (collector == null || !request.profile().npcWorkMetrics()) {
+            return;
+        }
+        NpcWorkMetricSample sample = observer.metricSample(npcId, tick, records);
+        collector.record(sample);
+        if (tick >= request.timing().warmupTicks() && tick % request.profile().emitEveryTicks() == 0) {
+            writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.npcWorkMetrics(
+                    request.requestId(),
+                    tick,
+                    collector.snapshot(npcId)
+            ));
+        }
+    }
+
+    private void writeFinalWorkMetricsIfEnabled(@Nonnull NpcRuntimeRequest request,
+                                                @Nonnull NpcRuntimeTraceWriter writer,
+                                                @Nonnull NpcRuntimeObservationCadence cadence,
+                                                @Nonnull SpawnedFixtureHolder spawnedFixtures,
+                                                int tick) throws java.io.IOException {
+        NpcWorkMetricsCollector collector = spawnedFixtures.workMetricsCollector;
+        NpcRuntimeFixtureSpawner.SpawnedNpc npcUnderTest = spawnedFixtures.npcUnderTest();
+        if (collector == null || npcUnderTest == null || !request.profile().npcWorkMetrics() || !request.profile().includeFinalSummary()) {
+            return;
+        }
+        NpcWorkMetricSnapshot snapshot = collector.snapshot(npcUnderTest.fixtureId());
+        writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), tick, "npc-work-metrics-summary")
+                .with("npcId", snapshot.npcId())
+                .with("windowTicks", snapshot.windowTicks())
+                .with("samples", snapshot.samples())
+                .with("workScorePerTick", snapshot.workScorePerTick())
+                .with("idleChurnScore", snapshot.idleChurnScore())
+                .with("topContributors", snapshot.topContributors().stream()
+                        .map(item -> Map.of("category", item.category(), "score", item.score()))
+                        .toList())
+                .with("notes", List.of("observable work proxy; exact CPU timing unavailable")));
     }
 
     private void writeFixtureLinkIfPresent(@Nonnull NpcRuntimeRequest request,
@@ -823,6 +880,8 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
         private final List<Map<String, Object>> evidenceRecords = new ArrayList<>();
         private final NpcRuntimeActionObserver.ActionLifecycleTracker actionLifecycleTracker = new NpcRuntimeActionObserver.ActionLifecycleTracker();
         private final LinkedHashMap<String, NpcRuntimeObservedNpc> previousObservedByFixture = new LinkedHashMap<>();
+        @Nullable
+        private NpcWorkMetricsCollector workMetricsCollector;
         @Nullable
         private NpcRuntimeObservedNpc previousObserved;
 

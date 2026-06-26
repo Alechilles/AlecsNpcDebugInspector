@@ -1,6 +1,7 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
 import com.alechilles.alecsnpcdebuginspector.debug.NpcDebugSnapshot;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSample;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -142,6 +143,54 @@ public final class NpcRuntimeObserver {
                     .with("changes", diff.changes().stream().map(NpcRuntimeObserver::changeMap).toList()));
         }
         return records;
+    }
+
+    @Nonnull
+    public NpcWorkMetricSample metricSample(@Nonnull String npcId,
+                                            int tick,
+                                            @Nonnull List<NpcRuntimeTraceRecord> records) {
+        int sensorChecks = count(records, "sensor-evidence");
+        int targetSelections = count(records, "target-selection-evidence");
+        int targetCandidates = records.stream()
+                .filter(record -> "target-selection-evidence".equals(record.fields().get("kind")))
+                .mapToInt(record -> intField(record, "candidateCount"))
+                .sum();
+        int pathingEvents = count(records, "pathing-evidence");
+        int combatEligibility = count(records, "combat-eligibility-evidence") + count(records, "combat-evaluator-evidence");
+        int instructionChanges = count(records, "instruction-lifecycle-evidence");
+        int actionTransitions = count(records, "action-start") + count(records, "action-change") + count(records, "action-end");
+        int stateTransitions = records.stream()
+                .filter(record -> "npc-transition".equals(record.fields().get("kind")))
+                .mapToInt(record -> intField(record, "changeCount"))
+                .sum();
+        int signalEvents = count(records, "flock-evidence") + count(records, "message-evidence") + count(records, "beacon-evidence");
+        boolean idle = instructionChanges == 0 && actionTransitions == 0 && stateTransitions == 0;
+        return new NpcWorkMetricSample(
+                npcId,
+                tick,
+                records.size(),
+                sensorChecks,
+                targetSelections,
+                targetCandidates,
+                pathingEvents,
+                combatEligibility,
+                instructionChanges,
+                actionTransitions,
+                stateTransitions,
+                signalEvents,
+                idle
+        );
+    }
+
+    private static int count(@Nonnull List<NpcRuntimeTraceRecord> records, @Nonnull String kind) {
+        return Math.toIntExact(records.stream()
+                .filter(record -> kind.equals(record.fields().get("kind")))
+                .count());
+    }
+
+    private static int intField(@Nonnull NpcRuntimeTraceRecord record, @Nonnull String field) {
+        Object value = record.fields().get(field);
+        return value instanceof Number number ? number.intValue() : 0;
     }
 
     @Nonnull

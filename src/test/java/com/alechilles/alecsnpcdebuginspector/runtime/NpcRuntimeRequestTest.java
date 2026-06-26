@@ -143,6 +143,35 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesNpcWorkMetricsProfile() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "boar_profile",
+                  "assetId": "Boar",
+                  "roleId": "Boar",
+                  "ticks": 300,
+                  "world": {"instanceId": "npc_runtime_test_flatworld"},
+                  "fixtures": {"npc": {"position": [0, 64, 0]}},
+                  "profile": {
+                    "npcWorkMetrics": true,
+                    "windowTicks": 100,
+                    "emitEveryTicks": 20,
+                    "includeFinalSummary": true
+                  }
+                }
+                """, config);
+
+        assertTrue(request.profile().npcWorkMetrics());
+        assertEquals(100, request.profile().windowTicks());
+        assertEquals(20, request.profile().emitEveryTicks());
+        assertTrue(request.profile().includeFinalSummary());
+        assertTrue(request.toJson().contains("\"npcWorkMetrics\":true"));
+    }
+
+    @Test
     void parsesRecordFixtureCorrelationFields() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 

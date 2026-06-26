@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -130,5 +131,38 @@ class NpcRuntimeTraceWriterTest {
         assertTrue(combatEligibility.contains("\"lineOfSightOk\":true"));
         assertTrue(lifecycle.contains("\"kind\":\"instruction-lifecycle-evidence\""));
         assertTrue(lifecycle.contains("\"previousStatus\":\"candidate\""));
+    }
+
+    @Test
+    void writesNpcWorkMetricsRecord() throws Exception {
+        Path trace = tempDir.resolve("metrics.trace.jsonl");
+        NpcWorkMetricSnapshot snapshot = new NpcWorkMetricSnapshot(
+                "npcUnderTest",
+                100,
+                20,
+                7.5,
+                4.0,
+                2.0,
+                0.5,
+                10.0,
+                0.5,
+                1.0,
+                0.1,
+                0.2,
+                0.3,
+                0.4,
+                3.5,
+                List.of(new NpcWorkMetricSnapshot.Contributor("targeting", 4.0))
+        );
+
+        try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(trace)) {
+            writer.write(NpcRuntimeTraceRecord.npcWorkMetrics("profile", 40, snapshot));
+        }
+
+        String line = Files.readString(trace);
+        assertTrue(line.contains("\"kind\":\"npc-work-metrics\""));
+        assertTrue(line.contains("\"workScorePerTick\":7.5"));
+        assertTrue(line.contains("\"category\":\"targeting\""));
+        assertTrue(line.contains("observable work proxy"));
     }
 }

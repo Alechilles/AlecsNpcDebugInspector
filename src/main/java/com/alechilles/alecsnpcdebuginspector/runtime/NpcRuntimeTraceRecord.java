@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -135,6 +136,32 @@ public final class NpcRuntimeTraceRecord {
             record.with("previousStatus", previousStatus);
         }
         return record;
+    }
+
+    @Nonnull
+    public static NpcRuntimeTraceRecord npcWorkMetrics(@Nonnull String requestId,
+                                                       int tick,
+                                                       @Nonnull NpcWorkMetricSnapshot snapshot) {
+        return of(requestId, tick, "npc-work-metrics")
+                .with("npcId", snapshot.npcId())
+                .with("windowTicks", snapshot.windowTicks())
+                .with("samples", snapshot.samples())
+                .with("workScorePerTick", snapshot.workScorePerTick())
+                .with("eventRecordsPerTick", snapshot.eventRecordsPerTick())
+                .with("sensorChecksPerTick", snapshot.sensorChecksPerTick())
+                .with("targetSelectionsPerTick", snapshot.targetSelectionsPerTick())
+                .with("targetCandidatesPerTick", snapshot.targetCandidatesPerTick())
+                .with("pathingEventsPerTick", snapshot.pathingEventsPerTick())
+                .with("combatEligibilityPerTick", snapshot.combatEligibilityPerTick())
+                .with("instructionChangesPerTick", snapshot.instructionChangesPerTick())
+                .with("actionTransitionsPerTick", snapshot.actionTransitionsPerTick())
+                .with("stateTransitionsPerTick", snapshot.stateTransitionsPerTick())
+                .with("flockSignalEventsPerTick", snapshot.flockSignalEventsPerTick())
+                .with("idleChurnScore", snapshot.idleChurnScore())
+                .with("topContributors", snapshot.topContributors().stream()
+                        .map(item -> Map.of("category", item.category(), "score", item.score()))
+                        .toList())
+                .with("notes", List.of("observable work proxy; exact CPU timing unavailable"));
     }
 
     @Nonnull

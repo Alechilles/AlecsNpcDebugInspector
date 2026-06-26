@@ -5,6 +5,8 @@ import com.alechilles.alecsnpcdebuginspector.commands.NpcDebugCommand;
 import com.alechilles.alecsnpcdebuginspector.interactions.NpcDebugInspectorItemInteraction;
 import com.alechilles.alecsnpcdebuginspector.items.NpcDebugItemFeatureHandler;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcDebugInspectorHStatsIntegration;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricWeights;
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricsCollector;
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeCommand;
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessConfig;
 import com.alechilles.alecsnpcdebuginspector.runtime.NpcRuntimeHarnessService;
@@ -25,6 +27,7 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
     private NpcDebugSnapshotService snapshotService;
     private NpcDebugItemFeatureHandler itemFeatureHandler;
     private NpcDebugInspectorHStatsIntegration hStatsIntegration;
+    private NpcWorkMetricsCollector workMetricsCollector;
     private NpcRuntimeHarnessService runtimeHarnessService;
 
     public AlecsNpcDebugInspector(@Nonnull JavaPluginInit init) {
@@ -34,7 +37,8 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     @Override
     protected void setup() {
-        snapshotService = new NpcDebugSnapshotService();
+        workMetricsCollector = new NpcWorkMetricsCollector(100, NpcWorkMetricWeights.defaults());
+        snapshotService = new NpcDebugSnapshotService(workMetricsCollector);
         Interaction.CODEC.register(
                 "NpcDebugInspectorItem",
                 NpcDebugInspectorItemInteraction.class,
@@ -94,6 +98,10 @@ public final class AlecsNpcDebugInspector extends JavaPlugin {
 
     public NpcRuntimeHarnessService getRuntimeHarnessService() {
         return runtimeHarnessService;
+    }
+
+    public NpcWorkMetricsCollector getWorkMetricsCollector() {
+        return workMetricsCollector;
     }
 
     private static Path defaultUserDataPath() {

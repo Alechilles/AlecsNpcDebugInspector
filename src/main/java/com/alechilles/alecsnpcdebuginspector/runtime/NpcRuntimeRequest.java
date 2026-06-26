@@ -27,6 +27,7 @@ public record NpcRuntimeRequest(
         @Nonnull MultiNpcSpec multiNpc,
         @Nonnull Fixtures fixtures,
         @Nonnull EngineHooksSpec engineHooks,
+        @Nonnull ProfileSpec profile,
         @Nonnull RecordSpec record,
         @Nonnull List<AssertionSpec> assertions,
         @Nonnull LimitsSpec limits
@@ -48,7 +49,7 @@ public record NpcRuntimeRequest(
                 List.of("version", "requestId", "scenario", "assetId", "roleId", "ticks", "seed", "world",
                         "requiresPlayer", "timing", "environment", "multiNpc", "multiNpcMode",
                         "deliveryWindowTicks", "maxFixtureCount", "fixtures", "preseedTargetSlots", "engineHooks",
-                        "record", "assertions", "limits"),
+                        "profile", "record", "assertions", "limits"),
                 requestId
         );
         int version = intValue(data.get("version"), 1, requestId);
@@ -94,6 +95,7 @@ public record NpcRuntimeRequest(
         LimitsSpec limits = LimitsSpec.from(asMap(data.get("limits"), requestId), config, requestId);
         validateEntityCount(config, fixtures.entityCount(), limits.maxEntities(), requestId);
         NpcRuntimeFixtureAllowlist.defaults().validate(fixtures.list(), requestId);
+        ProfileSpec profile = ProfileSpec.from(asMap(data.get("profile"), requestId), requestId);
         RecordSpec record = RecordSpec.from(asMap(data.get("record"), requestId), requestId);
         List<AssertionSpec> assertions = assertions(data.get("assertions"), requestId, timing.warmupTicks(), ticks);
 
@@ -112,6 +114,7 @@ public record NpcRuntimeRequest(
                 multiNpc,
                 fixtures,
                 engineHooks,
+                profile,
                 record,
                 assertions,
                 limits
@@ -148,6 +151,9 @@ public record NpcRuntimeRequest(
         map.put("fixtures", fixtures.toMap());
         if (engineHooks.anyEnabled()) {
             map.put("engineHooks", engineHooks.toMap());
+        }
+        if (profile.npcWorkMetrics()) {
+            map.put("profile", profile.toMap());
         }
         map.put("record", record.toMap());
         map.put("assertions", assertions.stream().map(AssertionSpec::toMap).toList());
@@ -773,6 +779,39 @@ public record NpcRuntimeRequest(
             if (!fixtureIds.isEmpty()) {
                 map.put("fixtureIds", fixtureIds);
             }
+            return map;
+        }
+    }
+
+    public record ProfileSpec(boolean npcWorkMetrics, int windowTicks, int emitEveryTicks, boolean includeFinalSummary) {
+        @Nonnull
+        static ProfileSpec disabled() {
+            return new ProfileSpec(false, 100, 20, true);
+        }
+
+        @Nonnull
+        static ProfileSpec from(@Nonnull Map<String, Object> data, @Nonnull String requestId) {
+            if (data.isEmpty()) {
+                return disabled();
+            }
+            rejectUnsupportedKeys(data, "profile", List.of("npcWorkMetrics", "windowTicks", "emitEveryTicks", "includeFinalSummary"), requestId);
+            int windowTicks = Math.max(1, intValue(data.get("windowTicks"), 100, requestId));
+            int emitEveryTicks = Math.max(1, intValue(data.get("emitEveryTicks"), 20, requestId));
+            return new ProfileSpec(
+                    boolValue(data.get("npcWorkMetrics"), false, requestId),
+                    windowTicks,
+                    emitEveryTicks,
+                    boolValue(data.get("includeFinalSummary"), true, requestId)
+            );
+        }
+
+        @Nonnull
+        Map<String, Object> toMap() {
+            LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+            map.put("npcWorkMetrics", npcWorkMetrics);
+            map.put("windowTicks", windowTicks);
+            map.put("emitEveryTicks", emitEveryTicks);
+            map.put("includeFinalSummary", includeFinalSummary);
             return map;
         }
     }

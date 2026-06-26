@@ -140,6 +140,7 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 return NpcRuntimeResult.fixtureSpawnFailed(request, ticksRun, tracePath, failure.spawnResult(), cleanupReport);
             }
 
+            writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
             NpcRuntimeCleanupReport cleanupReport = cleanupOnWorldThread(world, request, fixtureRegistry, spawnedFixtures.spawnedNpcs, spawnedFixtures.spawnedItems, spawnedFixtures.blockMutations);
             spawnedFixtures.spawnedNpcs.clear();
             spawnedFixtures.spawnedItems.clear();
@@ -162,7 +163,6 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
 
             if (summary.canceled()) {
-                writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "canceled")
                         .with("reason", summary.cancelReason())
@@ -188,7 +188,6 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
             }
             if (resultSummary.hasAssertionFailures() || resultSummary.hasAssertionUnknowns()) {
                 String classification = resultSummary.hasAssertionFailures() ? "assertion-failed" : "assertion-unknown";
-                writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
                 writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                         .with("status", "failed")
                         .with("classification", classification)
@@ -206,7 +205,6 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                 );
             }
 
-            writeFinalWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, summary.ticksRun());
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.of(request.requestId(), summary.ticksRun(), "run-end")
                     .with("status", "passed")
                     .with("ticksRun", summary.ticksRun())

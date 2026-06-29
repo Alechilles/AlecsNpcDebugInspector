@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "projectId": "alecs-npc-debug-inspector",
+  "displayName": "Alec's NPC Inspector!",
+  "telemetry": {
+    "stats": {
+      "supported": true
+    }
+  },
+  "ui": {
+    "iconTexturePath": "AlecsNpcDebugInspector/Telemetry/ConsentIcon.png"
+  },
+  "defaults": {
+    "enabled": true,
+    "destinationMode": "hosted"
+  },
+  "hosted": {
+    "projectKey": "proj_Kvt_1S0NTpcfPggm_K9ZOUW2"
+  }
+}

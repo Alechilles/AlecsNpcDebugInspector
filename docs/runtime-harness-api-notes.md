@@ -15,7 +15,7 @@ These notes are based on `javap` inspection of public APIs and targeted bytecode
 `HytaleNpcAssetTools` can run repeatable no-login smoke batches against this harness with:
 
 ```powershell
-python -m hytale_npc_assets.cli runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
+hytale-assets runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
 ```
 
 The starter manifest lives in the tooling repo and points at this harness repo. It currently runs `Mob_Tamework_Example_Simple` in `npc_runtime_test_flatworld`, starts the server when needed, waits for the heartbeat, writes the request, waits for the result, and writes an artifact bundle under `out\runtime-headless-smoke`.

@@ -1,29 +1,26 @@
 {
-  "Group": "Alechilles",
-  "Name": "Alec's NPC Inspector!",
-  "Version": "${project.version}",
-  "Description": "Standalone NPC debug inspector with in-game detail UI.",
-  "Authors": [
-    {
-      "Name": "Alec (Alechilles)",
-      "Email": "",
-      "Url": "https://www.curseforge.com/members/alechilles/projects",
-      "Discord": "alechilles"
+    "Group": "Alechilles",
+    "Name": "Alec's NPC Inspector!",
+    "Version": "1.5.0",
+    "Description": "Standalone NPC debug inspector with in-game detail UI.",
+    "Authors": [
+        {
+            "Name": "Alec (Alechilles)",
+            "Url": "https://www.curseforge.com/members/alechilles/projects"
+        }
+    ],
+    "Website": "",
+    "Main": "com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector",
+    "ServerVersion": "0.5.x",
+    "Dependencies": {
+        "Hytale:AssetModule": "*"
+    },
+    "OptionalDependencies": {
+        "Alechilles:Alec's Tamework!": ">=3.0.0 <4.0.0"
+    },
+    "DisabledByDefault": false,
+    "IncludesAssetPack": true,
+    "UpdateChecker": {
+        "CurseForge": "1476193"
     }
-  ],
-  "Website": "",
-  "Main": "com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector",
-  "ServerVersion": "0.5.x",
-  "Dependencies": {},
-  "OptionalDependencies": {
-    "Alechilles:Alec's Tamework!": "2.x"
-  },
-  "LoadBefore": {},
-  "DisabledByDefault": false,
-  "IncludesAssetPack": true,
-  "SubPlugins": [],
-  "UpdateChecker": {
-    "CurseForge": "1476193"
-  }
 }
-

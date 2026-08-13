@@ -100,8 +100,8 @@ class NpcDebugCompatibilityTest {
         private final Instruction bodyInstruction = allocate(Instruction.class);
         private final Instruction headInstruction = allocate(Instruction.class);
         private final StateSupport stateSupport = allocate(StateSupport.class);
-        private final EntitySupport entitySupport = new EntitySupport();
-        private final MarkedEntitySupport markedEntitySupport = new MarkedEntitySupport();
+        private final EntitySupport entitySupport = allocate(EntitySupport.class);
+        private final MarkedEntitySupport markedEntitySupport = allocate(MarkedEntitySupport.class);
         private final CombatSupport combatSupport = allocate(CombatSupport.class);
         private final AlarmStore alarmStore = new AlarmStore();
         private final NPCEntity npcEntity = allocate(NPCEntity.class);

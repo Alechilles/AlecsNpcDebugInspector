@@ -29,7 +29,7 @@ configurations.named('testImplementation') {
 hytaleTools {
     hytaleVersion = localProperty('hytale_version')
     patchline = localProperty('hytale_patchline')
-    manifestServerVersion = '0.5.x'
+    manifestServerVersion = '>=0.5.7 <0.7.0 || >=0.6.0-pre.1 <0.6.0'
     manifestGroup = 'Alechilles'
     modId = "Alec's NPC Inspector!"
     modDescription = 'Standalone NPC debug inspector with in-game detail UI.'

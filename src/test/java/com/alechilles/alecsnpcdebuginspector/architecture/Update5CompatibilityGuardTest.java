@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class Update5CompatibilityGuardTest {
     private static final Path MAIN_JAVA = Paths.get("src", "main", "java");
-    private static final Path MAIN_RESOURCES = Paths.get("src", "main", "resources");
     private static final List<ForbiddenUsage> FORBIDDEN_USAGES = List.of(
             new ForbiddenUsage(
                     "Update 5 removed Hytale Vector3d/Vector3f/Vector3i classes. Use org.joml vectors instead.",
@@ -87,17 +86,6 @@ class Update5CompatibilityGuardTest {
                 violations.isEmpty(),
                 () -> "Update 5 compatibility guard found removed API usage.\nViolations:\n"
                         + String.join("\n", violations)
-        );
-    }
-
-    @Test
-    void manifestUsesUpdate5ServerVersionRange() throws IOException {
-        Path manifest = MAIN_RESOURCES.resolve("manifest.json");
-        String text = Files.readString(manifest, StandardCharsets.UTF_8);
-
-        assertTrue(
-                text.contains("\"ServerVersion\": \"0.5.x\""),
-                "Update 5 uses semantic server version ranges; manifest.json should target 0.5.x"
         );
     }
 

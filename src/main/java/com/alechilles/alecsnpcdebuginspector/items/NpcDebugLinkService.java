@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.items;
 
+import com.alechilles.alecsnpcdebuginspector.compat.NpcDebugCompatibility;
 import com.alechilles.alecsnpcdebuginspector.ui.NpcDebugLinkedEntry;
 import com.hypixel.hytale.codec.Codec;
 import com.hypixel.hytale.component.ComponentType;
@@ -18,6 +19,7 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.flock.FlockMembership;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
+import com.hypixel.hytale.server.npc.role.support.StateSupport;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -142,7 +144,7 @@ final class NpcDebugLinkService {
                     resolveDisplayName(npcRef, store, npc),
                     resolveRoleId(npc),
                     true,
-                    resolveStateName(npc),
+                    resolveStateName(npcRef, store, npc),
                     resolveHealthText(npcRef, store),
                     resolveFlockText(npcRef, store),
                     resolveFlockId(npcRef, store),
@@ -253,11 +255,17 @@ final class NpcDebugLinkService {
     }
 
     @Nonnull
-    private String resolveStateName(@Nonnull NPCEntity npc) {
-        if (npc.getRole() == null || npc.getRole().getStateSupport() == null) {
+    private String resolveStateName(@Nonnull Ref<EntityStore> npcRef,
+                                    @Nonnull Store<EntityStore> store,
+                                    @Nonnull NPCEntity npc) {
+        if (npc.getRole() == null) {
             return "<unknown>";
         }
-        String stateName = npc.getRole().getStateSupport().getStateName();
+        StateSupport stateSupport = NpcDebugCompatibility.stateSupport(npc.getRole(), npcRef, store);
+        if (stateSupport == null) {
+            return "<unknown>";
+        }
+        String stateName = stateSupport.getStateName();
         return stateName != null && !stateName.isBlank() ? stateName : "<unknown>";
     }
 

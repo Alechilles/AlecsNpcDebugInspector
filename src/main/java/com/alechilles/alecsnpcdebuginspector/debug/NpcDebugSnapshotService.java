@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.debug;
 
+import com.alechilles.alecsnpcdebuginspector.compat.NpcDebugCompatibility;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSample;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricWeights;
@@ -152,7 +153,7 @@ public final class NpcDebugSnapshotService {
             appendSection(details, "Tamework Resolved Config", buildTameworkResolvedConfigSection(resolvedUuid, npc, gameTime));
             appendSection(details, "Tamework Diagnostics", buildTameworkDiagnosticsSection(gameTime));
         }
-        String aiSection = buildAiSection(resolvedUuid, npc, gameTime);
+        String aiSection = buildAiSection(resolvedUuid, targetRef, store, npc, gameTime);
         String targetingSection = buildTargetingSection(resolvedUuid, targetRef, store, npc, gameTime);
         String pathingSection = buildPathingSection(resolvedUuid, targetRef, store, npc, gameTime);
         String combatSection = buildCombatSection(resolvedUuid, targetRef, store, npc, gameTime);
@@ -162,14 +163,14 @@ public final class NpcDebugSnapshotService {
         appendSection(details, "AI", aiSection);
         appendSection(details, "Targeting / Sensors", targetingSection);
         appendSection(details, "Pathing", pathingSection);
-        appendSection(details, "Timers / Cooldowns", buildTimerSection(resolvedUuid, npc, gameTime));
+        appendSection(details, "Timers / Cooldowns", buildTimerSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Lifecycle / Persistence", buildLifecycleSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Relationships", buildRelationshipsSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Combat", combatSection);
         appendSection(details, "Work Metrics", buildWorkMetricsSection(resolvedUuid, gameTime));
         appendSection(details, "Inventory / Equipment", buildInventorySection(resolvedUuid, npc, gameTime));
-        appendSection(details, "Alarms", buildAlarmSection(resolvedUuid, npc, gameTime));
-        appendSection(details, "Flags", buildFlagSection(resolvedUuid, npc, gameTime));
+        appendSection(details, "Alarms", buildAlarmSection(resolvedUuid, targetRef, store, npc, gameTime));
+        appendSection(details, "Flags", buildFlagSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Components", buildComponentSection(resolvedUuid, targetRef, store, npc, gameTime));
         appendSection(details, "Flock", flockSection);
         appendSection(details, "Recent Events", buildEventsSection(resolvedUuid, enabledEventCategories));
@@ -221,7 +222,7 @@ public final class NpcDebugSnapshotService {
         );
         appendTrackedLine(sb, npcUuid, now, "overview.roleName", "Role Name", safeText(npc.getRoleName(), "<unknown>"), true, false);
         appendTrackedLine(sb, npcUuid, now, "overview.roleId", "Role Id", resolveRoleId(npc), true, true);
-        appendTrackedLine(sb, npcUuid, now, "overview.state", "State", resolveStateName(npc), true, true);
+        appendTrackedLine(sb, npcUuid, now, "overview.state", "State", resolveStateName(npc, npcRef, store), true, true);
         appendTrackedLine(sb, npcUuid, now, "overview.health", "Health", resolveHealthText(npcRef, store), true, false);
 
         TransformComponent transform = npcRef != null && npcRef.isValid()
@@ -279,6 +280,7 @@ public final class NpcDebugSnapshotService {
                 0,
                 stateChanges,
                 signalEvents,
+                Map.of(),
                 idle
         ));
     }
@@ -483,6 +485,8 @@ public final class NpcDebugSnapshotService {
 
     @Nonnull
     private String buildAiSection(@Nullable UUID npcUuid,
+                                  @Nullable Ref<EntityStore> npcRef,
+                                  @Nonnull Store<EntityStore> store,
                                   @Nullable NPCEntity npc,
                                   @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
@@ -492,10 +496,10 @@ public final class NpcDebugSnapshotService {
         }
 
         Role role = npc.getRole();
-        StateSupport stateSupport = role.getStateSupport();
-        EntitySupport entitySupport = role.getEntitySupport();
+        StateSupport stateSupport = NpcDebugCompatibility.stateSupport(role, npcRef, store);
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(role, npcRef, store);
         String subStateName = resolveDisplaySubStateName(npc, role, stateSupport);
-        appendTrackedLine(sb, npcUuid, now, "ai.stateName", "State", resolveStateName(npc), true, false);
+        appendTrackedLine(sb, npcUuid, now, "ai.stateName", "State", resolveStateName(npc, npcRef, store), true, false);
         appendTrackedLine(
                 sb,
                 npcUuid,
@@ -506,18 +510,29 @@ public final class NpcDebugSnapshotService {
                 true,
                 false
         );
-        appendTrackedLine(sb, npcUuid, now, "ai.stateIndex", "State Index", String.valueOf(stateSupport.getStateIndex()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "ai.subStateIndex", "Sub-State Index", String.valueOf(stateSupport.getSubStateIndex()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "ai.busy", "In Busy State", String.valueOf(stateSupport.isInBusyState()), true, true);
-        appendTrackedLine(sb, npcUuid, now, "ai.transitionsRunning", "Transition Actions Running", String.valueOf(stateSupport.isRunningTransitionActions()), true, false);
-        appendComponentLocalStateLines(sb, npcUuid, now, role, stateSupport);
+        appendTrackedLine(sb, npcUuid, now, "ai.stateIndex", "State Index",
+                stateSupport != null ? String.valueOf(stateSupport.getStateIndex()) : "n/a", true, false);
+        appendTrackedLine(sb, npcUuid, now, "ai.subStateIndex", "Sub-State Index",
+                stateSupport != null ? String.valueOf(stateSupport.getSubStateIndex()) : "n/a", true, false);
+        appendTrackedLine(sb, npcUuid, now, "ai.busy", "In Busy State",
+                stateSupport != null ? String.valueOf(stateSupport.isInBusyState()) : "n/a", true, true);
+        appendTrackedLine(sb, npcUuid, now, "ai.transitionsRunning", "Transition Actions Running",
+                stateSupport != null ? String.valueOf(stateSupport.isRunningTransitionActions()) : "n/a", true, false);
+        if (stateSupport != null) {
+            appendComponentLocalStateLines(sb, npcUuid, now, role, stateSupport);
+        } else {
+            appendTrackedLine(sb, npcUuid, now, "ai.componentLocalStateCount",
+                    "Component Local State Machines", "0", true, false);
+        }
 
         appendTrackedLine(sb, npcUuid, now, "ai.rootInstruction", "Root Instruction", resolveInstructionLabel(role.getRootInstruction()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.currentTreeModeStep", "Current Tree Step", resolveInstructionLabel(readField(role, "currentTreeModeStep", Instruction.class)), true, true);
         appendTrackedLine(sb, npcUuid, now, "ai.bodyStep", "Current Body Step", resolveInstructionLabel(readField(role, "lastBodyMotionStep", Instruction.class)), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.headStep", "Current Head Step", resolveInstructionLabel(readField(role, "lastHeadMotionStep", Instruction.class)), true, false);
-        appendTrackedLine(sb, npcUuid, now, "ai.nextBodyStep", "Queued Body Step", resolveInstructionLabel(entitySupport.getNextBodyMotionStep()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "ai.nextHeadStep", "Queued Head Step", resolveInstructionLabel(entitySupport.getNextHeadMotionStep()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "ai.nextBodyStep", "Queued Body Step",
+                resolveInstructionLabel(NpcDebugCompatibility.nextBodyMotionStep(role, entitySupport, npcRef, store)), true, false);
+        appendTrackedLine(sb, npcUuid, now, "ai.nextHeadStep", "Queued Head Step",
+                resolveInstructionLabel(NpcDebugCompatibility.nextHeadMotionStep(role, entitySupport, npcRef, store)), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.interactionInstruction", "Interaction Instruction", resolveInstructionLabel(role.getInteractionInstruction()), true, false);
         appendTrackedLine(sb, npcUuid, now, "ai.deathInstruction", "Death Instruction", resolveInstructionLabel(role.getDeathInstruction()), true, false);
 
@@ -584,7 +599,7 @@ public final class NpcDebugSnapshotService {
         }
 
         Role role = npc.getRole();
-        MarkedEntitySupport marked = role.getMarkedEntitySupport();
+        MarkedEntitySupport marked = NpcDebugCompatibility.markedEntitySupport(role, npcRef, store);
         if (marked != null) {
             int slotCount = marked.getMarkedEntitySlotCount();
             appendTrackedLine(sb, npcUuid, now, "targeting.slotCount", "Marked Target Slots", String.valueOf(slotCount), true, false);
@@ -596,8 +611,10 @@ public final class NpcDebugSnapshotService {
             }
         }
 
-        StateSupport stateSupport = role.getStateSupport();
-        Ref<EntityStore> interactionTarget = stateSupport.getInteractionIterationTarget();
+        StateSupport stateSupport = NpcDebugCompatibility.stateSupport(role, npcRef, store);
+        Ref<EntityStore> interactionTarget = stateSupport != null
+                ? stateSupport.getInteractionIterationTarget()
+                : null;
         appendTrackedLine(
                 sb,
                 npcUuid,
@@ -609,7 +626,8 @@ public final class NpcDebugSnapshotService {
                 false
         );
 
-        StdScope scope = role.getEntitySupport() != null ? role.getEntitySupport().getSensorScope() : null;
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(role, npcRef, store);
+        StdScope scope = entitySupport != null ? entitySupport.getSensorScope() : null;
         Map<String, String> scopeValues = snapshotScopeValues(scope);
         appendTrackedLine(sb, npcUuid, now, "targeting.scopeCount", "Sensor Scope Keys", String.valueOf(scopeValues.size()), true, false);
 
@@ -678,6 +696,8 @@ public final class NpcDebugSnapshotService {
 
     @Nonnull
     private String buildTimerSection(@Nullable UUID npcUuid,
+                                     @Nullable Ref<EntityStore> npcRef,
+                                     @Nonnull Store<EntityStore> store,
                                      @Nullable NPCEntity npc,
                                      @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
@@ -690,8 +710,8 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "timers.despawnSeconds", "Despawn Countdown (s)", despawnSeconds, true, false);
         trackTimerTransition(npcUuid, now, "despawnSeconds", "Despawn Countdown (s)", despawnSeconds);
 
-        CombatSupport combatSupport = npc.getRole().getCombatSupport();
-        String attackExecuting = String.valueOf(combatSupport.isExecutingAttack());
+        CombatSupport combatSupport = NpcDebugCompatibility.combatSupport(npc.getRole(), npcRef, store);
+        String attackExecuting = combatSupport != null ? String.valueOf(combatSupport.isExecutingAttack()) : "n/a";
         appendTrackedLine(sb, npcUuid, now, "timers.attackExecuting", "Attack Executing", attackExecuting, true, false);
         trackTimerTransition(npcUuid, now, "attackExecuting", "Attack Executing", attackExecuting);
         Double attackPause = readField(combatSupport, "attackPause", Double.class);
@@ -699,7 +719,10 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "timers.attackPause", "Attack Pause (s)", attackPauseText, true, false);
         trackTimerTransition(npcUuid, now, "attackPause", "Attack Pause (s)", attackPauseText);
 
-        Map<String, String> scopeValues = snapshotScopeValues(npc.getRole().getEntitySupport().getSensorScope());
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(npc.getRole(), npcRef, store);
+        Map<String, String> scopeValues = snapshotScopeValues(
+                entitySupport != null ? entitySupport.getSensorScope() : null
+        );
         List<Map.Entry<String, String>> timerKeys = filterScope(scopeValues,
                 "timer", "time", "cooldown", "window", "delay", "pause", "until", "respawn", "lock");
         appendTrackedLine(sb, npcUuid, now, "timers.scopeCount", "Scope Timer Keys", String.valueOf(timerKeys.size()), true, false);
@@ -741,7 +764,10 @@ public final class NpcDebugSnapshotService {
         boolean dead = npcRef != null && npcRef.isValid() && store.getArchetype(npcRef).contains(DeathComponent.getComponentType());
         appendTrackedLine(sb, npcUuid, now, "lifecycle.dead", "Has Death Component", String.valueOf(dead), true, true);
 
-        Map<String, String> scopeValues = snapshotScopeValues(npc.getRole().getEntitySupport().getSensorScope());
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(npc.getRole(), npcRef, store);
+        Map<String, String> scopeValues = snapshotScopeValues(
+                entitySupport != null ? entitySupport.getSensorScope() : null
+        );
         List<Map.Entry<String, String>> lifecycleKeys = filterScope(scopeValues,
                 "age", "baby", "adult", "spawn", "despawn", "growth", "mature", "stage", "life");
         appendTopEntries(sb, npcUuid, now, "lifecycle.scope", lifecycleKeys, 10, true);
@@ -763,7 +789,7 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "relationships.leashPoint", "Leash Point", formatVector(npc.getLeashPoint()), true, false);
 
         Role role = npc.getRole();
-        MarkedEntitySupport marked = role.getMarkedEntitySupport();
+        MarkedEntitySupport marked = NpcDebugCompatibility.markedEntitySupport(role, npcRef, store);
         if (marked != null) {
             int slotCount = marked.getMarkedEntitySlotCount();
             appendTrackedLine(sb, npcUuid, now, "relationships.markedCount", "Marked Relation Slots", String.valueOf(slotCount), true, false);
@@ -783,7 +809,10 @@ public final class NpcDebugSnapshotService {
             }
         }
 
-        Map<String, String> scopeValues = snapshotScopeValues(role.getEntitySupport().getSensorScope());
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(role, npcRef, store);
+        Map<String, String> scopeValues = snapshotScopeValues(
+                entitySupport != null ? entitySupport.getSensorScope() : null
+        );
         List<Map.Entry<String, String>> relationshipKeys = filterScope(scopeValues,
                 "owner", "tamer", "leader", "follower", "flock", "home", "leash", "parent", "mate", "bond");
         List<Map.Entry<String, String>> resolvedRelationshipKeys =
@@ -804,9 +833,11 @@ public final class NpcDebugSnapshotService {
             return sb.toString().trim();
         }
 
-        CombatSupport combatSupport = npc.getRole().getCombatSupport();
-        appendTrackedLine(sb, npcUuid, now, "combat.executing", "Executing Attack", String.valueOf(combatSupport.isExecutingAttack()), true, true);
-        appendTrackedLine(sb, npcUuid, now, "combat.friendlyDamage", "Dealing Friendly Damage", String.valueOf(combatSupport.isDealingFriendlyDamage()), true, false);
+        CombatSupport combatSupport = NpcDebugCompatibility.combatSupport(npc.getRole(), npcRef, store);
+        appendTrackedLine(sb, npcUuid, now, "combat.executing", "Executing Attack",
+                combatSupport != null ? String.valueOf(combatSupport.isExecutingAttack()) : "n/a", true, true);
+        appendTrackedLine(sb, npcUuid, now, "combat.friendlyDamage", "Dealing Friendly Damage",
+                combatSupport != null ? String.valueOf(combatSupport.isDealingFriendlyDamage()) : "n/a", true, false);
 
         DamageData damageData = npc.getDamageData();
         appendTrackedLine(sb, npcUuid, now, "combat.maxInflicted", "Max Damage Inflicted", formatNumber(damageData.getMaxDamageInflicted()), true, false);
@@ -862,6 +893,8 @@ public final class NpcDebugSnapshotService {
 
     @Nonnull
     private String buildAlarmSection(@Nullable UUID npcUuid,
+                                     @Nullable Ref<EntityStore> npcRef,
+                                     @Nonnull Store<EntityStore> store,
                                      @Nullable NPCEntity npc,
                                      @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
@@ -870,7 +903,7 @@ public final class NpcDebugSnapshotService {
             return sb.toString().trim();
         }
 
-        AlarmStore alarmStore = npc.getAlarmStore();
+        AlarmStore alarmStore = NpcDebugCompatibility.alarmStore(npc, npcRef, store);
         Map<String, Alarm> alarms = readAlarmMap(alarmStore);
         appendTrackedLine(sb, npcUuid, now, "alarms.count", "Alarm Count", String.valueOf(alarms.size()), true, false);
         if (alarms.isEmpty()) {
@@ -898,10 +931,12 @@ public final class NpcDebugSnapshotService {
 
     @Nonnull
     private String buildFlagSection(@Nullable UUID npcUuid,
+                                    @Nullable Ref<EntityStore> npcRef,
+                                    @Nonnull Store<EntityStore> store,
                                     @Nullable NPCEntity npc,
                                     @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
-        if (npc == null || npc.getRole() == null || npc.getRole().getEntitySupport() == null) {
+        if (npc == null || npc.getRole() == null) {
             appendTrackedLine(sb, npcUuid, now, "flags.status", "Status", "Flag data unavailable", true, false);
             return sb.toString().trim();
         }
@@ -921,7 +956,10 @@ public final class NpcDebugSnapshotService {
             appendTrackedLine(sb, npcUuid, now, "flags.role.indexes", "Enabled Flag Indexes", enabledIndexes.isEmpty() ? "<none>" : String.join(",", enabledIndexes), true, false);
         }
 
-        Map<String, String> scopeValues = snapshotScopeValues(role.getEntitySupport().getSensorScope());
+        EntitySupport entitySupport = NpcDebugCompatibility.entitySupport(role, npcRef, store);
+        Map<String, String> scopeValues = snapshotScopeValues(
+                entitySupport != null ? entitySupport.getSensorScope() : null
+        );
         List<Map.Entry<String, String>> boolEntries = new ArrayList<>();
         for (Map.Entry<String, String> entry : scopeValues.entrySet()) {
             String value = entry.getValue();
@@ -954,7 +992,16 @@ public final class NpcDebugSnapshotService {
         appendTrackedLine(sb, npcUuid, now, "components.death", "DeathComponent", String.valueOf(store.getArchetype(npcRef).contains(DeathComponent.getComponentType())), true, true);
         appendTrackedLine(sb, npcUuid, now, "components.inventory", "Inventory", String.valueOf(npc.getInventory() != null), true, false);
         appendTrackedLine(sb, npcUuid, now, "components.role", "Role", String.valueOf(npc.getRole() != null), true, false);
-        appendTrackedLine(sb, npcUuid, now, "components.alarmStore", "AlarmStore", String.valueOf(npc.getAlarmStore() != null), true, false);
+        appendTrackedLine(
+                sb,
+                npcUuid,
+                now,
+                "components.alarmStore",
+                "AlarmStore",
+                String.valueOf(NpcDebugCompatibility.alarmStore(npc, npcRef, store) != null),
+                true,
+                false
+        );
         appendTrackedLine(sb, npcUuid, now, "components.damageData", "DamageData", String.valueOf(npc.getDamageData() != null), true, false);
         appendTrackedLine(sb, npcUuid, now, "components.pathManager", "PathManager", String.valueOf(npc.getPathManager() != null), true, false);
         return sb.toString().trim();
@@ -1480,12 +1527,17 @@ public final class NpcDebugSnapshotService {
     }
 
     @Nonnull
-    private String resolveStateName(@Nonnull NPCEntity npc) {
+    private String resolveStateName(@Nonnull NPCEntity npc,
+                                   @Nullable Ref<EntityStore> npcRef,
+                                   @Nonnull Store<EntityStore> store) {
         Role role = npc.getRole();
-        if (role == null || role.getStateSupport() == null) {
+        if (role == null) {
             return "<unknown>";
         }
-        StateSupport stateSupport = role.getStateSupport();
+        StateSupport stateSupport = NpcDebugCompatibility.stateSupport(role, npcRef, store);
+        if (stateSupport == null) {
+            return "<unknown>";
+        }
         String stateName = safeText(
                 stateSupport.getStateHelper().getStateName(stateSupport.getStateIndex()),
                 safeText(stateSupport.getStateName(), "<unknown>")
@@ -1512,7 +1564,10 @@ public final class NpcDebugSnapshotService {
     @Nonnull
     private String resolveDisplaySubStateName(@Nonnull NPCEntity npc,
                                               @Nonnull Role role,
-                                              @Nonnull StateSupport stateSupport) {
+                                              @Nullable StateSupport stateSupport) {
+        if (stateSupport == null) {
+            return "<unknown>";
+        }
         String roleSubStateName = resolveSubStateName(stateSupport);
         String localSubStateName = componentLocalStateResolver.resolvePrimaryLocalSubStateName(role, stateSupport);
         if (localSubStateName == null || localSubStateName.isBlank()) {

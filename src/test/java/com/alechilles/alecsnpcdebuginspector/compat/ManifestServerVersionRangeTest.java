@@ -23,11 +23,12 @@ class ManifestServerVersionRangeTest {
         SemverRange range = manifest.getServerVersion();
 
         assertAll(
+                () -> assertTrue(satisfies(range, "0.5.0")),
+                () -> assertTrue(satisfies(range, "0.5.6")),
                 () -> assertTrue(satisfies(range, "0.5.7")),
-                () -> assertTrue(satisfies(range, "0.6.0-pre.11")),
                 () -> assertTrue(satisfies(range, "0.6.0")),
-                () -> assertFalse(satisfies(range, "0.5.6")),
-                () -> assertFalse(satisfies(range, "0.6.0-pre.0")),
+                () -> assertFalse(satisfies(range, "0.4.9")),
+                () -> assertFalse(satisfies(range, "0.6.0-pre.11")),
                 () -> assertFalse(satisfies(range, "0.7.0"))
         );
     }

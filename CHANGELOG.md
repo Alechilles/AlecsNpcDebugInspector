@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 - Moved the telemetry descriptor to `Server/Telemetry/project.json`, updated it to the current stats descriptor schema, and removed dev endpoint overrides so Alec's Telemetry uses its default hosted endpoint.
+- Standardized the Hytale server compatibility range on `>=0.5.0 <0.7.0`.
 
 ## 1.5.0 - Runtime Harness Evidence and Telemetry Stats - 2026-06-18
 

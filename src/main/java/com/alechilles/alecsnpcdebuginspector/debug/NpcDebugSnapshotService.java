@@ -280,7 +280,6 @@ public final class NpcDebugSnapshotService {
                 0,
                 stateChanges,
                 signalEvents,
-                Map.of(),
                 idle
         ));
     }

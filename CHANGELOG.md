@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.5.2 - Beacon Descriptor Migration - 2026-09-01
+
+### Changed
+- Moved the passive telemetry descriptor to `Server/Beacon/project.json` for the Beacon telemetry namespace.
+
 ## 1.5.1 - Stable 0.6 Compatibility Hotfix - 2026-08-27
 
 ### Changed

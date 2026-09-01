@@ -1,7 +1,7 @@
 {
     "Group": "Alechilles",
     "Name": "Alec's NPC Inspector!",
-    "Version": "1.5.1",
+    "Version": "1.5.2",
     "Description": "Standalone NPC debug inspector with in-game detail UI.",
     "Authors": [
         {

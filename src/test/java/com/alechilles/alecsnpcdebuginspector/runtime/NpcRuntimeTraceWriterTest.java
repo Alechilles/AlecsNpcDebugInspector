@@ -1,5 +1,6 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -56,5 +57,112 @@ class NpcRuntimeTraceWriterTest {
         );
 
         assertTrue(exception.getMessage().contains("reserved"));
+    }
+
+    @Test
+    void exposesTraceFieldsWithNullValuesForProfileFiltering() {
+        NpcRuntimeTraceRecord record = NpcRuntimeTraceRecord.of("request-a", 0, "fixture-spawn")
+                .with("fixture", "npcUnderTest")
+                .with("targetSlot", null);
+
+        assertEquals("fixture-spawn", record.fields().get("kind"));
+        assertTrue(record.fields().containsKey("targetSlot"));
+    }
+
+    @Test
+    void serializesRuntimeContractEvidenceHelpers() {
+        String tameworkMutation = NpcRuntimeTraceRecord.tameworkFixtureMutation(
+                "request-a",
+                0,
+                "npc_under_test",
+                "tamed",
+                true,
+                true,
+                "applied",
+                List.of()
+        ).toJson();
+        String targetSelection = NpcRuntimeTraceRecord.targetSelectionEvidence(
+                "request-a",
+                4,
+                "npc_under_test",
+                "hostile_a",
+                2,
+                true,
+                "nearest-hostile"
+        ).toJson();
+        String pathing = NpcRuntimeTraceRecord.pathingEvidence(
+                "request-a",
+                5,
+                "npc_under_test",
+                "hostile_a",
+                List.of(4, 70, 3),
+                "pathing",
+                false
+        ).toJson();
+        String combatEligibility = NpcRuntimeTraceRecord.combatEligibilityEvidence(
+                "request-a",
+                6,
+                "npc_under_test",
+                "hostile_a",
+                "MeleeAttack",
+                true,
+                true,
+                true,
+                true,
+                "eligible"
+        ).toJson();
+        String lifecycle = NpcRuntimeTraceRecord.instructionLifecycleEvidence(
+                "request-a",
+                7,
+                "npc_under_test",
+                "MeleeAttack",
+                "started",
+                "candidate"
+        ).toJson();
+
+        assertTrue(tameworkMutation.contains("\"kind\":\"tamework-fixture-mutation\""));
+        assertTrue(tameworkMutation.contains("\"fixtureId\":\"npc_under_test\""));
+        assertTrue(tameworkMutation.contains("\"requestedValue\":true"));
+        assertTrue(targetSelection.contains("\"kind\":\"target-selection-evidence\""));
+        assertTrue(targetSelection.contains("\"candidateCount\":2"));
+        assertTrue(pathing.contains("\"kind\":\"pathing-evidence\""));
+        assertTrue(pathing.contains("\"destination\":[4,70,3]"));
+        assertTrue(combatEligibility.contains("\"kind\":\"combat-eligibility-evidence\""));
+        assertTrue(combatEligibility.contains("\"lineOfSightOk\":true"));
+        assertTrue(lifecycle.contains("\"kind\":\"instruction-lifecycle-evidence\""));
+        assertTrue(lifecycle.contains("\"previousStatus\":\"candidate\""));
+    }
+
+    @Test
+    void writesNpcWorkMetricsRecord() throws Exception {
+        Path trace = tempDir.resolve("metrics.trace.jsonl");
+        NpcWorkMetricSnapshot snapshot = new NpcWorkMetricSnapshot(
+                "npcUnderTest",
+                100,
+                20,
+                7.5,
+                4.0,
+                2.0,
+                0.5,
+                10.0,
+                0.5,
+                1.0,
+                0.1,
+                0.2,
+                0.3,
+                0.4,
+                3.5,
+                List.of(new NpcWorkMetricSnapshot.Contributor("targeting", 4.0))
+        );
+
+        try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(trace)) {
+            writer.write(NpcRuntimeTraceRecord.npcWorkMetrics("profile", 40, snapshot));
+        }
+
+        String line = Files.readString(trace);
+        assertTrue(line.contains("\"kind\":\"npc-work-metrics\""));
+        assertTrue(line.contains("\"workScorePerTick\":7.5"));
+        assertTrue(line.contains("\"category\":\"targeting\""));
+        assertTrue(line.contains("observable work proxy"));
     }
 }

@@ -4,7 +4,7 @@ This repo provides the live server-side harness. The repeatable smoke command li
 
 ```powershell
 cd "C:\Users\22ale\AppData\Roaming\Hytale\Modding\HytaleNpcAssetTools"
-python -m hytale_npc_assets.cli runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
+hytale-assets runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
 ```
 
 The manifest starts the local server through this repo when needed, waits for `UserData\NpcRuntimeHarness\status\harness-status.json`, runs the configured requests in `npc_runtime_test_flatworld`, and writes artifacts to `out\runtime-headless-smoke`.

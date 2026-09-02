@@ -2,7 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 1.5.2 - Beacon Descriptor Migration - 2026-09-01
+
+### Changed
+- Moved the passive telemetry descriptor to `Server/Beacon/project.json` for the Beacon telemetry namespace.
+
+## 1.5.1 - Stable 0.6 Compatibility Hotfix - 2026-08-27
+
+### Changed
+- Moved the telemetry descriptor to `Server/Telemetry/project.json`, updated it to the current stats descriptor schema, and removed dev endpoint overrides so Alec's Telemetry uses its default hosted endpoint.
+- Standardized the Hytale server compatibility range on `>=0.5.0 <0.7.0`.
+
+## 1.5.0 - Runtime Harness Evidence and Telemetry Stats - 2026-06-18
+
+### Added
+- Added richer NPC runtime harness evidence, including causal-chain assertions, correlated action and sensor observers, fixture-derived combat line-of-sight checks, explicit action outcome evidence, and sensor distance-band assertions.
+- Added runtime block fixture reset mutations and related allowlist updates for more complete fixture-driven scenario coverage.
+- Added a telemetry consent icon and stats descriptor so Alec's NPC Inspector can opt into hosted usage summaries through the shared telemetry consent flow.
+
+### Changed
+- Updated release metadata for Hytale `0.5.x`, Modtale `0.5.3`, and project version `1.5.0`.
+
+### Fixed
+- Updated hosted telemetry stats routing to the current Alec telemetry ingest endpoint used by the shared rollout.
+
+## 1.4.2 - Asset Pack Icon - 2026-06-07
+
+### Added
+- Added a 256x256 in-game icon for the NPC Inspector asset pack.
 
 ## 1.4.1 - Update 5 Compatibility - 2026-05-28
 ### Changed

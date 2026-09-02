@@ -1,16 +1,14 @@
-[![Cats](https://img.shields.io/curseforge/dt/1432112?label=Cats&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-cats)
 [![Tamework](https://img.shields.io/curseforge/dt/1447962?label=Tamework&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-tamework)
+[![Cats](https://img.shields.io/curseforge/dt/1432112?label=Cats&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-cats)
 [![Nametags](https://img.shields.io/curseforge/dt/1464844?label=Nametags&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-nametags)
 [![Animal Husbandry](https://img.shields.io/curseforge/dt/1480275?label=Animal%20Husbandry&style=for-the-badge&logo=curseforge&color=rgb(241%2C100%2C54))](https://www.curseforge.com/hytale/mods/alecs-animal-husbandry)
 
 [![Discord](https://img.shields.io/discord/1468261809739005996?style=for-the-badge&logo=discord&logoColor=white&label=Join%20Discord&color=rgb(88,101,242))](https://discord.gg/E8n8RgTTdq)
+[![Buy me a coffee](https://img.shields.io/badge/ko--fi-Support%20Me-ff5f5f?logo=ko-fi&style=for-the-badge)](https://ko-fi.com/alechilles) [![Creator Code](https://img.shields.io/badge/Creator%20Code-Alec-00AEEF?style=for-the-badge)](https://hytale.com/)
 
+[![Sponsored By HytaleModding Grant Program](https://github.com/user-attachments/assets/a03709e3-445a-4e58-8ec5-591688490c5d)](https://hytalemodding.dev/en/grants)
 
-# Alec's NPC Inspector!
-
-Standalone in-game NPC debugging tool for Hytale.
-
-This plugin is independent from Alec's Tamework. It can be used alongside other mods and is designed to inspect live NPC behavior with UI tools instead of command spam.
+In-game NPC debugging tool for Hytale. It can be used with any mod and is designed to inspect live NPC behavior with UI tools instead of command spam.
 
 When Alec's Tamework is installed, the inspector now also consumes Tamework's public API to expose persisted tame/profile state alongside live ECS state.
 
@@ -20,12 +18,9 @@ When Alec's Tamework is installed, the inspector now also consumes Tamework's pu
   - Open a linked NPC roster
   - Inspect linked NPCs quickly
   - Toggle built-in role debug flags per NPC
-- Opens a full NPC inspector from command:
-  - `/npcdebug`
-  - `/npcdebug <uuid>`
 - Includes a **Pinned Overlay** so selected inspector fields stay visible while you keep playing.
 - Tracks **recent state/event transitions** in the inspector data.
-- When Tamework is present, adds API-backed debug sections for:
+- When Tamework is present, adds additional API-backed debug sections for:
   - persisted profile and snapshot state
   - command-link/home-position state
   - ownership / claim / damage policy evaluation
@@ -37,22 +32,12 @@ When Alec's Tamework is installed, the inspector now also consumes Tamework's pu
 1. Install the mod jar into your mods folders.
 2. Start server and join.
 3. Spawn and use the item `Npc_Debug_Inspector_Tool` on an NPC.
-    - Optional: Or, use `/npcdebug` while looking at an NPC to open the inspector without an item.
-
-## Commands
-### `/npcdebug`
-Opens inspector for the NPC currently in your view.
-
-### `/npcdebug <uuid>`
-Opens inspector for a specific NPC UUID.  
-If that NPC is currently unloaded, the page still opens but data availability is limited until loaded.
+  - Optional: Or, use `/npcdebug` while looking at an NPC to open the inspector without an item.
 
 ## Inspector Tool Behavior
 Item asset: `Server/Item/Items/Debug/Npc_Debug_Inspector_Tool.json`
-
-- **Primary use**: link/unlink targeted NPC.
-- **Secondary use**: open linked NPC roster.
-- Link capacity is currently capped at `50` NPCs per tool instance.
+- **Left-Click**: link/unlink targeted NPC.
+- **Right-Click**: open linked NPC roster.
 
 Each tool stores its own linked/highlighted NPC sets in item metadata, so multiple tools can track different test groups.
 

@@ -15,7 +15,7 @@ These notes are based on `javap` inspection of public APIs and targeted bytecode
 `HytaleNpcAssetTools` can run repeatable no-login smoke batches against this harness with:
 
 ```powershell
-python -m hytale_npc_assets.cli runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
+hytale-assets runtime-batch run --manifest docs\runtime-smoke-manifest.json --json
 ```
 
 The starter manifest lives in the tooling repo and points at this harness repo. It currently runs `Mob_Tamework_Example_Simple` in `npc_runtime_test_flatworld`, starts the server when needed, waits for the heartbeat, writes the request, waits for the result, and writes an artifact bundle under `out\runtime-headless-smoke`.
@@ -169,7 +169,7 @@ Main endgame Phase 3 adds first-class arena and cleanup evidence for the default
 
 Cleanup evidence is embedded under `result.cleanup.report` while preserving the older `cleanup.attempted`, `cleanup.succeeded`, and `cleanup.message` fields. If behavior completes but cleanup fails, the harness returns a failed result with classification `cleanup-failed` instead of a generic runtime error.
 
-Current block reset status: the default smoke arena does not mutate blocks yet, so block reset counts are expected to remain zero. Future fixture phases should register every block mutation before applying it and increment the same cleanup report during reset.
+Current block reset status: block fixtures are harness-owned world mutations. The runner records each `block-fixture-mutation` before applying it, resolves optional `state` values through `BlockType.getBlockKeyForState(...)`, applies the resulting block id through the resident chunk, stores the previous numeric block id, and resets mutations in reverse order during cleanup while incrementing the cleanup report block reset counters. Trace records include both the requested `blockId` and the concrete `appliedBlockId`/`stateKey` pair when stateful variants are used.
 
 ### Fixture Schema and Spawn Support
 
@@ -187,7 +187,7 @@ Main endgame Phase 4 adds a canonical `fixtures.list` schema while preserving th
 
 NPC-backed fixture kinds (`npcUnderTest`, `targetDummy`, `npc`, `mob`, `familyMember`, and `flockMember`) can currently spawn through `NPCPlugin.spawnNPC(...)` when a `roleId` is present. Spawned fixtures are emitted as `fixture-spawn` trace records with deterministic fixture ids, kind, role id, target slot, NPC UUID, and a structured spawn result. The cleanup report counts each spawned NPC fixture removal.
 
-The schema accepts item, block, and player-anchor fixture declarations, but the harness rejects them before world mutation with classification `unsupported-fixture` until safe item, block, and player-anchor engine APIs are implemented. Direct `entityId` spawning is also rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
+The schema accepts item, block, and player-anchor fixture declarations. Block fixtures require `blockId`, accept optional `state`, mutate the resident arena chunk at setup time, and reset the previous block id during cleanup. Item fixtures require `itemId`, spawn harness-owned item-drop entities through `ItemComponent.generateItemDrop(...)` plus `Store.addEntity(..., AddReason.SPAWN)`, and remove the stored entity ref during cleanup. Player anchors remain declarative headless fixtures. Direct `entityId` spawning is rejected with `unsupported-fixture`; use `roleId` for NPC-backed fixtures.
 
 ### Structured Observation Records
 
@@ -330,7 +330,6 @@ Implication: direct block mutation is possible, but the safe harness API still n
 - Exact chunk coordinate packing for `World.getChunkAsync(long)` and related chunk APIs.
 - Whether `WorldConfig.setCanUnloadChunks(false)` is sufficient to keep the runtime arena loaded without players.
 - Whether a long-lived chunk ticket or force-load owner API exists outside the inspected public surface.
-- The safest direct block set/reset primitive for arena cleanup.
 - The best dummy target entity type for sensors that require real combat, attitude, player, or visibility components.
 - Whether target slots should be induced through sensors/actions or can be pre-seeded through role support safely.
 - Whether synchronous scenario loops can run on `World.execute(...)` without blocking the world thread, or whether the runner needs a tick-driven state machine.
@@ -338,5 +337,4 @@ Implication: direct block mutation is possible, but the safe harness API still n
 ## Next Implementation Slice
 
 1. Confirm whether `WorldConfig.setCanUnloadChunks(false)` keeps the runtime arena resident without players, or find the internal force-load/ticket API.
-2. Add a direct block placement/reset wrapper for repeatable arena layouts.
-3. Add explicit request-level time/weather overrides on top of the headless world defaults.
+2. Add explicit request-level time/weather overrides on top of the headless world defaults.

@@ -1,0 +1,55 @@
+plugins {
+    id 'java'
+    id 'com.azuredoom.hytale-tools'
+}
+
+def localProperties = new Properties()
+file('gradle.properties').withInputStream { localProperties.load(it) }
+def localProperty = { String name -> providers.gradleProperty(name).getOrElse(localProperties.getProperty(name)) }
+
+group = 'com.alechilles'
+version = localProperty('mod_version')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+configurations.named('testImplementation') {
+    extendsFrom(configurations.compileOnly)
+}
+
+hytaleTools {
+    hytaleVersion = localProperty('hytale_version')
+    patchline = localProperty('hytale_patchline')
+    manifestServerVersion = '>=0.5.0 <0.7.0'
+    manifestGroup = 'Alechilles'
+    modId = "Alec's NPC Inspector!"
+    modDescription = 'Standalone NPC debug inspector with in-game detail UI.'
+    modCredits = 'Alec (Alechilles)||https://www.curseforge.com/members/alechilles/projects'
+    mainClass = 'com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector'
+    manifestOptionalDependencies = "Alechilles:Alec's Tamework!=>=3.0.0 <4.0.0"
+    curseforgeId = '1476193'
+    includesPack = true
+    bundleAssetEditorRuntime = false
+}
+
+tasks.named('jar') {
+    archiveFileName = "Alec's NPC Inspector! v${project.version}.jar"
+    manifest {
+        attributes('Plugin-Group': project.group, 'Plugin-Name': project.name, 'Plugin-Version': project.version)
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    workingDir projectDir
+    systemProperty 'java.util.logging.manager', 'com.hypixel.hytale.logger.backend.HytaleLogManager'
+}

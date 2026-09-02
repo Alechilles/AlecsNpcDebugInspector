@@ -5,6 +5,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,8 @@ class NpcRuntimeRequestTest {
         assertEquals("default", request.world().arena());
         assertEquals(12000, request.environment().timeOfDay());
         assertEquals("clear", request.environment().weather());
+        assertEquals(null, request.environment().pauseTime());
+        assertTrue(request.environment().effectivePauseTime());
         assertEquals(3, request.fixtures().npc().position().size());
         assertEquals("Idle", request.fixtures().npc().state());
         assertEquals(1, request.fixtures().targets().size());
@@ -107,6 +110,204 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void parsesTimingRecordProfileAndAssertionWindows() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "guard_long",
+                  "assetId": "Territorial_Guard_Boar",
+                  "roleId": "Territorial_Guard_Boar",
+                  "ticks": 300,
+                  "timing": {"warmupTicks": 60, "stopWhenAssertionsResolved": true},
+                  "world": {"instanceId": "npc_runtime_test_flatworld"},
+                  "fixtures": {"npc": {"position": [0, 64, 0]}},
+                  "record": {"profile": "standard", "everyTicks": 3, "includeSnapshots": true, "includeEvents": false},
+                  "assertions": [
+                    {
+                      "assertionId": "eventual-target",
+                      "kind": "sensor",
+                      "window": {"mode": "eventually", "startTick": 60, "endTick": 300}
+                    }
+                  ]
+                }
+                """, config);
+
+        assertEquals(60, request.timing().warmupTicks());
+        assertTrue(request.timing().stopWhenAssertionsResolved());
+        assertEquals("standard", request.record().profile());
+        assertEquals(3, request.record().everyTicks());
+        assertFalse(request.record().includeEvents());
+        assertEquals("eventually", request.assertions().getFirst().window().mode());
+    }
+
+    @Test
+    void parsesNpcWorkMetricsProfile() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "boar_profile",
+                  "assetId": "Boar",
+                  "roleId": "Boar",
+                  "ticks": 300,
+                  "world": {"instanceId": "npc_runtime_test_flatworld"},
+                  "fixtures": {"npc": {"position": [0, 64, 0]}},
+                  "profile": {
+                    "npcWorkMetrics": true,
+                    "windowTicks": 100,
+                    "emitEveryTicks": 20,
+                    "includeFinalSummary": true
+                  }
+                }
+                """, config);
+
+        assertTrue(request.profile().npcWorkMetrics());
+        assertEquals(100, request.profile().windowTicks());
+        assertEquals(20, request.profile().emitEveryTicks());
+        assertTrue(request.profile().includeFinalSummary());
+        assertTrue(request.toJson().contains("\"npcWorkMetrics\":true"));
+    }
+
+    @Test
+    void parsesRecordFixtureCorrelationFields() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse("""
+                {
+                  "version": 1,
+                  "requestId": "record_fixture_ids",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 120,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "targetSlot": "Enemy"}
+                    ]
+                  },
+                  "record": {
+                    "profile": "minimal",
+                    "everyTicks": 5,
+                    "includeSnapshots": true,
+                    "includeEvents": false,
+                    "fixtureScope": "allFixtures",
+                    "fixtureIds": ["npcUnderTest", "target.Enemy"]
+                  }
+                }
+                """, config);
+
+        assertEquals("minimal", request.record().profile());
+        assertEquals(5, request.record().everyTicks());
+        assertEquals("allFixtures", request.record().fixtureScope());
+        assertEquals("target.Enemy", request.record().fixtureIds().get(1));
+        assertTrue(request.toJson().contains("\"fixtureScope\":\"allFixtures\""));
+        assertTrue(request.toJson().contains("\"fixtureIds\":[\"npcUnderTest\",\"target.Enemy\"]"));
+    }
+
+    @Test
+    void rejectsMalformedRecordFixtureCorrelationFields() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException scopeException = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_scope\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"record\":{\"fixtureScope\":\"nearbyOnly\"}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", scopeException.classification());
+        assertEquals("unsupported record fixtureScope nearbyOnly", scopeException.getMessage());
+
+        NpcRuntimeRequest.ValidationException idsException = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_fixture_ids\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"record\":{\"fixtureIds\":[\"npcUnderTest\",\"bad id\"]}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", idsException.classification());
+        assertEquals("record.fixtureIds must be an array of safe fixture ids", idsException.getMessage());
+    }
+    @Test
+    void parsesTameworkFixtureMutationsAndEngineHooks() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "tamework_mutation_contract",
+                  "assetId": "AlecNpcTest:Boar",
+                  "roleId": "Default",
+                  "ticks": 20,
+                  "fixtures": {
+                    "list": [
+                      {
+                        "fixtureId": "npc_under_test",
+                        "kind": "npcUnderTest",
+                        "roleId": "Default",
+                        "asset": "AlecNpcTest:Boar",
+                        "tamework": {
+                          "tamed": true,
+                          "owner": {"type": "syntheticPlayer", "id": "owner_a"},
+                          "needs": {"hunger": 80, "thirst": 60},
+                          "effects": ["tamework:well_fed"],
+                          "command": "follow",
+                          "lifeStage": "adult"
+                        }
+                      }
+                    ]
+                  },
+                  "engineHooks": {
+                    "targetSelection": true,
+                    "pathing": true,
+                    "combatEligibility": true,
+                    "instructionLifecycle": true
+                  }
+                }
+                """,
+                config
+        );
+
+        NpcRuntimeFixtureSpec.TameworkMutation tamework = request.fixtures().list().getFirst().tamework();
+        assertEquals(true, tamework.tamed());
+        assertEquals("syntheticPlayer", tamework.owner().get("type"));
+        assertEquals("owner_a", tamework.owner().get("id"));
+        assertEquals(80, tamework.needs().get("hunger"));
+        assertEquals("tamework:well_fed", tamework.effects().getFirst());
+        assertEquals("follow", tamework.commandState());
+        assertEquals("adult", tamework.lifeStage());
+        assertTrue(request.engineHooks().targetSelection());
+        assertTrue(request.engineHooks().pathing());
+        assertTrue(request.engineHooks().combatEligibility());
+        assertTrue(request.engineHooks().instructionLifecycle());
+        assertTrue(request.toJson().contains("\"commandState\":\"follow\""));
+        assertTrue(request.toJson().contains("\"engineHooks\""));
+    }
+
+    @Test
+    void rejectsUnknownEngineHooks() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_hook\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                                + "\"engineHooks\":{\"targetSelection\":true,\"weatherControl\":true}}",
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("engineHooks.weatherControl", exception.unsupported().getFirst().path());
+    }
+
+    @Test
     void rejectsUnknownFieldsInsideKnownSections() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
 
@@ -125,6 +326,472 @@ class NpcRuntimeRequestTest {
     }
 
     @Test
+    void rejectsPreseedTargetSlotsAsUnsafeHeadlessMutation() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "preseed_target_slots",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "preseedTargetSlots": [
+                            {"slot": "Enemy", "fixtureId": "target.Enemy", "mode": "beforeRun"}
+                          ],
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "targetSlot": "Enemy"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("preseedTargetSlots", exception.unsupported().getFirst().path());
+        assertEquals("direct target-slot preseeding is not implemented safely; use fixture-driven sensor induction", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void parsesPauseTimeAndRejectsUnsafeWeatherIds() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "paused_weather",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 20,
+                  "environment": {
+                    "timeOfDay": 6000,
+                    "weather": "hytale:clear",
+                    "pauseTime": true
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals(6000, request.environment().timeOfDay());
+        assertEquals("hytale:clear", request.environment().weather());
+        assertEquals(true, request.environment().pauseTime());
+        assertTrue(request.toJson().contains("\"pauseTime\":true"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        "{\"version\":1,\"requestId\":\"bad_weather\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":20,"
+                                + "\"environment\":{\"weather\":\"bad weather!\"}}",
+                        config
+                )
+        );
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("environment.weather must be a safe asset id or keyword", exception.getMessage());
+    }
+
+    @Test
+    void rejectsDuplicateFixtureIdsWithExactPath() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "duplicate_fixture",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[2].fixtureId", exception.unsupported().getFirst().path());
+        assertEquals("duplicate fixture id: target.Enemy", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsMissingRoleIdOnExplicitEntityLikeFixtures() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "missing_fixture_role",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "npc.helper", "kind": "npc"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].roleId", exception.unsupported().getFirst().path());
+        assertEquals("entity-like fixtures require a roleId", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsUnsupportedFixtureFieldsWithIndexedPath() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "unsupported_fixture_field",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "target.Enemy", "kind": "targetDummy", "roleId": "R", "brainOverride": "Aggressive"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].brainOverride", exception.unsupported().getFirst().path());
+        assertEquals("field is not supported by the fixture schema", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void acceptsItemAndBlockFixturesWhenRequiredIdsArePresent() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "supported_item_and_block",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 1,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "item.food", "kind": "item", "itemId": "hytale:apple"},
+                      {"fixtureId": "block.wall", "kind": "block", "blockId": "hytale:stone"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+        assertEquals(NpcRuntimeFixtureKind.ITEM, request.fixtures().list().get(1).kind());
+        assertEquals("hytale:apple", request.fixtures().list().get(1).itemId());
+        assertEquals(NpcRuntimeFixtureKind.BLOCK, request.fixtures().list().get(2).kind());
+    }
+
+    @Test
+    void rejectsMultipleNpcUnderTestFixtures() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "two_npcs",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "npc_under_test", "kind": "npcUnderTest", "roleId": "R"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list", exception.unsupported().getFirst().path());
+        assertEquals("exactly one npcUnderTest fixture is required", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void rejectsMissingFixtureRelationshipTargets() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "missing_leader",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 1,
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "flock.child", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "flock.missing"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-fixture", exception.classification());
+        assertEquals("fixtures.list[1].leaderFixtureId", exception.unsupported().getFirst().path());
+        assertEquals("referenced fixture id does not exist: flock.missing", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void parsesMultiNpcContractAndPreservesDefaults() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest defaultRequest = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"single_default\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":120}",
+                config
+        );
+        NpcRuntimeRequest linkedRequest = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "linked_family",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 240,
+                  "timing": {"warmupTicks": 30},
+                  "multiNpc": {
+                    "mode": "linked",
+                    "deliveryWindowTicks": 120,
+                    "maxFixtureCount": 6
+                  },
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "family.child", "kind": "familyMember", "roleId": "R", "parentFixtureId": "npcUnderTest"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals("single", defaultRequest.multiNpc().mode());
+        assertEquals(90, defaultRequest.multiNpc().deliveryWindowTicks());
+        assertEquals(64, defaultRequest.multiNpc().maxFixtureCount());
+        assertEquals("linked", linkedRequest.multiNpc().mode());
+        assertEquals(120, linkedRequest.multiNpc().deliveryWindowTicks());
+        assertEquals(6, linkedRequest.multiNpc().maxFixtureCount());
+        assertTrue(linkedRequest.toJson().contains("\"multiNpc\":{\"mode\":\"linked\",\"deliveryWindowTicks\":120,\"maxFixtureCount\":6}"));
+    }
+
+    @Test
+    void parsesRequestLevelMultiNpcContractAliases() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "root_level_multi_npc",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 180,
+                  "timing": {"warmupTicks": 30},
+                  "multiNpcMode": "linked",
+                  "deliveryWindowTicks": 120,
+                  "maxFixtureCount": 6,
+                  "fixtures": {
+                    "list": [
+                      {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                      {"fixtureId": "message.threat", "kind": "message", "senderFixtureId": "npcUnderTest", "receiverFixtureId": "npcUnderTest"}
+                    ]
+                  }
+                }
+                """,
+                config
+        );
+
+        assertEquals("linked", request.multiNpc().mode());
+        assertEquals(120, request.multiNpc().deliveryWindowTicks());
+        assertEquals(6, request.multiNpc().maxFixtureCount());
+        assertTrue(request.toJson().contains("\"multiNpcMode\":\"linked\""));
+        assertTrue(request.toJson().contains("\"deliveryWindowTicks\":120"));
+        assertTrue(request.toJson().contains("\"maxFixtureCount\":6"));
+    }
+
+    @Test
+    void rejectsConflictingRequestLevelAndNestedMultiNpcContract() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "conflicting_multi_npc",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 180,
+                          "multiNpcMode": "linked",
+                          "multiNpc": {"mode": "single"}
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpcMode conflicts with multiNpc.mode", exception.getMessage());
+    }
+
+    @Test
+    void rejectsMultiNpcDeliveryWindowLongerThanScenarioWindow() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "too_short_for_delivery",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 80,
+                          "timing": {"warmupTicks": 30},
+                          "multiNpc": {"mode": "linked", "deliveryWindowTicks": 90}
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpc.deliveryWindowTicks requires ticks to be at least warmupTicks + deliveryWindowTicks", exception.getMessage());
+    }
+
+    @Test
+    void rejectsSwarmFixtureCountOverMultiNpcGuard() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "swarm_too_large",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "multiNpc": {"mode": "swarm", "maxFixtureCount": 2},
+                          "fixtures": {
+                            "list": [
+                              {"fixtureId": "npcUnderTest", "kind": "npcUnderTest", "roleId": "R"},
+                              {"fixtureId": "flock.one", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "npcUnderTest"},
+                              {"fixtureId": "flock.two", "kind": "flockMember", "roleId": "R", "leaderFixtureId": "npcUnderTest"}
+                            ]
+                          }
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("invalid-request", exception.classification());
+        assertEquals("multiNpc.maxFixtureCount exceeded by fixture list", exception.getMessage());
+    }
+
+    @Test
+    void rejectsRequiresPlayerInHeadlessRuntimeMode() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest.ValidationException exception = assertThrows(
+                NpcRuntimeRequest.ValidationException.class,
+                () -> NpcRuntimeRequest.parse(
+                        """
+                        {
+                          "version": 1,
+                          "requestId": "logged_in_player_required",
+                          "assetId": "A",
+                          "roleId": "R",
+                          "ticks": 120,
+                          "requiresPlayer": true
+                        }
+                        """,
+                        config
+                )
+        );
+
+        assertEquals("unsupported-request", exception.classification());
+        assertEquals("requiresPlayer", exception.unsupported().getFirst().path());
+        assertEquals("logged-in player runtime mode is not implemented for headless batch runs", exception.unsupported().getFirst().reason());
+    }
+
+    @Test
+    void parsesRequiresPlayerFalseAsHeadlessCompatible() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                """
+                {
+                  "version": 1,
+                  "requestId": "headless_anchor_compatible",
+                  "assetId": "A",
+                  "roleId": "R",
+                  "ticks": 120,
+                  "requiresPlayer": false
+                }
+                """,
+                config
+        );
+
+        assertFalse(request.requiresPlayer());
+        assertFalse(request.toJson().contains("requiresPlayer"));
+    }
+
+    @Test
     void serializesDeterministicJsonForCliRoundTrip() {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(
@@ -139,8 +806,9 @@ class NpcRuntimeRequestTest {
         assertTrue(json.contains("\"npc\":{\"position\":[0,64,0]}"));
         assertTrue(json.contains("\"scenario\":{\"id\":\"simple\"}"));
         assertTrue(json.contains("\"environment\":{}"));
+        assertTrue(json.contains("\"multiNpc\":{\"mode\":\"single\",\"deliveryWindowTicks\":90,\"maxFixtureCount\":64}"));
         assertTrue(json.contains("\"assertions\":[]"));
-        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":1048576}"));
+        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":8388608}"));
     }
 
     @Test

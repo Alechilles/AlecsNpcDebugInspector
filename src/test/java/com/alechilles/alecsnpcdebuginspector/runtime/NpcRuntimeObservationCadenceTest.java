@@ -12,12 +12,13 @@ class NpcRuntimeObservationCadenceTest {
         NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
         NpcRuntimeRequest request = NpcRuntimeRequest.parse(
                 "{\"version\":1,\"requestId\":\"cadence\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5,"
-                        + "\"record\":{\"everyTicks\":2,\"includeSnapshots\":true,\"includeEvents\":true}}",
+                        + "\"record\":{\"profile\":\"full\",\"everyTicks\":2,\"includeSnapshots\":true,\"includeEvents\":true}}",
                 config
         );
 
         NpcRuntimeObservationCadence cadence = NpcRuntimeObservationCadence.from(request);
 
+        assertTrue(cadence.shouldRecordEvent("tick-start", 1));
         assertTrue(cadence.includeEvents());
         assertTrue(cadence.includeSnapshots());
         assertTrue(cadence.shouldRecordSnapshot(0));
@@ -40,7 +41,61 @@ class NpcRuntimeObservationCadenceTest {
 
         assertFalse(cadence.includeEvents());
         assertFalse(cadence.includeSnapshots());
+        assertFalse(cadence.shouldRecordEvent("run-start", 0));
         assertFalse(cadence.shouldRecordSnapshot(0));
         assertFalse(cadence.shouldRecordSnapshot(1));
+    }
+
+    @Test
+    void standardProfileRecordsLifecycleButSuppressesPerTickNoise() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"cadence\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5,"
+                        + "\"record\":{\"profile\":\"standard\",\"everyTicks\":3,\"includeSnapshots\":true,\"includeEvents\":true}}",
+                config
+        );
+
+        NpcRuntimeObservationCadence cadence = NpcRuntimeObservationCadence.from(request);
+
+        assertTrue(cadence.shouldRecordEvent("run-start", 0));
+        assertTrue(cadence.shouldRecordEvent("world-ready", 0));
+        assertTrue(cadence.shouldRecordEvent("environment-setup", 0));
+        assertTrue(cadence.shouldRecordEvent("fixture-spawn", 0));
+        assertTrue(cadence.shouldRecordEvent("fixture-link", 0));
+        assertTrue(cadence.shouldRecordEvent("target-induction", 0));
+        assertTrue(cadence.shouldRecordEvent("multi-npc-setup", 0));
+        assertTrue(cadence.shouldRecordEvent("action-start", 3));
+        assertTrue(cadence.shouldRecordEvent("action-change", 3));
+        assertTrue(cadence.shouldRecordEvent("action-end", 3));
+        assertTrue(cadence.shouldRecordEvent("flock-evidence", 0));
+        assertTrue(cadence.shouldRecordEvent("message-evidence", 0));
+        assertTrue(cadence.shouldRecordEvent("beacon-evidence", 0));
+        assertTrue(cadence.shouldRecordEvent("assertions", 5));
+        assertFalse(cadence.shouldRecordEvent("tick-start", 1));
+        assertFalse(cadence.shouldRecordEvent("npc-sensor-delta", 3));
+        assertTrue(cadence.shouldRecordSnapshot(3));
+    }
+
+    @Test
+    void minimalProfileRecordsOnlyTerminalLifecycleEvents() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"cadence\",\"assetId\":\"Asset\",\"roleId\":\"Role\",\"ticks\":5,"
+                        + "\"record\":{\"profile\":\"minimal\",\"includeSnapshots\":false,\"includeEvents\":true}}",
+                config
+        );
+
+        NpcRuntimeObservationCadence cadence = NpcRuntimeObservationCadence.from(request);
+
+        assertTrue(cadence.shouldRecordEvent("run-start", 0));
+        assertTrue(cadence.shouldRecordEvent("assertions-resolved", 4));
+        assertTrue(cadence.shouldRecordEvent("run-end", 4));
+        assertFalse(cadence.shouldRecordEvent("world-ready", 0));
+        assertFalse(cadence.shouldRecordEvent("environment-setup", 0));
+        assertFalse(cadence.shouldRecordEvent("fixture-spawn", 0));
+        assertFalse(cadence.shouldRecordEvent("fixture-link", 0));
+        assertFalse(cadence.shouldRecordEvent("target-induction", 0));
+        assertFalse(cadence.shouldRecordEvent("multi-npc-setup", 0));
+        assertFalse(cadence.shouldRecordEvent("tick-start", 1));
     }
 }

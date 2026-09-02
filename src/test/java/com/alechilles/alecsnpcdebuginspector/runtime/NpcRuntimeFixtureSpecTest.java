@@ -5,23 +5,57 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcRuntimeFixtureSpecTest {
     @Test
+    void parsesEverySupportedFixtureKind() {
+        Map<String, NpcRuntimeFixtureKind> cases = Map.ofEntries(
+                Map.entry("npcUnderTest", NpcRuntimeFixtureKind.NPC_UNDER_TEST),
+                Map.entry("targetDummy", NpcRuntimeFixtureKind.TARGET_DUMMY),
+                Map.entry("npc", NpcRuntimeFixtureKind.NPC),
+                Map.entry("mob", NpcRuntimeFixtureKind.MOB),
+                Map.entry("familyMember", NpcRuntimeFixtureKind.FAMILY_MEMBER),
+                Map.entry("flockMember", NpcRuntimeFixtureKind.FLOCK_MEMBER),
+                Map.entry("playerAnchor", NpcRuntimeFixtureKind.PLAYER_ANCHOR),
+                Map.entry("item", NpcRuntimeFixtureKind.ITEM),
+                Map.entry("block", NpcRuntimeFixtureKind.BLOCK),
+                Map.entry("beacon", NpcRuntimeFixtureKind.BEACON),
+                Map.entry("message", NpcRuntimeFixtureKind.MESSAGE)
+        );
+
+        for (Map.Entry<String, NpcRuntimeFixtureKind> entry : cases.entrySet()) {
+            NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                    Map.of(
+                            "fixtureId", entry.getKey().equals("npcUnderTest") ? "npcUnderTest" : entry.getKey() + ".fixture",
+                            "kind", entry.getKey(),
+                            "roleId", "Role"
+                    ),
+                    "all_kinds",
+                    "fixtures.list[0]",
+                    "FallbackRole"
+            );
+
+            assertEquals(entry.getValue(), spec.kind());
+        }
+    }
+
+    @Test
     void parsesRichNpcBackedFixtureFields() {
         NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
-                Map.of(
-                        "fixtureId", "target.Enemy",
-                        "kind", "targetDummy",
-                        "position", List.of(4, 64, 0),
-                        "rotation", List.of(0, 90, 0),
-                        "tags", List.of("hostile", "close"),
-                        "roleId", "Mob_Tamework_Example_Simple",
-                        "targetSlot", "Enemy",
-                        "visible", true,
-                        "faction", "hostile",
-                        "attitude", "aggressive"
+                Map.ofEntries(
+                        Map.entry("fixtureId", "target.Enemy"),
+                        Map.entry("kind", "targetDummy"),
+                        Map.entry("position", List.of(4, 64, 0)),
+                        Map.entry("rotation", List.of(0, 90, 0)),
+                        Map.entry("tags", List.of("hostile", "close")),
+                        Map.entry("roleId", "Mob_Tamework_Example_Simple"),
+                        Map.entry("targetSlot", "Enemy"),
+                        Map.entry("visible", true),
+                        Map.entry("health", 25),
+                        Map.entry("faction", "hostile"),
+                        Map.entry("attitude", "aggressive")
                 ),
                 "rich_fixture",
                 "fixtures.list[1]",
@@ -32,9 +66,40 @@ class NpcRuntimeFixtureSpecTest {
         assertEquals(NpcRuntimeFixtureKind.TARGET_DUMMY, spec.kind());
         assertEquals("Mob_Tamework_Example_Simple", spec.roleId());
         assertEquals("Enemy", spec.targetSlot());
+        assertEquals(25, spec.health());
         assertEquals("hostile", spec.faction());
         assertEquals("aggressive", spec.attitude());
         assertTrue(spec.toMap().toString().contains("targetSlot=Enemy"));
+    }
+
+    @Test
+    void parsesTameworkMutationFieldsAndNormalizesCommandAlias() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "npc_under_test",
+                        "kind", "npcUnderTest",
+                        "tamework", Map.of(
+                                "tamed", true,
+                                "owner", Map.of("type", "syntheticPlayer", "id", "owner_a"),
+                                "needs", Map.of("hunger", 80, "thirst", 60),
+                                "effects", List.of("tamework:well_fed"),
+                                "command", "follow",
+                                "lifeStage", "adult"
+                        )
+                ),
+                "tamework_fixture",
+                "fixtures.list[0]",
+                "FallbackRole"
+        );
+
+        NpcRuntimeFixtureSpec.TameworkMutation mutation = spec.tamework();
+        assertEquals(true, mutation.tamed());
+        assertEquals("owner_a", mutation.owner().get("id"));
+        assertEquals(80, mutation.needs().get("hunger"));
+        assertEquals("tamework:well_fed", mutation.effects().getFirst());
+        assertEquals("follow", mutation.commandState());
+        assertEquals("adult", mutation.lifeStage());
+        assertTrue(spec.toMap().toString().contains("commandState=follow"));
     }
 
     @Test
@@ -53,5 +118,116 @@ class NpcRuntimeFixtureSpecTest {
         assertEquals(NpcRuntimeFixtureKind.TARGET_DUMMY, spec.kind());
         assertEquals("Role_Default", spec.roleId());
         assertEquals("LockedTarget", spec.targetSlot());
+    }
+
+    @Test
+    void parsesFlockFamilyRelationshipFields() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "flock.guard_1",
+                        "kind", "flockMember",
+                        "roleId", "Boar",
+                        "flockId", "guard-boars",
+                        "flockRole", "follower",
+                        "familyId", "boar-family",
+                        "familyRole", "adult",
+                        "leaderFixtureId", "npcUnderTest",
+                        "parentFixtureId", "family.parent"
+                ),
+                "relationship_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.FLOCK_MEMBER, spec.kind());
+        assertEquals("guard-boars", spec.flockId());
+        assertEquals("follower", spec.flockRole());
+        assertEquals("boar-family", spec.familyId());
+        assertEquals("adult", spec.familyRole());
+        assertEquals("npcUnderTest", spec.leaderFixtureId());
+        assertEquals("family.parent", spec.parentFixtureId());
+        assertTrue(spec.toMap().toString().contains("leaderFixtureId=npcUnderTest"));
+    }
+
+    @Test
+    void parsesBeaconFixtureKindButLeavesSafeMutationToAllowlist() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "beacon.combat",
+                        "kind", "beacon",
+                        "position", List.of(0, 64, 3),
+                        "beaconId", "combat-alert",
+                        "beaconType", "threat",
+                        "sourceFixtureId", "npcUnderTest",
+                        "targetFixtureId", "target.Enemy",
+                        "radius", 12,
+                        "ttlTicks", 90,
+                        "requiredConsumerFixtureIds", List.of("flock.follower_one", "flock.follower_two")
+                ),
+                "beacon_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.BEACON, spec.kind());
+        assertEquals("beacon.combat", spec.fixtureId());
+        assertEquals("combat-alert", spec.beaconId());
+        assertEquals("threat", spec.beaconType());
+        assertEquals("npcUnderTest", spec.sourceFixtureId());
+        assertEquals("target.Enemy", spec.targetFixtureId());
+        assertEquals(12.0, spec.radius());
+        assertEquals(90, spec.ttlTicks());
+        assertEquals(List.of("flock.follower_one", "flock.follower_two"), spec.requiredConsumerFixtureIds());
+    }
+
+    @Test
+    void parsesDeclarativeMessageFixtureFields() {
+        NpcRuntimeFixtureSpec spec = NpcRuntimeFixtureSpec.fromMap(
+                Map.of(
+                        "fixtureId", "message.threat",
+                        "kind", "message",
+                        "messageId", "threat-broadcast-1",
+                        "messageType", "threat.broadcast",
+                        "senderFixtureId", "npcUnderTest",
+                        "receiverFixtureId", "flock.follower_one",
+                        "targetFixtureId", "target.Enemy",
+                        "targetSlot", "Enemy",
+                        "payloadKeys", List.of("target", "urgency")
+                ),
+                "message_fixture",
+                "fixtures.list[1]",
+                "FallbackRole"
+        );
+
+        assertEquals(NpcRuntimeFixtureKind.MESSAGE, spec.kind());
+        assertEquals("message.threat", spec.fixtureId());
+        assertEquals("threat-broadcast-1", spec.messageId());
+        assertEquals("threat.broadcast", spec.messageType());
+        assertEquals("npcUnderTest", spec.senderFixtureId());
+        assertEquals("flock.follower_one", spec.receiverFixtureId());
+        assertEquals("target.Enemy", spec.targetFixtureId());
+        assertEquals(List.of("target", "urgency"), spec.payloadKeys());
+    }
+
+    @Test
+    void rejectsMalformedPositionRotationAndTags() {
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "position", List.of(0, 64)),
+                "bad_position",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "rotation", List.of(0, "east", 0)),
+                "bad_rotation",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
+        assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeFixtureSpec.fromMap(
+                Map.of("fixtureId", "npc.bad", "kind", "npc", "tags", List.of("hostile", 7)),
+                "bad_tags",
+                "fixtures.list[0]",
+                "FallbackRole"
+        ));
     }
 }

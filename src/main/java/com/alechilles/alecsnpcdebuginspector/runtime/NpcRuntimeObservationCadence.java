@@ -6,6 +6,7 @@ import javax.annotation.Nonnull;
  * Determines which per-tick runtime observations should be written.
  */
 public record NpcRuntimeObservationCadence(
+        @Nonnull String profile,
         int everyTicks,
         boolean includeSnapshots,
         boolean includeEvents,
@@ -14,6 +15,7 @@ public record NpcRuntimeObservationCadence(
     @Nonnull
     public static NpcRuntimeObservationCadence from(@Nonnull NpcRuntimeRequest request) {
         return new NpcRuntimeObservationCadence(
+                request.record().profile(),
                 Math.max(1, request.record().everyTicks()),
                 request.record().includeSnapshots(),
                 request.record().includeEvents(),
@@ -23,5 +25,33 @@ public record NpcRuntimeObservationCadence(
 
     public boolean shouldRecordSnapshot(int tick) {
         return includeSnapshots && tick >= 0 && tick % everyTicks == 0;
+    }
+
+    public boolean shouldRecordEvent(@Nonnull String kind, int tick) {
+        if (!includeEvents || tick < 0) {
+            return false;
+        }
+        return switch (profile) {
+            case "minimal" -> isMinimalEvent(kind);
+            case "standard" -> isMinimalEvent(kind) || isStandardEvent(kind);
+            default -> true;
+        };
+    }
+
+    private static boolean isMinimalEvent(@Nonnull String kind) {
+        return switch (kind) {
+            case "run-start", "run-end", "assertions", "assertions-resolved", "cleanup",
+                 "npc-work-metrics", "npc-work-metrics-summary" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isStandardEvent(@Nonnull String kind) {
+        return switch (kind) {
+            case "world-ready", "environment-setup", "arena-reset", "multi-npc-setup", "fixture-spawn", "fixture-link",
+                 "target-induction", "flock-evidence", "message-evidence", "beacon-evidence",
+                 "action-start", "action-change", "action-end" -> true;
+            default -> false;
+        };
     }
 }

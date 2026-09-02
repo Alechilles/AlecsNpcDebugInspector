@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +50,30 @@ class NpcRuntimeTickSchedulerTest {
         assertEquals(2, summary.ticksRun());
         assertTrue(summary.canceled());
         assertEquals("test cancellation", summary.cancelReason());
+    }
+
+    @Test
+    void schedulerStopsWhenTickOutcomeRequestsCompletion() throws Exception {
+        NpcRuntimeScenarioRun run = NpcRuntimeScenarioRun.start("early", "world", 300);
+        AtomicInteger ticks = new AtomicInteger();
+        NpcRuntimeTickScheduler scheduler = new NpcRuntimeTickScheduler();
+
+        NpcRuntimeTickScheduler.RunSummary summary = scheduler.run(
+                run,
+                call -> call.run(),
+                tick -> {
+                    ticks.incrementAndGet();
+                    if (tick == 42) {
+                        return NpcRuntimeTickScheduler.TickOutcome.completed("assertions resolved");
+                    }
+                    return NpcRuntimeTickScheduler.TickOutcome.continueRunning();
+                }
+        );
+
+        assertEquals(43, ticks.get());
+        assertEquals(43, summary.ticksRun());
+        assertTrue(summary.completedEarly());
+        assertEquals("assertions resolved", summary.completionReason());
     }
 
     @Test

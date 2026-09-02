@@ -21,6 +21,14 @@ class NpcRuntimeFixtureRegistryTest {
         Map<String, Object> json = registry.fixtures().getFirst().toMap();
         assertEquals("npcUnderTest", json.get("fixtureId"));
         assertEquals(uuid.toString(), json.get("uuid"));
+        assertEquals("npcUnderTest", registry.fixtureIdForUuid(uuid).orElseThrow());
+    }
+
+    @Test
+    void returnsEmptyFixtureIdForUnknownUuid() {
+        NpcRuntimeFixtureRegistry registry = new NpcRuntimeFixtureRegistry();
+
+        assertTrue(registry.fixtureIdForUuid(UUID.fromString("00000000-0000-0000-0000-000000000099")).isEmpty());
     }
 
     @Test
@@ -29,5 +37,19 @@ class NpcRuntimeFixtureRegistryTest {
         registry.recordEntity("fixture", "npc", null);
 
         assertThrows(IllegalArgumentException.class, () -> registry.recordBlockMutation("fixture", "0,64,0", "Air"));
+    }
+
+    @Test
+    void recordsFixtureLinksInInsertionOrder() {
+        NpcRuntimeFixtureRegistry registry = new NpcRuntimeFixtureRegistry();
+
+        registry.recordFixtureLink("flock.child", "flockLeader", "npcUnderTest");
+        registry.recordFixtureLink("family.child", "parent", "family.parent");
+
+        assertEquals(2, registry.fixtureLinks().size());
+        Map<String, Object> first = registry.fixtureLinks().getFirst().toMap();
+        assertEquals("flock.child", first.get("fixtureId"));
+        assertEquals("flockLeader", first.get("relationship"));
+        assertEquals("npcUnderTest", first.get("targetFixtureId"));
     }
 }

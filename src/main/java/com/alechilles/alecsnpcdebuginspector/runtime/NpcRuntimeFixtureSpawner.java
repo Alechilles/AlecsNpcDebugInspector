@@ -3,7 +3,11 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.RemoveReason;
 import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.component.AddReason;
+import com.hypixel.hytale.component.Holder;
 import com.hypixel.hytale.math.vector.Rotation3f;
+import com.hypixel.hytale.server.core.inventory.ItemStack;
+import com.hypixel.hytale.server.core.modules.entity.item.ItemComponent;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.npc.INonPlayerCharacter;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
@@ -59,11 +63,48 @@ public final class NpcRuntimeFixtureSpawner {
         return new SpawnedNpc(fixture.fixtureId(), fixture.kind(), fixture.roleId(), fixture.targetSlot(), spawned.first(), npcEntity);
     }
 
+    @Nonnull
+    public SpawnedItem spawnItemFixture(@Nonnull World world, @Nonnull NpcRuntimeFixtureSpec fixture) {
+        if (fixture.kind() != NpcRuntimeFixtureKind.ITEM) {
+            throw new IllegalArgumentException("Fixture kind is not an item fixture: " + fixture.kind().jsonName());
+        }
+        if (fixture.itemId() == null || fixture.itemId().isBlank()) {
+            throw new IllegalArgumentException("Fixture " + fixture.fixtureId() + " requires an itemId");
+        }
+        Store<EntityStore> store = world.getEntityStore().getStore();
+        Vector3d position = toVector3d(fixture.position(), "fixtures.list[" + fixture.fixtureId() + "].position");
+        Holder<EntityStore> holder = ItemComponent.generateItemDrop(
+                store,
+                new ItemStack(fixture.itemId(), 1),
+                position,
+                Rotation3f.IDENTITY,
+                0.0f,
+                0.0f,
+                0.0f
+        );
+        if (holder == null) {
+            throw new IllegalStateException("Hytale returned no item drop for item " + fixture.itemId());
+        }
+        Ref<EntityStore> ref = store.addEntity(holder, AddReason.SPAWN);
+        if (ref == null || !ref.isValid()) {
+            throw new IllegalStateException("Hytale returned no item ref for item " + fixture.itemId());
+        }
+        return new SpawnedItem(fixture.fixtureId(), fixture.itemId(), ref);
+    }
+
     public boolean cleanup(@Nonnull Store<EntityStore> store, @Nullable SpawnedNpc npc) {
         if (npc == null || npc.ref() == null || !npc.ref().isValid()) {
             return true;
         }
         store.removeEntity(npc.ref(), RemoveReason.REMOVE);
+        return true;
+    }
+
+    public boolean cleanup(@Nonnull Store<EntityStore> store, @Nullable SpawnedItem item) {
+        if (item == null || item.ref() == null || !item.ref().isValid()) {
+            return true;
+        }
+        store.removeEntity(item.ref(), RemoveReason.REMOVE);
         return true;
     }
 
@@ -96,6 +137,15 @@ public final class NpcRuntimeFixtureSpawner {
         @Nonnull
         public NpcRuntimeFixtureSpawnResult toSpawnResult() {
             return new NpcRuntimeFixtureSpawnResult(fixtureId, kind, true, uuid(), roleId, targetSlot, "spawned");
+        }
+    }
+
+    public record SpawnedItem(@Nonnull String fixtureId,
+                              @Nonnull String itemId,
+                              @Nonnull Ref<EntityStore> ref) {
+        @Nonnull
+        public NpcRuntimeFixtureSpawnResult toSpawnResult() {
+            return new NpcRuntimeFixtureSpawnResult(fixtureId, NpcRuntimeFixtureKind.ITEM, true, null, null, null, "spawned item drop");
         }
     }
 }

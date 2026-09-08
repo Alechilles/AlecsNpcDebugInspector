@@ -11,6 +11,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcDebugHistoryStoreTest {
     @Test
+    void profilingChangesStayHighlightedWithoutDisplacingCoreEvents() {
+        NpcDebugHistoryStore store = new NpcDebugHistoryStore();
+        UUID npcUuid = UUID.randomUUID();
+        Instant now = Instant.parse("2026-03-28T12:00:00Z");
+        store.track(npcUuid, "role.state", "State", "Idle", now, true);
+        store.track(npcUuid, "role.state", "State", "Alert", now, true);
+
+        for (String key : new String[]{"workMetrics.score", "workMetrics.idleChurn", "workMetrics.samples"}) {
+            store.track(npcUuid, key, "Metric", "0", now, true);
+            for (int sample = 1; sample <= 300; sample++) {
+                NpcDebugHistoryStore.TrackResult result = store.track(
+                        npcUuid, key, "Metric", String.valueOf(sample), now.plusSeconds(sample), true);
+                assertTrue(result.changed);
+                assertEquals(String.valueOf(sample - 1), result.previous);
+            }
+        }
+
+        assertEquals(1, store.totalEventCount(npcUuid));
+        assertEquals(java.util.List.of("12:00:00 State: Idle -> Alert"), store.events(npcUuid));
+        assertEquals(store.events(npcUuid), store.events(npcUuid, Set.of(NpcDebugEventCategory.CORE)));
+    }
+
+    @Test
     void tracksChangesAndFiltersEventsByCategory() {
         NpcDebugHistoryStore store = new NpcDebugHistoryStore();
         UUID npcUuid = UUID.randomUUID();

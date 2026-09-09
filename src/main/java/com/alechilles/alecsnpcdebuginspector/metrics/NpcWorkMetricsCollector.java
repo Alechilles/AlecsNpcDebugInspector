@@ -13,6 +13,8 @@ import javax.annotation.Nonnull;
  * Maintains bounded rolling NPC work metrics keyed by NPC UUID or runtime fixture id.
  */
 public final class NpcWorkMetricsCollector {
+    private static final int MAX_TOP_EVENT_RECORD_KINDS = 8;
+
     private final int windowTicks;
     private final NpcWorkMetricWeights weights;
     private final Map<String, ArrayDeque<NpcWorkMetricSample>> samplesByNpc = new HashMap<>();
@@ -65,6 +67,8 @@ public final class NpcWorkMetricsCollector {
                 0.0,
                 0.0,
                 0.0,
+                List.of(),
+                Map.of(),
                 List.of()
         );
     }
@@ -93,6 +97,7 @@ public final class NpcWorkMetricsCollector {
         int stateTransitions;
         int flockSignalEvents;
         double idleScore;
+        final Map<String, Integer> eventRecordKinds = new HashMap<>();
 
         void add(@Nonnull NpcWorkMetricSample sample, double sampleScore) {
             eventRecords += sample.eventRecords();
@@ -105,6 +110,9 @@ public final class NpcWorkMetricsCollector {
             actionTransitions += sample.actionTransitions();
             stateTransitions += sample.stateTransitions();
             flockSignalEvents += sample.flockSignalEvents();
+            for (Map.Entry<String, Integer> entry : sample.eventRecordKinds().entrySet()) {
+                eventRecordKinds.merge(entry.getKey(), entry.getValue(), Integer::sum);
+            }
             if (sample.idle()) {
                 idleScore += sampleScore;
             }
@@ -127,6 +135,16 @@ public final class NpcWorkMetricsCollector {
                 }
             }
             contributors.sort(Comparator.comparingDouble(NpcWorkMetricSnapshot.Contributor::score).reversed());
+            LinkedHashMap<String, Double> eventRecordKindRates = new LinkedHashMap<>();
+            eventRecordKinds.entrySet().stream()
+                    .filter(entry -> entry.getValue() > 0)
+                    .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
+                            .thenComparing(Map.Entry.comparingByKey()))
+                    .forEach(entry -> eventRecordKindRates.put(entry.getKey(), entry.getValue() / (double) windowTicks));
+            List<NpcWorkMetricSnapshot.EventRecordKindRate> topEventRecordKinds = eventRecordKindRates.entrySet().stream()
+                    .limit(MAX_TOP_EVENT_RECORD_KINDS)
+                    .map(entry -> new NpcWorkMetricSnapshot.EventRecordKindRate(entry.getKey(), entry.getValue()))
+                    .toList();
             return new NpcWorkMetricSnapshot(
                     npcId,
                     windowTicks,
@@ -143,7 +161,9 @@ public final class NpcWorkMetricsCollector {
                     stateTransitions / (double) windowTicks,
                     flockSignalEvents / (double) windowTicks,
                     idleScore / windowTicks,
-                    List.copyOf(contributors)
+                    List.copyOf(contributors),
+                    eventRecordKindRates,
+                    topEventRecordKinds
             );
         }
     }

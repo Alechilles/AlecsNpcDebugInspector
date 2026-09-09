@@ -375,7 +375,17 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                     spawnedFixtures.evidenceRecords.add(record.fields());
                 }
             }
-            recordWorkMetricsIfEnabled(request, writer, cadence, spawnedFixtures, npcUnderTest.fixtureId(), tick, records);
+            recordWorkMetricsIfEnabled(
+                    request,
+                    writer,
+                    cadence,
+                    spawnedFixtures,
+                    npcUnderTest.fixtureId(),
+                    tick,
+                    records,
+                    observed,
+                    spawnedFixtures.previousObservedByFixture.get(npcUnderTest.fixtureId())
+            );
             spawnedFixtures.previousObserved = observed;
             spawnedFixtures.previousObservedByFixture.clear();
             spawnedFixtures.previousObservedByFixture.putAll(observedByFixture);
@@ -403,12 +413,14 @@ public final class NpcRuntimeLiveScenarioRunner implements NpcRuntimeHarnessServ
                                             @Nonnull SpawnedFixtureHolder spawnedFixtures,
                                             @Nonnull String npcId,
                                             int tick,
-                                            @Nonnull List<NpcRuntimeTraceRecord> records) throws java.io.IOException {
+                                            @Nonnull List<NpcRuntimeTraceRecord> records,
+                                            @Nonnull NpcRuntimeObservedNpc observed,
+                                            @Nullable NpcRuntimeObservedNpc previous) throws java.io.IOException {
         NpcWorkMetricsCollector collector = spawnedFixtures.workMetricsCollector;
         if (collector == null || !request.profile().npcWorkMetrics()) {
             return;
         }
-        NpcWorkMetricSample sample = observer.metricSample(npcId, tick, records);
+        NpcWorkMetricSample sample = observer.metricSample(npcId, tick, records, observed, previous);
         collector.record(sample);
         if (tick >= request.timing().warmupTicks() && tick % request.profile().emitEveryTicks() == 0) {
             writeEventIfEnabled(writer, cadence, NpcRuntimeTraceRecord.npcWorkMetrics(

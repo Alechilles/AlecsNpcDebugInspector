@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.metrics;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class NpcWorkMetricsCollectorTest {
@@ -23,6 +24,7 @@ final class NpcWorkMetricsCollectorTest {
                 0,
                 3,
                 1,
+                Map.of("tamework-evidence", 90, "sensor-evidence", 6, "npc-state", 1),
                 true
         ));
 
@@ -35,6 +37,9 @@ final class NpcWorkMetricsCollectorTest {
         assertEquals(0.01, snapshot.pathingEventsPerTick());
         assertTrue(snapshot.workScorePerTick() > 0.0);
         assertEquals("targeting", snapshot.topContributors().getFirst().category());
+        assertEquals(0.90, snapshot.eventRecordKindsPerTick().get("tamework-evidence"));
+        assertEquals("tamework-evidence", snapshot.topEventRecordKinds().getFirst().kind());
+        assertEquals(0.90, snapshot.topEventRecordKinds().getFirst().recordsPerTick());
         assertTrue(snapshot.idleChurnScore() > 0.0);
     }
 
@@ -42,13 +47,14 @@ final class NpcWorkMetricsCollectorTest {
     void rollingWindowEvictsOldSamples() {
         NpcWorkMetricsCollector collector = new NpcWorkMetricsCollector(3, NpcWorkMetricWeights.defaults());
 
-        collector.record(new NpcWorkMetricSample("npc", 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, true));
-        collector.record(new NpcWorkMetricSample("npc", 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, true));
-        collector.record(new NpcWorkMetricSample("npc", 5, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, true));
+        collector.record(new NpcWorkMetricSample("npc", 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, Map.of("npc-state", 1), true));
+        collector.record(new NpcWorkMetricSample("npc", 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, Map.of("npc-state", 1), true));
+        collector.record(new NpcWorkMetricSample("npc", 5, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, Map.of("sensor-evidence", 1), true));
 
         NpcWorkMetricSnapshot snapshot = collector.snapshot("npc");
 
         assertEquals(1, snapshot.samples());
         assertEquals(1.0 / 3.0, snapshot.sensorChecksPerTick());
+        assertEquals(1.0 / 3.0, snapshot.eventRecordKindsPerTick().get("sensor-evidence"));
     }
 }

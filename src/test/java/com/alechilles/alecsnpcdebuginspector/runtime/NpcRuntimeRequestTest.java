@@ -89,9 +89,22 @@ class NpcRuntimeRequestTest {
         ));
         assertThrows(NpcRuntimeRequest.ValidationException.class, () -> NpcRuntimeRequest.parse(
                 "{\"version\":1,\"requestId\":\"too_much_trace\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
-                        + "\"limits\":{\"maxTraceBytes\":999999999}}",
+                        + "\"limits\":{\"maxTraceBytes\":104857601}}",
                 config
         ));
+    }
+
+    @Test
+    void acceptsTraceLimitUpToConfiguredHundredMibCap() {
+        NpcRuntimeHarnessConfig config = NpcRuntimeHarnessConfig.developmentDefault(Path.of("build", "test-userdata"));
+
+        NpcRuntimeRequest request = NpcRuntimeRequest.parse(
+                "{\"version\":1,\"requestId\":\"full_trace\",\"assetId\":\"A\",\"roleId\":\"R\",\"ticks\":1,"
+                        + "\"limits\":{\"maxTraceBytes\":104857600}}",
+                config
+        );
+
+        assertEquals(104_857_600L, request.limits().maxTraceBytes());
     }
 
     @Test
@@ -808,7 +821,7 @@ class NpcRuntimeRequestTest {
         assertTrue(json.contains("\"environment\":{}"));
         assertTrue(json.contains("\"multiNpc\":{\"mode\":\"single\",\"deliveryWindowTicks\":90,\"maxFixtureCount\":64}"));
         assertTrue(json.contains("\"assertions\":[]"));
-        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":8388608}"));
+        assertTrue(json.contains("\"limits\":{\"maxEntities\":64,\"maxTraceBytes\":104857600}"));
     }
 
     @Test

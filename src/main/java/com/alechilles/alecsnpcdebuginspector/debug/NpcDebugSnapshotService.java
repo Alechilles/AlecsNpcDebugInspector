@@ -1,10 +1,10 @@
 package com.alechilles.alecsnpcdebuginspector.debug;
 
 import com.alechilles.alecsnpcdebuginspector.compat.NpcDebugCompatibility;
-import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSample;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricWeights;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricsCollector;
+import com.alechilles.alecsnpcdebuginspector.runtime.NpcLiveWorkMetricsSampler;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
@@ -52,12 +52,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
@@ -91,7 +91,7 @@ public final class NpcDebugSnapshotService {
     private final NpcDebugComponentLocalStateResolver componentLocalStateResolver =
             new NpcDebugComponentLocalStateResolver();
     private final NpcWorkMetricsCollector workMetricsCollector;
-    private final AtomicInteger panelMetricTick = new AtomicInteger();
+    private final NpcLiveWorkMetricsSampler liveWorkMetricsSampler;
 
     public NpcDebugSnapshotService() {
         this(new NpcWorkMetricsCollector(100, NpcWorkMetricWeights.defaults()));
@@ -99,6 +99,7 @@ public final class NpcDebugSnapshotService {
 
     public NpcDebugSnapshotService(@Nonnull NpcWorkMetricsCollector workMetricsCollector) {
         this.workMetricsCollector = workMetricsCollector;
+        this.liveWorkMetricsSampler = new NpcLiveWorkMetricsSampler(workMetricsCollector);
     }
 
     /**
@@ -141,39 +142,86 @@ public final class NpcDebugSnapshotService {
                 + " | Game Time (UTC): " + formatInstant(gameTime)
                 + " | Changed lines are marked with '>>'";
 
-        StringBuilder details = new StringBuilder();
-        appendSection(details, "Overview", buildOverviewSection(resolvedUuid, targetRef, observerRef, store, npc, gameTime));
+        List<SnapshotSection> metricSections = new ArrayList<>();
+        String overviewSection = buildOverviewSection(resolvedUuid, targetRef, observerRef, store, npc, gameTime);
+        metricSections.add(new SnapshotSection("Overview", overviewSection));
+        String tameworkSection = null;
         if (tameworkIntegration.isDetected()) {
-            appendSection(details, "Tamework", buildTameworkSection(resolvedUuid, targetRef, store, npc, gameTime));
+            tameworkSection = buildTameworkSection(resolvedUuid, targetRef, store, npc, gameTime);
+            metricSections.add(new SnapshotSection("Tamework", tameworkSection));
         }
+        String tameworkApiProfileSection = null;
+        String tameworkCommandLinksSection = null;
+        String tameworkPolicySection = null;
+        String tameworkResolvedConfigSection = null;
+        String tameworkDiagnosticsSection = null;
         if (tameworkApiIntegration.isDetected()) {
-            appendSection(details, "Tamework API / Profile", buildTameworkApiProfileSection(resolvedUuid, gameTime));
-            appendSection(details, "Tamework Command Links", buildTameworkCommandLinksSection(resolvedUuid, gameTime));
-            appendSection(details, "Tamework Policy", buildTameworkPolicySection(resolvedUuid, viewerUuid, gameTime));
-            appendSection(details, "Tamework Resolved Config", buildTameworkResolvedConfigSection(resolvedUuid, npc, gameTime));
-            appendSection(details, "Tamework Diagnostics", buildTameworkDiagnosticsSection(gameTime));
+            tameworkApiProfileSection = buildTameworkApiProfileSection(resolvedUuid, gameTime);
+            tameworkCommandLinksSection = buildTameworkCommandLinksSection(resolvedUuid, gameTime);
+            tameworkPolicySection = buildTameworkPolicySection(resolvedUuid, viewerUuid, gameTime);
+            tameworkResolvedConfigSection = buildTameworkResolvedConfigSection(resolvedUuid, npc, gameTime);
+            tameworkDiagnosticsSection = buildTameworkDiagnosticsSection(gameTime);
+            metricSections.add(new SnapshotSection("Tamework API / Profile", tameworkApiProfileSection));
+            metricSections.add(new SnapshotSection("Tamework Command Links", tameworkCommandLinksSection));
+            metricSections.add(new SnapshotSection("Tamework Policy", tameworkPolicySection));
+            metricSections.add(new SnapshotSection("Tamework Resolved Config", tameworkResolvedConfigSection));
+            metricSections.add(new SnapshotSection("Tamework Diagnostics", tameworkDiagnosticsSection));
         }
         String aiSection = buildAiSection(resolvedUuid, targetRef, store, npc, gameTime);
         String targetingSection = buildTargetingSection(resolvedUuid, targetRef, store, npc, gameTime);
         String pathingSection = buildPathingSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String timerSection = buildTimerSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String lifecycleSection = buildLifecycleSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String relationshipsSection = buildRelationshipsSection(resolvedUuid, targetRef, store, npc, gameTime);
         String combatSection = buildCombatSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String inventorySection = buildInventorySection(resolvedUuid, npc, gameTime);
+        String alarmSection = buildAlarmSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String flagSection = buildFlagSection(resolvedUuid, targetRef, store, npc, gameTime);
+        String componentSection = buildComponentSection(resolvedUuid, targetRef, store, npc, gameTime);
         String flockSection = buildFlockSection(resolvedUuid, targetRef, store, npc, gameTime);
-        recordPanelWorkMetric(resolvedUuid, aiSection, targetingSection, pathingSection, combatSection, flockSection);
+        String eventsSection = buildEventsSection(resolvedUuid, enabledEventCategories);
 
+        metricSections.add(new SnapshotSection("AI", aiSection));
+        metricSections.add(new SnapshotSection("Targeting / Sensors", targetingSection));
+        metricSections.add(new SnapshotSection("Pathing", pathingSection));
+        metricSections.add(new SnapshotSection("Timers / Cooldowns", timerSection));
+        metricSections.add(new SnapshotSection("Lifecycle / Persistence", lifecycleSection));
+        metricSections.add(new SnapshotSection("Relationships", relationshipsSection));
+        metricSections.add(new SnapshotSection("Combat", combatSection));
+        metricSections.add(new SnapshotSection("Inventory / Equipment", inventorySection));
+        metricSections.add(new SnapshotSection("Alarms", alarmSection));
+        metricSections.add(new SnapshotSection("Flags", flagSection));
+        metricSections.add(new SnapshotSection("Components", componentSection));
+        metricSections.add(new SnapshotSection("Flock", flockSection));
+        metricSections.add(new SnapshotSection("Recent Events", eventsSection));
+        recordLiveWorkMetric(resolvedUuid, title, subtitle, metricSections);
+
+        StringBuilder details = new StringBuilder();
+        appendSection(details, "Overview", overviewSection);
+        if (tameworkSection != null) {
+            appendSection(details, "Tamework", tameworkSection);
+        }
+        if (tameworkApiProfileSection != null) {
+            appendSection(details, "Tamework API / Profile", tameworkApiProfileSection);
+            appendSection(details, "Tamework Command Links", tameworkCommandLinksSection);
+            appendSection(details, "Tamework Policy", tameworkPolicySection);
+            appendSection(details, "Tamework Resolved Config", tameworkResolvedConfigSection);
+            appendSection(details, "Tamework Diagnostics", tameworkDiagnosticsSection);
+        }
         appendSection(details, "AI", aiSection);
         appendSection(details, "Targeting / Sensors", targetingSection);
         appendSection(details, "Pathing", pathingSection);
-        appendSection(details, "Timers / Cooldowns", buildTimerSection(resolvedUuid, targetRef, store, npc, gameTime));
-        appendSection(details, "Lifecycle / Persistence", buildLifecycleSection(resolvedUuid, targetRef, store, npc, gameTime));
-        appendSection(details, "Relationships", buildRelationshipsSection(resolvedUuid, targetRef, store, npc, gameTime));
+        appendSection(details, "Timers / Cooldowns", timerSection);
+        appendSection(details, "Lifecycle / Persistence", lifecycleSection);
+        appendSection(details, "Relationships", relationshipsSection);
         appendSection(details, "Combat", combatSection);
         appendSection(details, "Work Metrics", buildWorkMetricsSection(resolvedUuid, gameTime));
-        appendSection(details, "Inventory / Equipment", buildInventorySection(resolvedUuid, npc, gameTime));
-        appendSection(details, "Alarms", buildAlarmSection(resolvedUuid, targetRef, store, npc, gameTime));
-        appendSection(details, "Flags", buildFlagSection(resolvedUuid, targetRef, store, npc, gameTime));
-        appendSection(details, "Components", buildComponentSection(resolvedUuid, targetRef, store, npc, gameTime));
+        appendSection(details, "Inventory / Equipment", inventorySection);
+        appendSection(details, "Alarms", alarmSection);
+        appendSection(details, "Flags", flagSection);
+        appendSection(details, "Components", componentSection);
         appendSection(details, "Flock", flockSection);
-        appendSection(details, "Recent Events", buildEventsSection(resolvedUuid, enabledEventCategories));
+        appendSection(details, "Recent Events", eventsSection);
 
         return new NpcDebugSnapshot(title, subtitle, details.toString().trim());
     }
@@ -247,41 +295,18 @@ public final class NpcDebugSnapshotService {
         return sb.toString().trim();
     }
 
-    private void recordPanelWorkMetric(@Nullable UUID npcUuid,
-                                       @Nonnull String aiSection,
-                                       @Nonnull String targetingSection,
-                                       @Nonnull String pathingSection,
-                                       @Nonnull String combatSection,
-                                       @Nonnull String flockSection) {
+    private void recordLiveWorkMetric(@Nullable UUID npcUuid,
+                                      @Nonnull String title,
+                                      @Nonnull String subtitle,
+                                      @Nonnull List<SnapshotSection> sections) {
         if (npcUuid == null) {
             return;
         }
-        int stateChanges = changedLineCount(aiSection) + changedLineCount(targetingSection) + changedLineCount(pathingSection)
-                + changedLineCount(combatSection) + changedLineCount(flockSection);
-        int instructionChanges = changedLineCountFor(aiSection, "Current Tree Step");
-        int pathingEvents = booleanSignalCount(pathingSection, "Following Path", "In Progress", "Obstructed", "Force Recompute Path");
-        int combatChecks = booleanSignalCount(combatSection, "Executing Attack");
-        int targetSelections = changedLineCountFor(targetingSection, "Target ");
-        int targetCandidates = integerValueFor(targetingSection, "Marked Target Slots") + integerValueFor(targetingSection, "Sensor Scope Keys");
-        int sensorChecks = Math.max(0, sectionLineCount(targetingSection) - 1);
-        int signalEvents = changedLineCount(flockSection);
-        boolean idle = instructionChanges == 0 && pathingEvents == 0 && combatChecks == 0 && stateChanges == 0;
-        workMetricsCollector.record(new NpcWorkMetricSample(
-                npcUuid.toString(),
-                panelMetricTick.incrementAndGet(),
-                sectionLineCount(aiSection) + sectionLineCount(targetingSection) + sectionLineCount(pathingSection)
-                        + sectionLineCount(combatSection) + sectionLineCount(flockSection),
-                sensorChecks,
-                targetSelections,
-                targetCandidates,
-                pathingEvents,
-                combatChecks,
-                instructionChanges,
-                0,
-                stateChanges,
-                signalEvents,
-                idle
-        ));
+        StringBuilder details = new StringBuilder();
+        for (SnapshotSection section : sections) {
+            appendSection(details, section.title(), section.body());
+        }
+        liveWorkMetricsSampler.record(npcUuid, new NpcDebugSnapshot(title, subtitle, details.toString().trim()));
     }
 
     @Nonnull
@@ -292,95 +317,26 @@ public final class NpcDebugSnapshotService {
             return sb.toString().trim();
         }
         NpcWorkMetricSnapshot snapshot = workMetricsCollector.snapshot(npcUuid.toString());
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.window", "Window", snapshot.windowTicks() + " ticks", true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.source", "Metric Source", "Filtered harness observer pipeline (panel cadence)", true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.window", "Window", snapshot.windowTicks() + " samples", true, false);
         appendTrackedLine(sb, npcUuid, now, "workMetrics.samples", "Samples", String.valueOf(snapshot.samples()), true, false);
         if (snapshot.samples() < 10) {
             appendTrackedLine(sb, npcUuid, now, "workMetrics.status", "Status", "Collecting samples", true, false);
         }
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.score", "Work Score / Tick", formatNumber(snapshot.workScorePerTick()), true, true);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.idleChurn", "Idle Churn", formatNumber(snapshot.idleChurnScore()), true, true);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.sensors", "Sensors / Tick", formatNumber(snapshot.sensorChecksPerTick()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.targetCandidates", "Target Candidates / Tick", formatNumber(snapshot.targetCandidatesPerTick()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.pathing", "Pathing / Tick", formatNumber(snapshot.pathingEventsPerTick()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.combat", "Combat Checks / Tick", formatNumber(snapshot.combatEligibilityPerTick()), true, false);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.instructions", "Instruction Changes / Tick", formatNumber(snapshot.instructionChangesPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.score", "Work Score / Sample", formatNumber(snapshot.workScorePerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.events", "Work Records / Sample", formatNumber(snapshot.eventRecordsPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.idleChurn", "Idle Churn", formatNumber(snapshot.idleChurnScore()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.sensors", "Sensors / Sample", formatNumber(snapshot.sensorChecksPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.targetCandidates", "Target Candidates / Sample", formatNumber(snapshot.targetCandidatesPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.pathing", "Pathing / Sample", formatNumber(snapshot.pathingEventsPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.combat", "Combat Checks / Sample", formatNumber(snapshot.combatEligibilityPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.instructions", "Instruction Changes / Sample", formatNumber(snapshot.instructionChangesPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.actions", "Action Transitions / Sample", formatNumber(snapshot.actionTransitionsPerTick()), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.state", "State Transitions / Sample", formatNumber(snapshot.stateTransitionsPerTick()), true, false);
         appendTrackedLine(sb, npcUuid, now, "workMetrics.top", "Top Contributors", formatContributors(snapshot), true, false);
-        appendTrackedLine(sb, npcUuid, now, "workMetrics.timing", "Timing", "Observable work proxy; exact CPU timing unavailable", true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.eventKinds", "Top Work Records", formatEventKinds(snapshot), true, false);
+        appendTrackedLine(sb, npcUuid, now, "workMetrics.timing", "Timing", "Filtered observable work proxy; exact CPU timing unavailable", true, false);
         return sb.toString().trim();
-    }
-
-    private int sectionLineCount(@Nonnull String section) {
-        if (section.isBlank()) {
-            return 0;
-        }
-        int count = 0;
-        for (String line : section.split("\\R")) {
-            if (!line.isBlank()) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private int changedLineCount(@Nonnull String section) {
-        int count = 0;
-        for (String line : section.split("\\R")) {
-            if (line.startsWith(HIGHLIGHT_CHANGED_PREFIX)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private int changedLineCountFor(@Nonnull String section, @Nonnull String labelPrefix) {
-        int count = 0;
-        for (String line : section.split("\\R")) {
-            String normalized = line.startsWith(HIGHLIGHT_CHANGED_PREFIX)
-                    ? line.substring(HIGHLIGHT_CHANGED_PREFIX.length())
-                    : line.startsWith(NORMAL_PREFIX)
-                    ? line.substring(NORMAL_PREFIX.length())
-                    : line;
-            if (line.startsWith(HIGHLIGHT_CHANGED_PREFIX) && normalized.startsWith(labelPrefix)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private int booleanSignalCount(@Nonnull String section, @Nonnull String... labels) {
-        int count = 0;
-        for (String line : section.split("\\R")) {
-            String normalized = line.startsWith(HIGHLIGHT_CHANGED_PREFIX)
-                    ? line.substring(HIGHLIGHT_CHANGED_PREFIX.length())
-                    : line.startsWith(NORMAL_PREFIX)
-                    ? line.substring(NORMAL_PREFIX.length())
-                    : line;
-            for (String label : labels) {
-                if (normalized.startsWith(label + ": true")) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
-    private int integerValueFor(@Nonnull String section, @Nonnull String label) {
-        for (String line : section.split("\\R")) {
-            String normalized = line.startsWith(HIGHLIGHT_CHANGED_PREFIX)
-                    ? line.substring(HIGHLIGHT_CHANGED_PREFIX.length())
-                    : line.startsWith(NORMAL_PREFIX)
-                    ? line.substring(NORMAL_PREFIX.length())
-                    : line;
-            String prefix = label + ": ";
-            if (normalized.startsWith(prefix)) {
-                try {
-                    return Integer.parseInt(normalized.substring(prefix.length()).trim());
-                } catch (NumberFormatException ignored) {
-                    return 0;
-                }
-            }
-        }
-        return 0;
     }
 
     @Nonnull
@@ -395,6 +351,20 @@ public final class NpcDebugSnapshotService {
             contributors.add(contributor.category() + "=" + formatNumber(contributor.score()));
         }
         return String.join(", ", contributors);
+    }
+
+    @Nonnull
+    private String formatEventKinds(@Nonnull NpcWorkMetricSnapshot snapshot) {
+        if (snapshot.topEventRecordKinds().isEmpty()) {
+            return "<none>";
+        }
+        List<String> eventKinds = new ArrayList<>();
+        int limit = Math.min(5, snapshot.topEventRecordKinds().size());
+        for (int index = 0; index < limit; index++) {
+            NpcWorkMetricSnapshot.EventRecordKindRate eventKind = snapshot.topEventRecordKinds().get(index);
+            eventKinds.add(eventKind.kind() + "=" + formatNumber(eventKind.recordsPerTick()));
+        }
+        return String.join(", ", eventKinds);
     }
 
     @Nonnull
@@ -2140,6 +2110,9 @@ public final class NpcDebugSnapshotService {
     @Nullable
     private boolean[] readBooleanArrayField(@Nullable Object target, @Nonnull String fieldName) {
         return readField(target, fieldName, boolean[].class);
+    }
+
+    private record SnapshotSection(@Nonnull String title, @Nonnull String body) {
     }
 
     private void appendSection(@Nonnull StringBuilder builder,

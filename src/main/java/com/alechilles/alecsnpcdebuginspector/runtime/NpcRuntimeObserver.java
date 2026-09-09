@@ -149,37 +149,46 @@ public final class NpcRuntimeObserver {
     public NpcWorkMetricSample metricSample(@Nonnull String npcId,
                                             int tick,
                                             @Nonnull List<NpcRuntimeTraceRecord> records) {
-        int sensorChecks = count(records, "sensor-evidence");
-        int targetSelections = count(records, "target-selection-evidence");
-        int targetCandidates = records.stream()
-                .filter(record -> "target-selection-evidence".equals(record.fields().get("kind")))
-                .mapToInt(record -> intField(record, "candidateCount"))
-                .sum();
-        int pathingEvents = count(records, "pathing-evidence");
-        int combatEligibility = count(records, "combat-eligibility-evidence") + count(records, "combat-evaluator-evidence");
-        int instructionChanges = count(records, "instruction-lifecycle-evidence");
-        int actionTransitions = count(records, "action-start") + count(records, "action-change") + count(records, "action-end");
-        int stateTransitions = records.stream()
-                .filter(record -> "npc-transition".equals(record.fields().get("kind")))
-                .mapToInt(record -> intField(record, "changeCount"))
-                .sum();
-        int signalEvents = count(records, "flock-evidence") + count(records, "message-evidence") + count(records, "beacon-evidence");
-        boolean idle = instructionChanges == 0 && actionTransitions == 0 && stateTransitions == 0;
+        return metricSample(npcId, tick, records, null, null);
+    }
+
+    @Nonnull
+    public NpcWorkMetricSample metricSample(@Nonnull String npcId,
+                                            int tick,
+                                            @Nonnull List<NpcRuntimeTraceRecord> records,
+                                            @Nullable NpcRuntimeObservedNpc current,
+                                            @Nullable NpcRuntimeObservedNpc previous) {
+        WorkSurface surface = current != null
+                ? WorkSurface.from(current, previous, records)
+                : WorkSurface.fromRecords(records);
         return new NpcWorkMetricSample(
                 npcId,
                 tick,
-                records.size(),
-                sensorChecks,
-                targetSelections,
-                targetCandidates,
-                pathingEvents,
-                combatEligibility,
-                instructionChanges,
-                actionTransitions,
-                stateTransitions,
-                signalEvents,
-                idle
+                surface.totalRecords(),
+                surface.sensorChecks(),
+                surface.targetSelections(),
+                surface.targetCandidates(),
+                surface.pathingEvents(),
+                surface.combatEligibility(),
+                surface.instructionChanges(),
+                surface.actionTransitions(),
+                surface.stateTransitions(),
+                surface.signalEvents(),
+                surface.recordKinds(),
+                surface.idle()
         );
+    }
+
+    @Nonnull
+    private static Map<String, Integer> eventRecordKinds(@Nonnull List<NpcRuntimeTraceRecord> records) {
+        LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
+        for (NpcRuntimeTraceRecord record : records) {
+            Object kind = record.fields().get("kind");
+            if (kind instanceof String kindText && !kindText.isBlank()) {
+                counts.merge(kindText, 1, Integer::sum);
+            }
+        }
+        return counts;
     }
 
     private static int count(@Nonnull List<NpcRuntimeTraceRecord> records, @Nonnull String kind) {
@@ -191,6 +200,218 @@ public final class NpcRuntimeObserver {
     private static int intField(@Nonnull NpcRuntimeTraceRecord record, @Nonnull String field) {
         Object value = record.fields().get(field);
         return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private static int intSectionField(@Nonnull Map<String, String> fields, @Nonnull String key) {
+        String value = fields.get(key);
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(value.trim()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private static boolean booleanSectionField(@Nonnull Map<String, String> fields, @Nonnull String key) {
+        return Boolean.parseBoolean(fields.getOrDefault(key, "false"));
+    }
+
+    private static boolean presentTarget(@Nullable String value) {
+        return value != null
+                && !value.isBlank()
+                && !"<none>".equalsIgnoreCase(value)
+                && !"none".equalsIgnoreCase(value)
+                && !"n/a".equalsIgnoreCase(value);
+    }
+
+    private static int targetFieldCount(@Nonnull Map<String, String> targeting) {
+        int count = 0;
+        for (String key : targeting.keySet()) {
+            if (key.startsWith("target") && !"targeting".equals(key)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int selectedTargetCount(@Nonnull Map<String, String> targeting) {
+        int count = 0;
+        for (Map.Entry<String, String> entry : targeting.entrySet()) {
+            if (entry.getKey().startsWith("target") && !"targeting".equals(entry.getKey()) && presentTarget(entry.getValue())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int nonNoneChangedFields(@Nullable NpcRuntimeObservedNpc previous,
+                                            @Nonnull NpcRuntimeObservedNpc current,
+                                            @Nonnull String sectionName,
+                                            @Nonnull String... fields) {
+        if (previous == null) {
+            return 0;
+        }
+        Map<String, String> before = previous.section(sectionName);
+        Map<String, String> after = current.section(sectionName);
+        int changes = 0;
+        for (String field : fields) {
+            String beforeValue = before.get(field);
+            String afterValue = after.get(field);
+            if ((beforeValue == null ? afterValue != null : !beforeValue.equals(afterValue)) && presentTarget(afterValue)) {
+                changes++;
+            }
+        }
+        return changes;
+    }
+
+    private static int changedFields(@Nullable NpcRuntimeObservedNpc previous,
+                                     @Nonnull NpcRuntimeObservedNpc current,
+                                     @Nonnull String sectionName,
+                                     @Nonnull String... fields) {
+        if (previous == null) {
+            return 0;
+        }
+        Map<String, String> before = previous.section(sectionName);
+        Map<String, String> after = current.section(sectionName);
+        int changes = 0;
+        for (String field : fields) {
+            String beforeValue = before.get(field);
+            String afterValue = after.get(field);
+            if (beforeValue == null ? afterValue != null : !beforeValue.equals(afterValue)) {
+                changes++;
+            }
+        }
+        return changes;
+    }
+
+    private record WorkSurface(
+            int sensorChecks,
+            int targetSelections,
+            int targetCandidates,
+            int pathingEvents,
+            int combatEligibility,
+            int instructionChanges,
+            int actionTransitions,
+            int stateTransitions,
+            int signalEvents,
+            @Nonnull Map<String, Integer> recordKinds
+    ) {
+        @Nonnull
+        static WorkSurface from(@Nonnull NpcRuntimeObservedNpc current,
+                                @Nullable NpcRuntimeObservedNpc previous,
+                                @Nonnull List<NpcRuntimeTraceRecord> records) {
+            Map<String, String> targeting = current.section("Targeting / Sensors");
+            int targetSlotSurface = Math.max(intSectionField(targeting, "markedTargetSlots"), targetFieldCount(targeting));
+            int sensorScopeSurface = intSectionField(targeting, "sensorScopeKeys");
+            int sensorChecks = targetSlotSurface + sensorScopeSurface;
+            int targetSelections = selectedTargetCount(targeting)
+                    + nonNoneChangedFields(previous, current, "Targeting / Sensors", targeting.keySet().toArray(String[]::new));
+            int targetCandidates = targetSlotSurface;
+
+            Map<String, String> pathing = current.section("Pathing");
+            int pathingEvents = 0;
+            pathingEvents += booleanSectionField(pathing, "followingPath") ? 1 : 0;
+            pathingEvents += booleanSectionField(pathing, "inProgress") ? 1 : 0;
+            pathingEvents += booleanSectionField(pathing, "obstructed") ? 2 : 0;
+            pathingEvents += booleanSectionField(pathing, "forceRecomputePath") ? 2 : 0;
+            pathingEvents += intSectionField(pathing, "pathLength") > 0 ? 1 : 0;
+            pathingEvents += changedFields(previous, current, "Pathing", "followingPath", "navState", "inProgress", "obstructed", "forceRecomputePath");
+
+            Map<String, String> combat = current.section("Combat");
+            int combatEligibility = 0;
+            combatEligibility += booleanSectionField(combat, "executingAttack") ? 2 : 0;
+            combatEligibility += intSectionField(combat, "attackOverrideCount");
+            combatEligibility += presentTarget(combat.get("mostDamagedVictim")) ? 1 : 0;
+            combatEligibility += presentTarget(combat.get("mostDamagingAttacker")) ? 1 : 0;
+            combatEligibility += changedFields(previous, current, "Combat", "executingAttack", "mostDamagedVictim", "mostDamagingAttacker");
+
+            int instructionChanges = changedFields(
+                    previous,
+                    current,
+                    "AI",
+                    "state",
+                    "subState",
+                    "currentTreeStep",
+                    "currentBodyStep",
+                    "currentHeadStep",
+                    "queuedBodyStep",
+                    "queuedHeadStep",
+                    "rootInstruction",
+                    "interactionInstruction"
+            );
+            int actionTransitions = changedFields(previous, current, "AI", "transitionActionsRunning")
+                    + changedFields(previous, current, "Combat", "executingAttack");
+            int stateTransitions = changedFields(previous, current, "Overview", "state")
+                    + changedFields(previous, current, "AI", "state", "subState");
+            int signalEvents = count(records, "flock-transition") + count(records, "message-transition") + count(records, "beacon-transition");
+
+            LinkedHashMap<String, Integer> kinds = new LinkedHashMap<>();
+            putPositive(kinds, "sensor-surface", sensorChecks);
+            putPositive(kinds, "target-selection", targetSelections);
+            putPositive(kinds, "target-surface", targetCandidates);
+            putPositive(kinds, "pathing-active", pathingEvents);
+            putPositive(kinds, "combat-active", combatEligibility);
+            putPositive(kinds, "instruction-change", instructionChanges);
+            putPositive(kinds, "action-transition", actionTransitions);
+            putPositive(kinds, "state-transition", stateTransitions);
+            putPositive(kinds, "signal-transition", signalEvents);
+            return new WorkSurface(
+                    sensorChecks,
+                    targetSelections,
+                    targetCandidates,
+                    pathingEvents,
+                    combatEligibility,
+                    instructionChanges,
+                    actionTransitions,
+                    stateTransitions,
+                    signalEvents,
+                    kinds
+            );
+        }
+
+        @Nonnull
+        static WorkSurface fromRecords(@Nonnull List<NpcRuntimeTraceRecord> records) {
+            int targetSelections = count(records, "target-selection-evidence");
+            int targetCandidates = records.stream()
+                    .filter(record -> "target-selection-evidence".equals(record.fields().get("kind")))
+                    .mapToInt(record -> intField(record, "candidateCount"))
+                    .sum();
+            int pathingEvents = count(records, "pathing-evidence");
+            int combatEligibility = count(records, "combat-eligibility-evidence");
+            int actionTransitions = count(records, "action-start") + count(records, "action-change") + count(records, "action-end");
+            int stateTransitions = records.stream()
+                    .filter(record -> "npc-transition".equals(record.fields().get("kind")))
+                    .mapToInt(record -> intField(record, "changeCount"))
+                    .sum();
+            int signalEvents = count(records, "flock-transition") + count(records, "message-transition") + count(records, "beacon-transition");
+            LinkedHashMap<String, Integer> kinds = new LinkedHashMap<>();
+            putPositive(kinds, "target-selection", targetSelections);
+            putPositive(kinds, "target-surface", targetCandidates);
+            putPositive(kinds, "pathing-active", pathingEvents);
+            putPositive(kinds, "combat-active", combatEligibility);
+            putPositive(kinds, "action-transition", actionTransitions);
+            putPositive(kinds, "state-transition", stateTransitions);
+            putPositive(kinds, "signal-transition", signalEvents);
+            return new WorkSurface(0, targetSelections, targetCandidates, pathingEvents, combatEligibility, 0, actionTransitions, stateTransitions, signalEvents, kinds);
+        }
+
+        int totalRecords() {
+            return recordKinds.values().stream().mapToInt(Integer::intValue).sum();
+        }
+
+        boolean idle() {
+            return totalRecords() == 0;
+        }
+
+        private static void putPositive(@Nonnull LinkedHashMap<String, Integer> target,
+                                        @Nonnull String kind,
+                                        int value) {
+            if (value > 0) {
+                target.put(kind, value);
+            }
+        }
     }
 
     @Nonnull

@@ -161,7 +161,19 @@ public final class NpcRuntimeTraceRecord {
                 .with("topContributors", snapshot.topContributors().stream()
                         .map(item -> Map.of("category", item.category(), "score", item.score()))
                         .toList())
-                .with("notes", List.of("observable work proxy; exact CPU timing unavailable"));
+                .with("eventRecordKindsPerTick", snapshot.eventRecordKindsPerTick())
+                .with("topEventRecordKinds", snapshot.topEventRecordKinds().stream()
+                        .map(NpcRuntimeTraceRecord::eventRecordKindMap)
+                        .toList())
+                .with("notes", List.of("filtered observable work proxy; diagnostic evidence excluded; exact CPU timing unavailable"));
+    }
+
+    @Nonnull
+    private static Map<String, Object> eventRecordKindMap(@Nonnull NpcWorkMetricSnapshot.EventRecordKindRate item) {
+        LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+        map.put("recordsPerTick", item.recordsPerTick());
+        map.put("kind", item.kind());
+        return map;
     }
 
     @Nonnull

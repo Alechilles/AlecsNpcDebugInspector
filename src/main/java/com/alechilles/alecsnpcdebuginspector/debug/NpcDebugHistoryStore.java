@@ -47,7 +47,8 @@ final class NpcDebugHistoryStore {
         synchronized (entry) {
             String previous = entry.fields.put(key, value);
             boolean changed = previous != null && !previous.equals(value);
-            if (changed && recordEvent) {
+            // Profiling values update continuously; keep highlights without filling the event timeline.
+            if (changed && recordEvent && !key.startsWith("workMetrics.")) {
                 String event = EVENT_TIME_FORMAT.format(now) + " " + label + ": " + previous + " -> " + value;
                 pushEvent(entry, event, eventCategory);
             }

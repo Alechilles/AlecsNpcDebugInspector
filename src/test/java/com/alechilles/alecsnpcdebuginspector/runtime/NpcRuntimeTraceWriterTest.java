@@ -3,6 +3,7 @@ package com.alechilles.alecsnpcdebuginspector.runtime;
 import com.alechilles.alecsnpcdebuginspector.metrics.NpcWorkMetricSnapshot;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -136,6 +137,9 @@ class NpcRuntimeTraceWriterTest {
     @Test
     void writesNpcWorkMetricsRecord() throws Exception {
         Path trace = tempDir.resolve("metrics.trace.jsonl");
+        LinkedHashMap<String, Double> eventKinds = new LinkedHashMap<>();
+        eventKinds.put("action-change", 0.4);
+        eventKinds.put("npc-transition", 0.2);
         NpcWorkMetricSnapshot snapshot = new NpcWorkMetricSnapshot(
                 "npcUnderTest",
                 100,
@@ -152,7 +156,9 @@ class NpcRuntimeTraceWriterTest {
                 0.3,
                 0.4,
                 3.5,
-                List.of(new NpcWorkMetricSnapshot.Contributor("targeting", 4.0))
+                List.of(new NpcWorkMetricSnapshot.Contributor("targeting", 4.0)),
+                eventKinds,
+                List.of(new NpcWorkMetricSnapshot.EventRecordKindRate("action-change", 0.4))
         );
 
         try (NpcRuntimeTraceWriter writer = NpcRuntimeTraceWriter.open(trace)) {
@@ -163,6 +169,8 @@ class NpcRuntimeTraceWriterTest {
         assertTrue(line.contains("\"kind\":\"npc-work-metrics\""));
         assertTrue(line.contains("\"workScorePerTick\":7.5"));
         assertTrue(line.contains("\"category\":\"targeting\""));
-        assertTrue(line.contains("observable work proxy"));
+        assertTrue(line.contains("\"eventRecordKindsPerTick\":{\"action-change\":0.4,\"npc-transition\":0.2}"));
+        assertTrue(line.contains("\"topEventRecordKinds\":[{\"recordsPerTick\":0.4,\"kind\":\"action-change\"}]"));
+        assertTrue(line.contains("diagnostic evidence excluded"));
     }
 }

@@ -11,7 +11,8 @@
     "projectId": "1476193",
     "releaseType": "release",
     "changelogType": "html",
-    "gameVersionTypeIds": [65437]
+    "gameVersion": "0.6",
+    "gameVersionTypeIds": [65438]
   },
   "modtale": {
     "projectId": "96e3fac6-4d48-43da-ac4c-5e8cc8b36ab1",

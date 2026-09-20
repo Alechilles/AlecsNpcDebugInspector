@@ -74,6 +74,10 @@ $config = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json
 $normalizedVersion = (($Version.Trim()) -replace "^v", "")
 $projectId = $config.curseforge.projectId
 $gameVersionTypeIds = @($config.curseforge.gameVersionTypeIds)
+$hytaleGameVersion = [string]$config.curseforge.gameVersion
+if ($hytaleGameVersion -ne "0.6" -or $gameVersionTypeIds.Count -ne 1 -or [int]$gameVersionTypeIds[0] -ne 65438) {
+    throw "CurseForge uploads must target Hytale 0.6 (gameVersion: 0.6, gameVersionTypeIds: [65438]) in $ConfigPath."
+}
 
 $apiBaseUrl = "https://www.curseforge.com/api"
 $endpoint = if ([string]::IsNullOrWhiteSpace($projectId)) {

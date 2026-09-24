@@ -44,6 +44,7 @@ Each tool stores its own linked/highlighted NPC sets in item metadata, so multip
 ## UI Surfaces
 ### 1) Inspector Page
 - Sectioned NPC details (overview, AI/state, sensors, pathing, timers, components, flock, etc.).
+- Lifecycle / Persistence includes Spawn Source, identifying the active beacon, spawn marker, or world-spawn configuration. Missing links are shown as unknown; this is not permanent spawn history, and taming can clear the link.
 - With Tamework installed, also shows API-backed persistence/policy/config/diagnostic sections in addition to the live Tamework component section.
 - Expand/collapse sections.
 - Section reorder support.

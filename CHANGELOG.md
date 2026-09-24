@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- Added Spawn Source under Lifecycle / Persistence, including beacon, spawn-marker, and world-spawn asset names when available.
+
 ## 1.5.1 - Stable 0.6 Compatibility Hotfix - 2026-08-27
 
 ### Changed

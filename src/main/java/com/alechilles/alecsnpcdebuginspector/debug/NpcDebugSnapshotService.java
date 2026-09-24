@@ -28,6 +28,8 @@ import com.hypixel.hytale.server.core.universe.world.path.IPathWaypoint;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.flock.FlockMembership;
 import com.hypixel.hytale.server.npc.NPCPlugin;
+import com.hypixel.hytale.server.npc.components.SpawnBeaconReference;
+import com.hypixel.hytale.server.npc.components.SpawnMarkerReference;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import com.hypixel.hytale.server.npc.entities.PathManager;
 import com.hypixel.hytale.server.npc.instructions.Instruction;
@@ -42,6 +44,9 @@ import com.hypixel.hytale.server.npc.util.Alarm;
 import com.hypixel.hytale.server.npc.util.DamageData;
 import com.hypixel.hytale.server.npc.util.expression.StdScope;
 import com.hypixel.hytale.server.npc.util.expression.ValueType;
+import com.hypixel.hytale.server.spawning.assets.spawns.config.WorldNPCSpawn;
+import com.hypixel.hytale.server.spawning.beacons.LegacySpawnBeaconEntity;
+import com.hypixel.hytale.server.spawning.spawnmarkers.SpawnMarkerEntity;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -715,6 +720,8 @@ public final class NpcDebugSnapshotService {
                                          @Nullable NPCEntity npc,
                                          @Nonnull Instant now) {
         StringBuilder sb = new StringBuilder();
+        appendTrackedLine(sb, npcUuid, now, "lifecycle.spawnSource", "Spawn Source",
+                resolveSpawnSource(npcRef, store, npc), true, false);
         if (npc == null || npc.getRole() == null) {
             appendTrackedLine(sb, npcUuid, now, "lifecycle.status", "Status", "Role unavailable", true, false);
             return sb.toString().trim();
@@ -741,6 +748,44 @@ public final class NpcDebugSnapshotService {
                 "age", "baby", "adult", "spawn", "despawn", "growth", "mature", "stage", "life");
         appendTopEntries(sb, npcUuid, now, "lifecycle.scope", lifecycleKeys, 10, true);
         return sb.toString().trim();
+    }
+
+    @Nonnull
+    private String resolveSpawnSource(@Nullable Ref<EntityStore> npcRef,
+                                            @Nonnull Store<EntityStore> store,
+                                            @Nullable NPCEntity npc) {
+        if (npcRef == null || !npcRef.isValid() || npc == null) return "Unavailable";
+
+        var beaconType = SpawnBeaconReference.getComponentType();
+        var beaconLink = beaconType == null ? null : store.getComponent(npcRef, beaconType);
+        if (beaconLink != null) {
+            var beaconRef = beaconLink.getReference().getEntity(store);
+            var entityType = LegacySpawnBeaconEntity.getComponentType();
+            var beacon = beaconRef == null || !beaconRef.isValid() || entityType == null
+                    ? null : store.getComponent(beaconRef, entityType);
+            return beacon == null || beacon.getSpawnWrapper() == null
+                    ? "Beacon (source unavailable)"
+                    : "Beacon: " + beacon.getSpawnWrapper().getSpawn().getId();
+        }
+
+        var markerType = SpawnMarkerReference.getComponentType();
+        var markerLink = markerType == null ? null : store.getComponent(npcRef, markerType);
+        if (markerLink != null) {
+            var markerRef = markerLink.getReference().getEntity(store);
+            var entityType = SpawnMarkerEntity.getComponentType();
+            var marker = markerRef == null || !markerRef.isValid() || entityType == null
+                    ? null : store.getComponent(markerRef, entityType);
+            return marker == null ? "Spawn marker (source unavailable)"
+                    : "Spawn marker: " + safeText(marker.getSpawnMarkerId(), "<unknown>");
+        }
+
+        int configIndex = npc.getSpawnConfiguration();
+        if (configIndex >= 0) {
+            var config = WorldNPCSpawn.getAssetMap().getAsset(configIndex);
+            return config == null ? "World spawn (config unavailable)" : "World spawn: " + config.getId();
+        }
+        // Capture/taming can detach spawn links, so absence is not proof of a manual spawn.
+        return "Unknown / no active spawn link";
     }
 
     @Nonnull

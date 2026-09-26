@@ -29,7 +29,10 @@ class ManifestServerVersionRangeTest {
                 () -> assertTrue(satisfies(range, "0.6.0")),
                 () -> assertFalse(satisfies(range, "0.4.9")),
                 () -> assertFalse(satisfies(range, "0.6.0-pre.11")),
-                () -> assertFalse(satisfies(range, "0.7.0"))
+                () -> assertTrue(satisfies(range, "0.7.0-pre.4")),
+                () -> assertTrue(satisfies(range, "0.7.0")),
+                () -> assertFalse(satisfies(range, "0.7.0-pre.3")),
+                () -> assertFalse(satisfies(range, "0.8.0"))
         );
     }
 

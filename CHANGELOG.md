@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Added Hytale Update 7 compatibility, including the `0.7.0-pre.4` pre-release, while retaining Update 5 and Update 6 support.
+
 ### Added
 - Added Spawn Source under Lifecycle / Persistence, including beacon, spawn-marker, and world-spawn asset names when available.
 

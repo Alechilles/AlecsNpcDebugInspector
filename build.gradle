@@ -29,13 +29,13 @@ configurations.named('testImplementation') {
 hytaleTools {
     hytaleVersion = localProperty('hytale_version')
     patchline = localProperty('hytale_patchline')
-    manifestServerVersion = '>=0.5.0 <0.7.0'
+    manifestServerVersion = '>=0.5.0 <0.8.0 || >=0.7.0-pre.4 <0.7.0'
     manifestGroup = 'Alechilles'
     modId = "Alec's NPC Inspector!"
     modDescription = 'Standalone NPC debug inspector with in-game detail UI.'
     modCredits = 'Alec (Alechilles)||https://www.curseforge.com/members/alechilles/projects'
     mainClass = 'com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector'
-    manifestOptionalDependencies = "Alechilles:Alec's Tamework!=>=3.0.0 <4.0.0"
+    manifestOptionalDependencies = "Alechilles:Alec's Tamework!=>=3.0.0 <5.0.0"
     curseforgeId = '1476193'
     includesPack = true
     bundleAssetEditorRuntime = false

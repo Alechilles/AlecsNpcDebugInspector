@@ -1,8 +1,14 @@
 package com.alechilles.alecsnpcdebuginspector.runtime;
 
+import com.alechilles.alecsnpcdebuginspector.compat.NpcDebugCompatibility;
+import com.hypixel.hytale.assetstore.map.AssetMapWithIndexes;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
+import com.hypixel.hytale.server.core.asset.type.blocktype.config.RotationTuple;
+import com.hypixel.hytale.server.core.universe.world.SetBlockSettings;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
+import com.hypixel.hytale.server.core.util.FillerBlockUtil;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +50,9 @@ final class NpcRuntimeBlockFixtureMutator {
             throw new IllegalStateException("block fixture chunk is not resident: " + chunkIndex);
         }
 
-        int previousBlockId = chunk.getBlock(localX, worldY, localZ);
+        int previousBlockId = NpcDebugCompatibility.isUpdate6()
+                ? NpcRuntimeBlockSectionFixtureMutator.getBlock(world, worldX, worldY, worldZ)
+                : chunk.getBlock(localX, worldY, localZ);
         return new PreparedMutation(
                 requestId,
                 tick,
@@ -69,7 +77,9 @@ final class NpcRuntimeBlockFixtureMutator {
         if (chunk == null) {
             chunk = world.getChunkIfInMemory(mutation.chunkIndex());
         }
-        return chunk != null && chunk.setBlock(mutation.localX(), mutation.worldY(), mutation.localZ(), mutation.previousBlockId());
+        return chunk != null && setBlock(world, chunk,
+                mutation.worldX(), mutation.worldY(), mutation.worldZ(),
+                mutation.localX(), mutation.localZ(), mutation.previousBlockId());
     }
 
     static int localBlockCoordinate(int worldCoordinate) {
@@ -117,7 +127,11 @@ final class NpcRuntimeBlockFixtureMutator {
             if (chunk == null) {
                 throw new IllegalStateException("block fixture chunk became unavailable: " + chunkIndex);
             }
-            boolean applied = chunk.setBlock(localX, worldY, localZ, appliedBlockId);
+            int blockId = BlockType.getAssetMap().getIndex(appliedBlockId);
+            if (blockId == AssetMapWithIndexes.NOT_FOUND) {
+                throw new IllegalArgumentException("Unknown key! " + appliedBlockId);
+            }
+            boolean applied = setBlock(world, chunk, worldX, worldY, worldZ, localX, localZ, blockId);
             if (!applied) {
                 throw new IllegalStateException("block fixture setBlock returned false");
             }
@@ -161,6 +175,23 @@ final class NpcRuntimeBlockFixtureMutator {
             }
             return record;
         }
+    }
+
+    private static boolean setBlock(@Nonnull World world, @Nonnull WorldChunk chunk,
+                                    int worldX, int worldY, int worldZ,
+                                    int localX, int localZ, int blockId) {
+        BlockType blockType = blockId == BlockType.EMPTY_ID
+                ? BlockType.EMPTY
+                : BlockType.getAssetMap().getAsset(blockId);
+        if (blockType == null) {
+            return false;
+        }
+        if (NpcDebugCompatibility.isUpdate6()) {
+            return NpcRuntimeBlockSectionFixtureMutator.setBlock(
+                    world, worldX, worldY, worldZ, blockId, blockType);
+        }
+        return chunk.setBlock(localX, worldY, localZ, blockId, blockType,
+                RotationTuple.NONE_INDEX, FillerBlockUtil.NO_FILLER, SetBlockSettings.NONE);
     }
 
     record AppliedMutation(@Nonnull String requestId,

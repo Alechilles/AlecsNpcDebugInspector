@@ -12,8 +12,10 @@ import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -412,6 +414,20 @@ final class NpcDebugTameworkApiIntegration implements AutoCloseable {
                 stringify(invoke(diagnostics, "walBytes"), "0"), true, false);
         addField(fields, "tamework.api.diagnostics.shmBytes", "SHM Bytes",
                 stringify(invoke(diagnostics, "shmBytes"), "0"), true, false);
+
+        // Tamework API 3.0.0 file-store details; absent on older Tamework, where the accessors do not resolve.
+        if (invoke(diagnostics, "recordsByLocation") instanceof Map<?, ?> recordsByLocation) {
+            for (Map.Entry<?, ?> entry : new TreeMap<>(recordsByLocation).entrySet()) {
+                addField(fields, "tamework.api.diagnostics.records." + entry.getKey(),
+                        "Records " + entry.getKey(), stringify(entry.getValue(), "0"), true, true);
+            }
+            addField(fields, "tamework.api.diagnostics.unreadableRecords", "Unreadable Records",
+                    stringify(invoke(diagnostics, "unreadableRecords"), "0"), true, true);
+            addField(fields, "tamework.api.diagnostics.lastFlushAt", "Last Flush At",
+                    formatTimestamp(invoke(diagnostics, "lastFlushAtMs")), true, true);
+            addField(fields, "tamework.api.diagnostics.lastFailure", "Last Write Failure",
+                    stringify(invoke(diagnostics, "lastFailure"), "<none>"), true, true);
+        }
 
         Object queueMetrics = invoke(diagnostics, "queueMetrics");
         if (queueMetrics != null) {

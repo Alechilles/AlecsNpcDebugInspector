@@ -35,7 +35,7 @@ hytaleTools {
     modDescription = 'Standalone NPC debug inspector with in-game detail UI.'
     modCredits = 'Alec (Alechilles)||https://www.curseforge.com/members/alechilles/projects'
     mainClass = 'com.alechilles.alecsnpcdebuginspector.AlecsNpcDebugInspector'
-    manifestOptionalDependencies = "Alechilles:Alec's Tamework!=>=3.0.0 <5.0.0"
+    manifestOptionalDependencies = "Alechilles:Alec's Tamework!=>=3.0.0 <6.0.0"
     curseforgeId = '1476193'
     includesPack = true
     bundleAssetEditorRuntime = false

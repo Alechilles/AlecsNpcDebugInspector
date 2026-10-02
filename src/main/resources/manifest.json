@@ -16,7 +16,7 @@
         "Hytale:AssetModule": "*"
     },
     "OptionalDependencies": {
-        "Alechilles:Alec's Tamework!": ">=3.0.0 <5.0.0"
+        "Alechilles:Alec's Tamework!": ">=3.0.0 <6.0.0"
     },
     "DisabledByDefault": false,
     "IncludesAssetPack": true,

@@ -2,13 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
-
-- Added Hytale Update 7 compatibility, including the `0.7.0-pre.4` pre-release, while retaining Update 5 and Update 6 support.
+## 1.6.0 - Tamework 5 and Update 7 - 2026-10-04
 
 ### Added
+- Added Hytale Update 7 compatibility, including the `0.7.0-pre.4` pre-release, while retaining Update 5 and Update 6 support.
 - Added Tamework 5 companion store diagnostics: records per location, unreadable records, last flush time, and last write failure. The optional Tamework dependency range is now `>=3.0.0 <6.0.0`.
 - Added Spawn Source under Lifecycle / Persistence, including beacon, spawn-marker, and world-spawn asset names when available.
+
+## 1.5.2 - Beacon Descriptor Migration - 2026-09-01
+
+### Changed
+- Moved the passive telemetry descriptor to `Server/Beacon/project.json` for the Beacon telemetry namespace.
 
 ## 1.5.1 - Stable 0.6 Compatibility Hotfix - 2026-08-27
 
